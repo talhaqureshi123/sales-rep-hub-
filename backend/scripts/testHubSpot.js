@@ -5,7 +5,7 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const axios = require('axios');
-const config = require('../enviornment/config');
+const config = require('../config');
 
 const API_BASE = 'http://localhost:5000';
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';

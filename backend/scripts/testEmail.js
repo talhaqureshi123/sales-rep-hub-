@@ -1,6 +1,6 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const nodemailer = require('nodemailer');
-const config = require('../enviornment/config');
+const config = require('../config');
 
 console.log('\n📧 Email Configuration Test\n');
 console.log('EMAIL_HOST:', config.EMAIL_HOST);

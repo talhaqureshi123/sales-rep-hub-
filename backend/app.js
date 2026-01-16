@@ -1,7 +1,7 @@
 const express = require("express");
 const connectDB = require("./database/connection");
 const errorHandler = require("./middleware/errorHandler");
-const config = require("./enviornment/config");
+const config = require("./config");
 
 // Import routes
 const authRoutes = require("./authentication/authRoutes");

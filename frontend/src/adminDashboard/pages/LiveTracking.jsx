@@ -1,28 +1,25 @@
 import { useState, useEffect } from 'react'
 import { FaMapMarkerAlt, FaSearch, FaUsers, FaRoute, FaSyncAlt, FaEnvelope, FaToggleOn, FaToggleOff } from 'react-icons/fa'
 import GoogleMapView from '../../universalcomponents/GoogleMapView'
-import { getActiveTrackingSessions } from '../../services/adminservices/trackingService'
-import { getUsers } from '../../services/adminservices/userService'
+import { getLatestSalesmenLocations } from '../../services/adminservices/locationService'
 
 const LiveTracking = () => {
-  const [activeTrackings, setActiveTrackings] = useState([])
-  const [allSalesmen, setAllSalesmen] = useState([])
+  const [salesmenLocations, setSalesmenLocations] = useState([]) // [{ salesman, latestLocation, isOnline, lastSeenMs }]
   const [filteredSalesmen, setFilteredSalesmen] = useState([])
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
-  const [filter, setFilter] = useState('All') // All, Active, Inactive
+  const [filter, setFilter] = useState('All') // All, Online, Offline
   const [searchTerm, setSearchTerm] = useState('')
-  const [totalDistance, setTotalDistance] = useState(0)
+  const [onlineCount, setOnlineCount] = useState(0)
 
   useEffect(() => {
-    loadSalesmen()
-    loadActiveTrackings()
+    loadSalesmenLocations()
     
     // Auto-refresh every 10 seconds if enabled
     let intervalId
     if (autoRefresh) {
       intervalId = setInterval(() => {
-        loadActiveTrackings()
+        loadSalesmenLocations()
       }, 10000) // 10 seconds
     }
 
@@ -33,52 +30,45 @@ const LiveTracking = () => {
 
   useEffect(() => {
     filterSalesmen()
-  }, [filter, searchTerm, allSalesmen, activeTrackings])
+  }, [filter, searchTerm, salesmenLocations])
 
-  const loadSalesmen = async () => {
-    try {
-      const result = await getUsers({ role: 'salesman' })
-      if (result.success && result.data) {
-        setAllSalesmen(result.data)
-      }
-    } catch (error) {
-      console.error('Error loading salesmen:', error)
-    }
-  }
-
-  const loadActiveTrackings = async () => {
+  const loadSalesmenLocations = async () => {
     setLoading(true)
     try {
-      const result = await getActiveTrackingSessions()
+      // Mark as "online" if updated within last 5 minutes (backend default)
+      const result = await getLatestSalesmenLocations({ activeWithinMinutes: 5 })
       if (result.success) {
-        setActiveTrackings(result.data || [])
-        setTotalDistance(result.totalDistance || 0)
+        const rows = result.data || []
+        setSalesmenLocations(rows)
+        setOnlineCount(result.onlineCount || 0)
       }
     } catch (error) {
-      console.error('Error loading active trackings:', error)
-      setActiveTrackings([])
+      console.error('Error loading salesman locations:', error)
+      setSalesmenLocations([])
+      setOnlineCount(0)
     } finally {
       setLoading(false)
     }
   }
 
   const filterSalesmen = () => {
-    let filtered = allSalesmen
+    let filtered = salesmenLocations
 
     // Filter by status
-    if (filter === 'Active') {
-      const activeSalesmanIds = activeTrackings.map(t => t.salesman?._id || t.salesman)
-      filtered = filtered.filter(s => activeSalesmanIds.includes(s._id))
-    } else if (filter === 'Inactive') {
-      const activeSalesmanIds = activeTrackings.map(t => t.salesman?._id || t.salesman)
-      filtered = filtered.filter(s => !activeSalesmanIds.includes(s._id))
+    if (filter === 'Online') {
+      filtered = filtered.filter(r => r.isOnline)
+    } else if (filter === 'Offline') {
+      filtered = filtered.filter(r => !r.isOnline)
     }
 
     // Filter by search term
     if (searchTerm) {
-      filtered = filtered.filter(s => 
-        (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(r => {
+        const s = r.salesman || {}
+        return (
+          (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+        )
       )
     }
 
@@ -86,7 +76,7 @@ const LiveTracking = () => {
   }
 
   const handleRefresh = () => {
-    loadActiveTrackings()
+    loadSalesmenLocations()
   }
 
   const handleSendReport = () => {
@@ -94,14 +84,20 @@ const LiveTracking = () => {
     alert('Send Report functionality will be implemented')
   }
 
-  const getSalesmanTracking = (salesmanId) => {
-    return activeTrackings.find(t => 
-      (t.salesman?._id || t.salesman) === salesmanId
-    )
-  }
-
-  const formatDistance = (km) => {
-    return km ? km.toFixed(2) : '0.00'
+  const getMapMarkers = () => {
+    return salesmenLocations
+      .filter(r => r.latestLocation?.latitude && r.latestLocation?.longitude)
+      .map(r => ({
+        _id: r.latestLocation?._id || r.salesman?._id,
+        name: r.salesman?.name || r.salesman?.email || 'Salesman',
+        latitude: parseFloat(r.latestLocation.latitude),
+        longitude: parseFloat(r.latestLocation.longitude),
+        status: r.isOnline ? 'Online' : 'Offline',
+        address: '',
+        salesman: r.salesman,
+        timestamp: r.latestLocation?.timestamp,
+        accuracy: r.latestLocation?.accuracy,
+      }))
   }
 
   return (
@@ -123,29 +119,14 @@ const LiveTracking = () => {
         <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
           {/* Map Container */}
           <div className="flex-1 bg-gray-100 relative" style={{ minHeight: '500px' }}>
-            {activeTrackings.length > 0 ? (
+            {getMapMarkers().length > 0 ? (
               <GoogleMapView
                 milestones={[]}
-                visitTargets={activeTrackings
-                  .filter(tracking => tracking.startLocation?.latitude && tracking.startLocation?.longitude)
-                  .map(tracking => ({
-                    _id: tracking._id,
-                    name: tracking.salesman?.name || tracking.salesman?.email || 'Salesman',
-                    latitude: parseFloat(tracking.startLocation.latitude),
-                    longitude: parseFloat(tracking.startLocation.longitude),
-                    status: tracking.status === 'active' ? 'In Progress' : 'Pending',
-                    address: tracking.startLocation.address || '',
-                    salesman: tracking.salesman,
-                    startedAt: tracking.startedAt,
-                    totalDistance: tracking.totalDistance,
-                  }))}
+                visitTargets={getMapMarkers()}
                 userLocation={null}
                 center={
-                  activeTrackings[0]?.startLocation
-                    ? {
-                        lat: parseFloat(activeTrackings[0].startLocation.latitude),
-                        lng: parseFloat(activeTrackings[0].startLocation.longitude),
-                      }
+                  getMapMarkers()[0]
+                    ? { lat: getMapMarkers()[0].latitude, lng: getMapMarkers()[0].longitude }
                     : { lat: 24.9141, lng: 67.0822 }
                 }
                 zoom={13}
@@ -162,9 +143,9 @@ const LiveTracking = () => {
               <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
                 <div className="text-center">
                   <FaMapMarkerAlt className="w-24 h-24 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">No Active Tracking</p>
+                  <p className="text-gray-500 text-lg">No Locations Yet</p>
                   <p className="text-gray-400 text-sm mt-2">
-                    Active tracking sessions will appear on the map
+                    Salesman locations will appear when the app starts sending GPS updates
                   </p>
                 </div>
               </div>
@@ -246,19 +227,19 @@ const LiveTracking = () => {
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
                   <FaRoute className="w-5 h-5 text-gray-500" />
-                  <span className="text-sm text-gray-700">Total Distance:</span>
+                  <span className="text-sm text-gray-700">Online Window:</span>
                 </div>
                 <span className="text-sm font-semibold text-gray-900">
-                  {formatDistance(totalDistance)} km
+                  5 min
                 </span>
               </div>
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
                   <FaUsers className="w-5 h-5 text-gray-500" />
-                  <span className="text-sm text-gray-700">Active Reps:</span>
+                  <span className="text-sm text-gray-700">Online Reps:</span>
                 </div>
                 <span className="text-sm font-semibold text-gray-900">
-                  {activeTrackings.length}/{allSalesmen.length}
+                  {onlineCount}/{salesmenLocations.length}
                 </span>
               </div>
             </div>
@@ -289,24 +270,24 @@ const LiveTracking = () => {
                   All
                 </button>
                 <button
-                  onClick={() => setFilter('Active')}
+                  onClick={() => setFilter('Online')}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filter === 'Active'
+                    filter === 'Online'
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  Active
+                  Online
                 </button>
                 <button
-                  onClick={() => setFilter('Inactive')}
+                  onClick={() => setFilter('Offline')}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filter === 'Inactive'
+                    filter === 'Offline'
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  Inactive
+                  Offline
                 </button>
               </div>
             </div>
@@ -325,17 +306,16 @@ const LiveTracking = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {filteredSalesmen.map((salesman) => {
-                    const tracking = getSalesmanTracking(salesman._id)
-                    const isActive = !!tracking
+                  {filteredSalesmen.map((row) => {
+                    const salesman = row.salesman || {}
+                    const loc = row.latestLocation
+                    const isOnline = !!row.isOnline
                     
                     return (
                       <div
                         key={salesman._id}
                         className={`p-3 rounded-lg border ${
-                          isActive
-                            ? 'border-green-200 bg-green-50'
-                            : 'border-gray-200 bg-gray-50'
+                          isOnline ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -348,13 +328,13 @@ const LiveTracking = () => {
                                 {salesman.email}
                               </p>
                             )}
-                            {isActive && tracking.startLocation && (
+                            {loc?.latitude && loc?.longitude && (
                               <p className="text-xs text-gray-600 mt-1">
-                                📍 {tracking.startLocation.latitude?.toFixed(4)}, {tracking.startLocation.longitude?.toFixed(4)}
+                                📍 {Number(loc.latitude).toFixed(4)}, {Number(loc.longitude).toFixed(4)}
                               </p>
                             )}
                           </div>
-                          {isActive && (
+                          {isOnline && (
                             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                           )}
                         </div>

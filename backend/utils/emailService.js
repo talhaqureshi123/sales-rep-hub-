@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const config = require('../enviornment/config');
+const config = require('../config');
 
 // Create reusable transporter object using SMTP transport
 const createTransporter = () => {

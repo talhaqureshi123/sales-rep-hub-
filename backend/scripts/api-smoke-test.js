@@ -16,7 +16,7 @@
  */
 /* eslint-disable no-console */
 const axios = require("axios");
-const config = require("../enviornment/config");
+const config = require("../config");
 
 function parseArgs(argv) {
   const out = {};
@@ -49,9 +49,7 @@ const SALESMAN_EMAIL =
   process.env.SALESMAN_EMAIL ||
   "usman.abid00321@gmail.com";
 const SALESMAN_PASSWORD =
-  args["salesman-password"] ||
-  process.env.SALESMAN_PASSWORD ||
-  "salesman123";
+  args["salesman-password"] || process.env.SALESMAN_PASSWORD || "salesman123";
 
 const client = axios.create({
   baseURL: API_BASE_URL,
@@ -157,7 +155,9 @@ async function main() {
   });
 
   if (!salesman) {
-    console.log("\nSalesman login fail. Check email/password and status 'Active'.");
+    console.log(
+      "\nSalesman login fail. Check email/password and status 'Active'."
+    );
     process.exitCode = 1;
     return;
   }
@@ -281,7 +281,9 @@ async function main() {
     await http({
       name: "Salesman product (by code)",
       method: "get",
-      url: `/api/salesman/products/code/${encodeURIComponent(firstProduct.productCode)}`,
+      url: `/api/salesman/products/code/${encodeURIComponent(
+        firstProduct.productCode
+      )}`,
       token: salesman.token,
       okStatuses: [200],
     });
@@ -403,7 +405,9 @@ async function main() {
       });
     }
   } else {
-    console.log("ℹ️ Quotation create/update/delete skipped (no products found)\n");
+    console.log(
+      "ℹ️ Quotation create/update/delete skipped (no products found)\n"
+    );
   }
 
   // Samples: list + create + get + update
@@ -568,4 +572,3 @@ main().catch((err) => {
   console.error("❌ Script crashed:", err);
   process.exitCode = 1;
 });
-

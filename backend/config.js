@@ -1,9 +1,10 @@
 const path = require("path");
-// Try to load .env from backend root first, then from enviornment folder
-const envPath = path.join(__dirname, "..", ".env");
-const envPathAlt = path.join(__dirname, ".env");
+const fs = require("fs");
+
+// Load .env from backend root.
+const envPath = path.join(__dirname, ".env");
 require("dotenv").config({
-  path: require("fs").existsSync(envPath) ? envPath : envPathAlt,
+  path: envPath,
 });
 
 const normalizeSecret = (value) => {
@@ -55,3 +56,4 @@ module.exports = {
   HUBSPOT_OAUTH_SCOPES: normalizeSecret(process.env.HUBSPOT_OAUTH_SCOPES),
   HUBSPOT_ENABLED: process.env.HUBSPOT_ENABLED === "true" || false,
 };
+

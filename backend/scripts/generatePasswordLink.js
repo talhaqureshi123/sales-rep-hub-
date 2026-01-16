@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const connectDB = require('../database/connection');
 const User = require('../database/models/User');
 const crypto = require('crypto');
-const config = require('../enviornment/config');
+const config = require('../config');
 
 // Get command line arguments
 const args = process.argv.slice(2);

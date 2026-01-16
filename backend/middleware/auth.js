@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const config = require("../enviornment/config");
+const config = require("../config");
 const User = require("../database/models/User");
 
 // Protect routes - verify JWT token

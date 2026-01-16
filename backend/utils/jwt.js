@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const config = require('../enviornment/config');
+const config = require('../config');
 
 // Generate JWT Token
 const generateToken = (userId) => {

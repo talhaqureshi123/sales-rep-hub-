@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const config = require('../enviornment/config');
+const config = require('../config');
 const hubspotOAuthService = require('../services/hubspotOAuthService');
 
 // GET /api/hubspot/authorize

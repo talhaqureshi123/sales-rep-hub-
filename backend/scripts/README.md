@@ -29,7 +29,7 @@ node scripts/seedUsers.js
 
 ### Requirements:
 
-- MongoDB connection must be configured in `enviornment/config.js`
+- MongoDB connection must be configured in `config.js` (old path `enviornment/config.js` still works)
 - Backend dependencies must be installed (`npm install`)
 
 ### Notes:

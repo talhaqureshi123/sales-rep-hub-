@@ -166,7 +166,7 @@ const createUser = async (req, res) => {
         customerLimit: user.customerLimit,
         emailSent: emailSent,
         setupLink: role === "salesman" && !password && resetToken 
-          ? `${require('../../enviornment/config').FRONTEND_URL}/setup-password?token=${resetToken}`
+          ? `${require('../../config').FRONTEND_URL}/setup-password?token=${resetToken}`
           : undefined,
       },
     });
@@ -301,7 +301,7 @@ const generatePasswordLink = async (req, res) => {
     await user.save();
 
     // Generate setup URL
-    const config = require('../../enviornment/config');
+    const config = require('../../config');
     const setupUrl = `${config.FRONTEND_URL}/setup-password?token=${resetToken}`;
 
     // Send email with password setup link

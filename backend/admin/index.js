@@ -13,6 +13,7 @@ const salesOrderRoutes = require("./routes/salesOrderRoutes");
 const salesTargetRoutes = require("./routes/salesTargetRoutes");
 const shiftPhotoRoutes = require("./routes/shiftPhotoRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
+const locationRoutes = require("./routes/locationRoutes");
 const hubspotRoutes = require("./routes/hubspotRoutes");
 
 // Mount routes
@@ -29,6 +30,7 @@ router.use("/sales-orders", salesOrderRoutes);
 router.use("/sales-targets", salesTargetRoutes);
 router.use("/shift-photos", shiftPhotoRoutes);
 router.use("/tracking", trackingRoutes);
+router.use("/locations", locationRoutes);
 router.use("/hubspot", hubspotRoutes);
 
 module.exports = router;

@@ -1,5 +1,5 @@
 const axios = require('axios');
-const config = require('../enviornment/config');
+const config = require('../config');
 const HubSpotOAuthToken = require('../database/models/HubSpotOAuthToken');
 
 const HUBSPOT_TOKEN_URL = 'https://api.hubapi.com/oauth/v1/token';

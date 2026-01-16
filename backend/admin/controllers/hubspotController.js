@@ -171,7 +171,7 @@ const testHubSpotConnection = async (req, res) => {
     console.log('Request received at:', new Date().toISOString());
     console.log('User:', req.user?.id);
     
-    const config = require('../../enviornment/config');
+    const config = require('../../config');
     const axios = require('axios');
     const hubspotOAuthService = require('../../services/hubspotOAuthService');
 
@@ -442,7 +442,7 @@ const importHubSpotTasksToDb = async (req, res) => {
           const headers = await (async () => {
             // use existing hubspotService auth via creating a trivial call
             // we can reuse fetchCustomers search, but this is lighter
-            const cfg = require('../../enviornment/config');
+            const cfg = require('../../config');
             const hubspotOAuthService = require('../../services/hubspotOAuthService');
             let token = '';
             if (cfg.HUBSPOT_AUTH_MODE === 'oauth') {
@@ -544,7 +544,7 @@ const importHubSpotTasksToDb = async (req, res) => {
 const getHubSpotOrdersRequiredFields = async (req, res) => {
   try {
     const axios = require('axios');
-    const config = require('../../enviornment/config');
+    const config = require('../../config');
     const hubspotOAuthService = require('../../services/hubspotOAuthService');
 
     let token = '';
