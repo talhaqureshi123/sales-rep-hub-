@@ -1,0 +1,983 @@
+import { useState, useEffect, useRef } from 'react'
+import { FaShoppingCart, FaPlus, FaTrash, FaSave, FaTimes } from 'react-icons/fa'
+import { getSalesOrder, createSalesOrder, updateSalesOrder } from '../../services/adminservices/salesOrderService'
+import { getCustomers } from '../../services/adminservices/customerService'
+import { getProducts } from '../../services/adminservices/productService'
+import { getUsers } from '../../services/adminservices/userService'
+
+const SalesOrderForm = ({ orderId = null, onClose = null }) => {
+  const [loading, setLoading] = useState(false)
+  const [customers, setCustomers] = useState([])
+  const [products, setProducts] = useState([])
+  const [salesPersons, setSalesPersons] = useState([])
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [showProductDropdown, setShowProductDropdown] = useState({})
+  const signatureCanvasRef = useRef(null)
+  const [isDrawing, setIsDrawing] = useState(false)
+
+  const orderSourceOptions = [
+    'Website',
+    'Phone',
+    'Email',
+    'Walk-in',
+    'Sales Rep',
+    'Referral',
+    'Other'
+  ]
+
+  const paymentMethodOptions = [
+    'Cash',
+    'Credit Card',
+    'Debit Card',
+    'Bank Transfer',
+    'Cheque',
+    'Credit Terms',
+    'Other'
+  ]
+
+  const unitOptions = ['Rolls', 'Boxes', 'Pieces', 'Packs', 'Units', 'Kg', 'Liters']
+
+  const [formData, setFormData] = useState({
+    // Section A: Order Information
+    soNumber: '',
+    orderDate: new Date().toISOString().split('T')[0],
+    salesPerson: '',
+    salesPersonEmail: '',
+    poNumber: '',
+    orderSource: '',
+
+    // Section B: Customer Details
+    customer: '',
+    customerName: '',
+    contactPerson: '',
+    phoneNumber: '',
+    emailAddress: '',
+    billingAddress: '',
+    deliveryAddress: '',
+
+    // Section C: Product Line Items
+    items: [{
+      productCode: '',
+      productName: '',
+      productId: '',
+      spec: '',
+      unitPrice: 0,
+      quantity: 1,
+      unit: 'Rolls',
+      lineTotal: 0,
+    }],
+
+    // Section D: Order Totals
+    subtotal: 0,
+    discount: 0,
+    deliveryCharges: 0,
+    vat: 0,
+    grandTotal: 0,
+
+    // Section E: Payment Information
+    paymentMethod: '',
+    amountPaid: 0,
+    paymentReceived: false,
+    balanceRemaining: 0,
+
+    // Section F: Status & Workflow
+    orderStatus: 'Draft',
+    invoiceNumber: '',
+    trackingNumber: '',
+    expectedDispatchDate: '',
+    actualDispatchDate: '',
+    orderNotes: '',
+
+    // Section G: Internal Flags
+    sendToAdmin: false,
+    stockDeducted: false,
+    sendToWarehouse: false,
+    creditLimitCheck: false,
+
+    // Customer Signature
+    customerSignature: '',
+  })
+
+  useEffect(() => {
+    loadInitialData()
+    if (orderId) {
+      loadOrder(orderId)
+    } else {
+      // Set current user as sales person
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      if (user.email) {
+        setFormData(prev => ({
+          ...prev,
+          salesPersonEmail: user.email,
+          salesPerson: user._id || user.id || '',
+        }))
+      }
+    }
+  }, [orderId])
+
+  useEffect(() => {
+    calculateTotals()
+  }, [formData.items, formData.discount, formData.deliveryCharges])
+
+  const loadInitialData = async () => {
+    try {
+      const [customersResult, productsResult, usersResult] = await Promise.all([
+        getCustomers(),
+        getProducts(),
+        getUsers({ role: 'salesman' }),
+      ])
+
+      if (customersResult.success) setCustomers(customersResult.data || [])
+      if (productsResult.success) setProducts(productsResult.data || [])
+      if (usersResult.success) setSalesPersons(usersResult.data || [])
+    } catch (error) {
+      console.error('Error loading initial data:', error)
+    }
+  }
+
+  const loadOrder = async (id) => {
+    setLoading(true)
+    try {
+      const result = await getSalesOrder(id)
+      if (result.success && result.data) {
+        const order = result.data
+        setFormData({
+          ...order,
+          orderDate: order.orderDate ? new Date(order.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          expectedDispatchDate: order.expectedDispatchDate ? new Date(order.expectedDispatchDate).toISOString().split('T')[0] : '',
+          actualDispatchDate: order.actualDispatchDate ? new Date(order.actualDispatchDate).toISOString().split('T')[0] : '',
+        })
+        if (order.customerSignature) {
+          setTimeout(() => {
+            loadSignatureToCanvas(order.customerSignature)
+          }, 100)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading order:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateTotals = () => {
+    const subtotal = formData.items.reduce((sum, item) => {
+      const lineTotal = (item.unitPrice || 0) * (item.quantity || 0)
+      return sum + lineTotal
+    }, 0)
+
+    const vatRate = 20 // 20%
+    const vat = (subtotal - (formData.discount || 0) + (formData.deliveryCharges || 0)) * (vatRate / 100)
+    const grandTotal = subtotal - (formData.discount || 0) + (formData.deliveryCharges || 0) + vat
+    const balanceRemaining = grandTotal - (formData.amountPaid || 0)
+
+    setFormData(prev => ({
+      ...prev,
+      subtotal,
+      vat,
+      grandTotal,
+      balanceRemaining,
+    }))
+  }
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }))
+  }
+
+  const handleCustomerSelect = (customer) => {
+    setFormData(prev => ({
+      ...prev,
+      customer: customer._id || customer.id,
+      customerName: customer.firstName || customer.name || '',
+      contactPerson: customer.contactPerson || '',
+      phoneNumber: customer.phone || '',
+      emailAddress: customer.email || '',
+      billingAddress: customer.address || '',
+      deliveryAddress: customer.address || '',
+    }))
+    setShowCustomerDropdown(false)
+    setCustomerSearch('')
+  }
+
+  const handleProductSelect = (product, itemIndex) => {
+    const updatedItems = [...formData.items]
+    updatedItems[itemIndex] = {
+      ...updatedItems[itemIndex],
+      productId: product._id || product.id,
+      productCode: product.productCode || '',
+      productName: product.name || '',
+      unitPrice: product.price || 0,
+      spec: product.keyFeatures?.[0] || '',
+    }
+    updatedItems[itemIndex].lineTotal = (updatedItems[itemIndex].unitPrice || 0) * (updatedItems[itemIndex].quantity || 0)
+    setFormData(prev => ({ ...prev, items: updatedItems }))
+    setShowProductDropdown(prev => ({ ...prev, [itemIndex]: false }))
+  }
+
+  const handleItemChange = (index, field, value) => {
+    const updatedItems = [...formData.items]
+    updatedItems[index] = {
+      ...updatedItems[index],
+      [field]: field === 'quantity' || field === 'unitPrice' ? parseFloat(value) || 0 : value,
+    }
+    updatedItems[index].lineTotal = (updatedItems[index].unitPrice || 0) * (updatedItems[index].quantity || 0)
+    setFormData(prev => ({ ...prev, items: updatedItems }))
+  }
+
+  const addItemRow = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        productCode: '',
+        productName: '',
+        productId: '',
+        spec: '',
+        unitPrice: 0,
+        quantity: 1,
+        unit: 'Rolls',
+        lineTotal: 0,
+      }],
+    }))
+  }
+
+  const removeItemRow = (index) => {
+    if (formData.items.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        items: prev.items.filter((_, i) => i !== index),
+      }))
+    }
+  }
+
+  // Signature handling
+  const startDrawing = (e) => {
+    setIsDrawing(true)
+    const canvas = signatureCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const rect = canvas.getBoundingClientRect()
+    ctx.beginPath()
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top)
+  }
+
+  const draw = (e) => {
+    if (!isDrawing) return
+    const canvas = signatureCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const rect = canvas.getBoundingClientRect()
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top)
+    ctx.stroke()
+  }
+
+  const stopDrawing = () => {
+    setIsDrawing(false)
+    saveSignature()
+  }
+
+  const saveSignature = () => {
+    const canvas = signatureCanvasRef.current
+    if (canvas) {
+      const signature = canvas.toDataURL('image/png')
+      setFormData(prev => ({ ...prev, customerSignature: signature }))
+    }
+  }
+
+  const clearSignature = () => {
+    const canvas = signatureCanvasRef.current
+    if (canvas) {
+      const ctx = canvas.getContext('2d')
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      setFormData(prev => ({ ...prev, customerSignature: '' }))
+    }
+  }
+
+  const loadSignatureToCanvas = (signatureData) => {
+    const canvas = signatureCanvasRef.current
+    if (canvas && signatureData) {
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0)
+      }
+      img.src = signatureData
+    }
+  }
+
+  const handleSubmit = async (e, saveAsDraft = false) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      const orderData = {
+        ...formData,
+        orderStatus: saveAsDraft ? 'Draft' : formData.orderStatus,
+        orderDate: new Date(formData.orderDate),
+        expectedDispatchDate: formData.expectedDispatchDate ? new Date(formData.expectedDispatchDate) : null,
+        actualDispatchDate: formData.actualDispatchDate ? new Date(formData.actualDispatchDate) : null,
+      }
+
+      let result
+      if (orderId) {
+        result = await updateSalesOrder(orderId, orderData)
+      } else {
+        result = await createSalesOrder(orderData)
+      }
+
+      if (result.success) {
+        alert(orderId ? 'Order updated successfully!' : 'Order created successfully!')
+        if (onClose) onClose()
+        else window.location.reload()
+      } else {
+        alert(result.message || 'Failed to save order')
+      }
+    } catch (error) {
+      console.error('Error saving order:', error)
+      alert('Error saving order')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredCustomers = customers.filter(c =>
+    (c.firstName || c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(customerSearch.toLowerCase())
+  )
+
+  return (
+    <div className="w-full bg-white rounded-lg shadow-lg">
+      <div className="flex items-center justify-between p-6 border-b bg-white">
+        <h1 className="text-3xl font-bold text-gray-900">Sales Order Form</h1>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <FaTimes className="w-6 h-6" />
+          </button>
+        )}
+      </div>
+      <div className="p-6">
+
+      <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-8">
+        {/* Section A: Order Information */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Section A: Order Information</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">SO Number</label>
+              <input
+                type="text"
+                name="soNumber"
+                value={formData.soNumber}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                placeholder="Auto-generated"
+                readOnly
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Date</label>
+              <input
+                type="date"
+                name="orderDate"
+                value={formData.orderDate}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Sales Person</label>
+              <input
+                type="text"
+                name="salesPersonEmail"
+                value={formData.salesPersonEmail}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                readOnly
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">PO Number (Optional)</label>
+              <input
+                type="text"
+                name="poNumber"
+                value={formData.poNumber}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                placeholder="e.g., PO-2025-001"
+              />
+              <p className="text-xs text-gray-500 mt-1">Customer's purchase order number.</p>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Source <span className="text-red-500">*</span></label>
+              <select
+                name="orderSource"
+                value={formData.orderSource}
+                onChange={handleInputChange}
+                required
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              >
+                <option value="">Select order source</option>
+                {orderSourceOptions.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Section B: Customer Details */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Section B: Customer Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Customer <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={customerSearch || formData.customerName}
+                onChange={(e) => {
+                  setCustomerSearch(e.target.value)
+                  setShowCustomerDropdown(true)
+                }}
+                onFocus={() => setShowCustomerDropdown(true)}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                placeholder="Search customers..."
+                required
+              />
+              {showCustomerDropdown && filteredCustomers.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredCustomers.map(customer => (
+                    <div
+                      key={customer._id || customer.id}
+                      onClick={() => handleCustomerSelect(customer)}
+                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                    >
+                      <p className="font-medium">{customer.firstName || customer.name}</p>
+                      <p className="text-sm text-gray-600">{customer.email}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
+              <input
+                type="text"
+                name="contactPerson"
+                value={formData.contactPerson}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+              <input
+                type="tel"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+              <input
+                type="email"
+                name="emailAddress"
+                value={formData.emailAddress}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Billing Address</label>
+              <textarea
+                name="billingAddress"
+                value={formData.billingAddress}
+                onChange={handleInputChange}
+                rows="3"
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Address</label>
+              <textarea
+                name="deliveryAddress"
+                value={formData.deliveryAddress}
+                onChange={handleInputChange}
+                rows="3"
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section C: Product Line Items */}
+        <div className="border-b pb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-800">Section C: Product Line Items</h2>
+            <button
+              type="button"
+              onClick={addItemRow}
+              className="flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors"
+            >
+              <FaPlus className="w-4 h-4" />
+              <span>Add Row</span>
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Product Code</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Product Name <span className="text-red-500">*</span></th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Spec/Micron</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Unit Price (£)</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Quantity</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Unit</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Line Total</th>
+                  <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {formData.items.map((item, index) => (
+                  <tr key={index} className="border-b">
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        value={item.productCode}
+                        onChange={(e) => handleItemChange(index, 'productCode', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                        placeholder="Code"
+                      />
+                    </td>
+                    <td className="px-4 py-2 relative">
+                      <input
+                        type="text"
+                        value={item.productName}
+                        onChange={(e) => {
+                          handleItemChange(index, 'productName', e.target.value)
+                          setShowProductDropdown(prev => ({ ...prev, [index]: true }))
+                        }}
+                        onFocus={() => setShowProductDropdown(prev => ({ ...prev, [index]: true }))}
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                        placeholder="Search products..."
+                        required
+                      />
+                      {showProductDropdown[index] && products.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {products
+                            .filter(p => 
+                              (p.name || '').toLowerCase().includes(item.productName.toLowerCase()) ||
+                              (p.productCode || '').toLowerCase().includes(item.productName.toLowerCase())
+                            )
+                            .map(product => (
+                              <div
+                                key={product._id || product.id}
+                                onClick={() => handleProductSelect(product, index)}
+                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                              >
+                                <p className="font-medium">{product.name}</p>
+                                <p className="text-sm text-gray-600">Code: {product.productCode} | £{product.price}</p>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        value={item.spec}
+                        onChange={(e) => handleItemChange(index, 'spec', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                        placeholder="Spec"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                        min="0"
+                        step="0.01"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                        min="1"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={item.unit}
+                        onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                      >
+                        {unitOptions.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-semibold">£{item.lineTotal.toFixed(2)}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      {formData.items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeItemRow(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <FaTrash className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 text-right">
+            <p className="text-lg font-semibold">Line Total: £{formData.items.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2)}</p>
+          </div>
+        </div>
+
+        {/* Section D: Order Totals */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Section D: Order Totals</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Subtotal</label>
+              <input
+                type="text"
+                value={`£${formData.subtotal.toFixed(2)}`}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50"
+                readOnly
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Discount (£)</label>
+              <input
+                type="number"
+                name="discount"
+                value={formData.discount}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Charges (£)</label>
+              <input
+                type="number"
+                name="deliveryCharges"
+                value={formData.deliveryCharges}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">VAT (20%)</label>
+              <input
+                type="text"
+                value={`£${formData.vat.toFixed(2)}`}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50"
+                readOnly
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Grand Total</label>
+              <input
+                type="text"
+                value={`£${formData.grandTotal.toFixed(2)}`}
+                className="w-full px-4 py-2 border-2 border-[#e9931c] rounded-lg bg-orange-50 text-2xl font-bold text-[#e9931c]"
+                readOnly
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section E: Payment Information */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Section E: Payment Information</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+              <select
+                name="paymentMethod"
+                value={formData.paymentMethod}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              >
+                <option value="">Select payment method</option>
+                {paymentMethodOptions.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Amount Paid (£)</label>
+              <input
+                type="number"
+                name="amountPaid"
+                value={formData.amountPaid}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="paymentReceived"
+                  checked={formData.paymentReceived}
+                  onChange={handleInputChange}
+                  className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+                />
+                <span className="text-sm text-gray-700">Payment Received</span>
+              </label>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Balance Remaining</label>
+              <input
+                type="text"
+                value={`£${formData.balanceRemaining.toFixed(2)}`}
+                className="w-full px-4 py-2 border-2 border-green-200 rounded-lg bg-green-50 text-green-700 font-semibold"
+                readOnly
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section F: Status & Workflow */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Section F: Status & Workflow</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Status <span className="text-red-500">*</span></label>
+              <select
+                name="orderStatus"
+                value={formData.orderStatus}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                required
+              >
+                <option value="Draft">Draft - Order being created</option>
+                <option value="Pending">Pending - Awaiting confirmation</option>
+                <option value="Confirmed">Confirmed - Order approved</option>
+                <option value="Processing">Processing - Being prepared</option>
+                <option value="Dispatched">Dispatched - Shipped to customer</option>
+                <option value="Delivered">Delivered - Customer received</option>
+                <option value="Cancelled">Cancelled - Order cancelled</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.orderStatus === 'Draft' && 'Order is being created, not yet submitted'}
+                {formData.orderStatus === 'Pending' && 'Order submitted, waiting for approval'}
+                {formData.orderStatus === 'Confirmed' && 'Order approved, sent to warehouse'}
+                {formData.orderStatus === 'Processing' && 'Order being prepared and packed'}
+                {formData.orderStatus === 'Dispatched' && 'Order shipped, add tracking number'}
+                {formData.orderStatus === 'Delivered' && 'Order delivered to customer'}
+                {formData.orderStatus === 'Cancelled' && 'Order has been cancelled'}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Number</label>
+              <input
+                type="text"
+                name="invoiceNumber"
+                value={formData.invoiceNumber}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-gray-50"
+                placeholder="Auto-generated when status changes from Draft"
+                readOnly={formData.orderStatus !== 'Draft'}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.orderStatus === 'Draft' 
+                  ? 'Will be auto-generated when status changes from Draft'
+                  : 'Invoice number (auto-generated)'}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tracking Number</label>
+              <input
+                type="text"
+                name="trackingNumber"
+                value={formData.trackingNumber}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                placeholder="Add tracking number when order is dispatched"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Required when status is "Dispatched" or "Delivered"
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Expected Dispatch Date</label>
+              <input
+                type="date"
+                name="expectedDispatchDate"
+                value={formData.expectedDispatchDate}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Actual Dispatch Date</label>
+              <input
+                type="date"
+                name="actualDispatchDate"
+                value={formData.actualDispatchDate}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Order Notes</label>
+              <textarea
+                name="orderNotes"
+                value={formData.orderNotes}
+                onChange={handleInputChange}
+                rows="3"
+                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                placeholder="Additional notes about the order..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section G: Internal Flags */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Section G: Internal Flags</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="sendToAdmin"
+                checked={formData.sendToAdmin}
+                onChange={handleInputChange}
+                className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+              />
+              <span className="text-sm text-gray-700">Send to Admin</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="stockDeducted"
+                checked={formData.stockDeducted}
+                onChange={handleInputChange}
+                className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+              />
+              <span className="text-sm text-gray-700">Stock Deducted</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="sendToWarehouse"
+                checked={formData.sendToWarehouse}
+                onChange={handleInputChange}
+                className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+              />
+              <span className="text-sm text-gray-700">Send to Warehouse</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                name="creditLimitCheck"
+                checked={formData.creditLimitCheck}
+                onChange={handleInputChange}
+                className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+              />
+              <span className="text-sm text-gray-700">Credit Limit Check</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Customer Signature */}
+        <div className="border-b pb-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Customer Signature</h2>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Customer Signature</label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+              <canvas
+                ref={signatureCanvasRef}
+                width={600}
+                height={200}
+                className="border border-gray-300 rounded bg-white cursor-crosshair"
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+              />
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={clearSignature}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+              >
+                Clear Signature
+              </button>
+              <button
+                type="button"
+                onClick={saveSignature}
+                className="px-4 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors"
+              >
+                Save Signature
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Actions */}
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={(e) => handleSubmit(e, true)}
+              className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+            >
+              Save as Draft
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-2"
+            >
+              <FaSave className="w-4 h-4" />
+              <span>Submit Order</span>
+            </button>
+          </div>
+          {!orderId && (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                className="px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              >
+                Select
+              </button>
+            </div>
+          )}
+        </div>
+      </form>
+      </div>
+    </div>
+  )
+}
+
+export default SalesOrderForm

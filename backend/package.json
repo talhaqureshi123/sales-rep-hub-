@@ -1,0 +1,29 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Sales Rap Hub Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node scripts/seedUsers.js",
+    "seed:users": "node scripts/seedUsers.js",
+    "admin:create": "node scripts/adminManager.js create",
+    "admin:remove": "node scripts/adminManager.js remove",
+    "admin:list": "node scripts/adminManager.js list",
+    "password:link": "node scripts/generatePasswordLink.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.1.2",
+    "nodemailer": "^6.10.1",
+    "nodemon": "^3.1.11"
+  }
+}
