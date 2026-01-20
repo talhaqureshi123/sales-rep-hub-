@@ -17,7 +17,7 @@ const normalizeSecret = (value) => {
 };
 
 module.exports = {
-  PORT: process.env.PORT || 5000,
+  PORT: process.env.PORT || 4000,
   MONGODB_URI:
     process.env.MONGODB_URI ||
     "mongodb+srv://talhaabid400:1234567890@cluster0.oaruawd.mongodb.net/salesraphub",
@@ -52,7 +52,7 @@ module.exports = {
   ),
   HUBSPOT_OAUTH_REDIRECT_URI:
     normalizeSecret(process.env.HUBSPOT_OAUTH_REDIRECT_URI) ||
-    "http://localhost:5000/api/hubspot/callback",
+    "http://localhost:4000/api/hubspot/callback",
   HUBSPOT_OAUTH_SCOPES: normalizeSecret(process.env.HUBSPOT_OAUTH_SCOPES),
   HUBSPOT_ENABLED: process.env.HUBSPOT_ENABLED === "true" || false,
 };

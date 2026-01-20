@@ -86,6 +86,22 @@ const followUpSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VisitTarget',
   },
+  approvalStatus: {
+    type: String,
+    enum: ['Pending', 'Approved', 'Rejected'],
+    default: 'Approved', // Admin created tasks are auto-approved
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedAt: {
+    type: Date,
+  },
+  rejectionReason: {
+    type: String,
+    trim: true,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

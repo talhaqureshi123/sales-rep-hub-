@@ -5,6 +5,9 @@ import Achievements from '../components/Achievements'
 import Quotation from '../components/quatation'
 import CustomerManagement from '../components/CustomerManagement'
 import Dashboard from '../components/Dashboard'
+import Tasks from '../components/Tasks'
+import SalesTargets from '../components/SalesTargets'
+import SalesSubmissions from '../components/SalesSubmissions'
 import SalesmanSidebar from '../components/SalesmanSidebar'
 import BottomNavbar from '../components/BottomNavbar'
 
@@ -27,7 +30,7 @@ const SalesmanDashboard = ({ onLogout }) => {
   // Listen for navigation events
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (event.detail && ['dashboard', 'quotation', 'achievements', 'sales-tracking', 'customers'].includes(event.detail)) {
+      if (event.detail && ['dashboard', 'quotation', 'achievements', 'sales-tracking', 'customers', 'tasks', 'sales-targets', 'sales-submissions'].includes(event.detail)) {
         setActiveTab(event.detail)
         // If navigating to customers, check if we should open add form
         if (event.detail === 'customers' && (event.openAddForm || window.shouldOpenAddCustomer)) {
@@ -52,6 +55,12 @@ const SalesmanDashboard = ({ onLogout }) => {
         return <Quotation key={activeTab} />
       case 'customers':
         return <CustomerManagement openAddForm={openAddCustomer} onAddFormClose={() => setOpenAddCustomer(false)} />
+      case 'tasks':
+        return <Tasks />
+      case 'sales-targets':
+        return <SalesTargets />
+      case 'sales-submissions':
+        return <SalesSubmissions />
       case 'achievements':
         return <Achievements />
       default:

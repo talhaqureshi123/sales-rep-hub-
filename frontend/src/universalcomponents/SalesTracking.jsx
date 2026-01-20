@@ -6,8 +6,11 @@ import NotificationToast from './NotificationToast'
 import { getVisitTargets, updateVisitTargetStatus, createVisitRequest, getVisitRequests } from '../services/salemanservices/visitTargetService'
 import { getCurrentLocation, watchPosition, clearWatch, formatDistance, calculateDistance, PROXIMITY_DISTANCE_KM } from '../services/salemanservices/locationService'
 import { startTracking, stopTracking, getActiveTracking } from '../services/salemanservices/trackingService'
+import { getMyFollowUps } from '../services/salemanservices/followUpService'
+import { getMyCustomers } from '../services/salemanservices/customerService'
 import { createWorker } from 'tesseract.js'
-import { FaPlay, FaStop, FaPause, FaMapMarkerAlt, FaClock, FaCheckCircle } from 'react-icons/fa'
+import { FaPlay, FaStop, FaPause, FaMapMarkerAlt, FaClock, FaCheckCircle, FaCalendarAlt, FaExclamationTriangle, FaArrowRight, FaTimes, FaTasks, FaFlask } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const SalesTracking = () => {
   // const [milestones, setMilestones] = useState([]) // COMMENTED OUT - Using Visit Targets only
@@ -43,6 +46,8 @@ const SalesTracking = () => {
   const [visitRequests, setVisitRequests] = useState([])
   const [showRequestVisitModal, setShowRequestVisitModal] = useState(false)
   const [requestForm, setRequestForm] = useState({
+    customerId: '',
+    customerName: '',
     name: '',
     description: '',
     address: '',
@@ -56,6 +61,19 @@ const SalesTracking = () => {
     notes: '',
   })
   const [requestSubmitting, setRequestSubmitting] = useState(false)
+  const [customers, setCustomers] = useState([])
+  const [loadingCustomers, setLoadingCustomers] = useState(false)
+  const [showVisitAssignmentModal, setShowVisitAssignmentModal] = useState(false)
+  const [selectedVisitsForAssignment, setSelectedVisitsForAssignment] = useState([])
+  const [assignmentDate, setAssignmentDate] = useState('')
+  const [assigningVisits, setAssigningVisits] = useState(false)
+  const [dateFilter, setDateFilter] = useState('All') // All, Today, Tomorrow, This Week, Upcoming, Past
+  const [selectedDateForView, setSelectedDateForView] = useState('') // Date selected for viewing filtered visits
+  const [assignModalActiveTab, setAssignModalActiveTab] = useState('visits') // visits, followup, sample
+  const [followUps, setFollowUps] = useState([])
+  const [samples, setSamples] = useState([])
+  const [selectedFollowUpsForAssignment, setSelectedFollowUpsForAssignment] = useState([])
+  const [selectedSamplesForAssignment, setSelectedSamplesForAssignment] = useState([])
   const watchIdRef = useRef(null)
   const countdownIntervalRef = useRef(null)
 
@@ -76,6 +94,112 @@ const SalesTracking = () => {
     return formatDistance(distance)
   }
 
+  // Group visits by date
+  const groupVisitsByDate = (targets) => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const nextWeek = new Date(today)
+    nextWeek.setDate(nextWeek.getDate() + 7)
+
+    const grouped = {
+      today: [],
+      tomorrow: [],
+      thisWeek: [],
+      upcoming: [],
+      past: [],
+      noDate: []
+    }
+
+    targets.forEach(target => {
+      if (!target.visitDate) {
+        grouped.noDate.push(target)
+        return
+      }
+
+      const visitDate = new Date(target.visitDate)
+      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+
+      if (visitDateOnly.getTime() === today.getTime()) {
+        grouped.today.push(target)
+      } else if (visitDateOnly.getTime() === tomorrow.getTime()) {
+        grouped.tomorrow.push(target)
+      } else if (visitDateOnly < today) {
+        grouped.past.push(target)
+      } else if (visitDateOnly <= nextWeek) {
+        grouped.thisWeek.push(target)
+      } else {
+        grouped.upcoming.push(target)
+      }
+    })
+
+    return grouped
+  }
+
+  // Filter visits based on date filter
+  const getFilteredVisits = () => {
+    if (dateFilter === 'All') {
+      return visitTargets
+    }
+
+    const grouped = groupVisitsByDate(visitTargets)
+    switch (dateFilter) {
+      case 'Today':
+        return grouped.today
+      case 'Tomorrow':
+        return grouped.tomorrow
+      case 'This Week':
+        return [...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek]
+      case 'Upcoming':
+        return grouped.upcoming
+      case 'Past':
+        return grouped.past
+      default:
+        return visitTargets
+    }
+  }
+
+  // Load tasks (follow-ups) - load all statuses except completed
+  const loadFollowUps = async () => {
+    try {
+      console.log('Loading tasks (follow-ups)...')
+      // Load all tasks (not just pending) so user can see all tasks
+      const result = await getMyFollowUps({})
+      console.log('Tasks API result:', result)
+      if (result.success && result.data) {
+        // Filter out completed tasks for assignment view
+        const activeTasks = result.data.filter(t => t.status !== 'Completed')
+        console.log('Active tasks (non-completed):', activeTasks.length)
+        setFollowUps(activeTasks)
+      } else {
+        console.warn('No tasks found or API error:', result.message)
+        setFollowUps([])
+      }
+    } catch (error) {
+      console.error('Error loading tasks:', error)
+      setFollowUps([])
+    }
+  }
+
+  // Load samples using salesman service
+  const loadSamples = async () => {
+    try {
+      const { getMySamples } = await import('../services/salemanservices/sampleService')
+      const result = await getMySamples({})
+      if (result.success && result.data) {
+        // Filter out converted samples for assignment view
+        const activeSamples = result.data.filter(s => s.status !== 'Converted')
+        setSamples(activeSamples)
+      } else {
+        setSamples([])
+      }
+    } catch (error) {
+      console.error('Error loading samples:', error)
+      setSamples([])
+    }
+  }
+
   // Load visit targets on component mount (Milestones commented out)
   useEffect(() => {
     const loadData = async () => {
@@ -90,15 +214,14 @@ const SalesTracking = () => {
         // Load visit targets (approved only by backend default)
         const visitTargetsResult = await getVisitTargets()
         if (visitTargetsResult.success && visitTargetsResult.data) {
-          // Filter out targets without valid coordinates AND completed targets
+          // Filter out only targets without valid coordinates (show all statuses including completed)
           const validTargets = visitTargetsResult.data.filter(target => {
             const lat = parseFloat(target.latitude)
             const lng = parseFloat(target.longitude)
             const hasValidCoords = !isNaN(lat) && !isNaN(lng) && 
               lat >= -90 && lat <= 90 && 
               lng >= -180 && lng <= 180
-            const isNotCompleted = target.status !== 'Completed'
-            return hasValidCoords && isNotCompleted
+            return hasValidCoords
           })
           setVisitTargets(validTargets)
         } else {
@@ -122,22 +245,35 @@ const SalesTracking = () => {
     loadData()
   }, [])
 
+  // Check for missed visits when visitTargets change
+  useEffect(() => {
+    if (visitTargets.length > 0) {
+      // Use a timeout to avoid checking too frequently
+      const timeoutId = setTimeout(() => {
+        checkMissedVisits()
+      }, 1000)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [visitTargets])
+
   const refreshRequestsAndTargets = async () => {
     try {
+      // Load all visit targets (including completed) - admin assigned and approved requests
       const visitTargetsResult = await getVisitTargets()
       if (visitTargetsResult.success && visitTargetsResult.data) {
+        // Filter only by valid coordinates (show all statuses including completed)
         const validTargets = visitTargetsResult.data.filter(target => {
           const lat = parseFloat(target.latitude)
           const lng = parseFloat(target.longitude)
           const hasValidCoords = !isNaN(lat) && !isNaN(lng) && 
             lat >= -90 && lat <= 90 && 
             lng >= -180 && lng <= 180
-          const isNotCompleted = target.status !== 'Completed'
-          return hasValidCoords && isNotCompleted
+          return hasValidCoords
         })
         setVisitTargets(validTargets)
       }
 
+      // Load salesman's own visit requests (pending/rejected)
       const reqs = await getVisitRequests()
       if (reqs?.success && Array.isArray(reqs.data)) {
         setVisitRequests(reqs.data)
@@ -149,17 +285,72 @@ const SalesTracking = () => {
     }
   }
 
+  // Load customers for visit request
+  const loadCustomers = async () => {
+    setLoadingCustomers(true)
+    try {
+      const result = await getMyCustomers({})
+      if (result.success && result.data) {
+        setCustomers(result.data)
+      } else {
+        setCustomers([])
+      }
+    } catch (error) {
+      console.error('Error loading customers:', error)
+      setCustomers([])
+    } finally {
+      setLoadingCustomers(false)
+    }
+  }
+
+  // Handle customer selection - auto-fill form
+  const handleCustomerSelect = (customerId) => {
+    const selectedCustomer = customers.find(c => c._id === customerId)
+    if (selectedCustomer) {
+      // Build customer name from available fields
+      const customerName = selectedCustomer.name || 
+                          selectedCustomer.company || 
+                          (selectedCustomer.firstName ? `${selectedCustomer.firstName}${selectedCustomer.contactPerson ? ` ${selectedCustomer.contactPerson}` : ''}` : '') ||
+                          selectedCustomer.email ||
+                          'Customer'
+      
+      setRequestForm(prev => ({
+        ...prev,
+        customerId: selectedCustomer._id,
+        customerName: customerName,
+        name: customerName, // Visit name will be customer name
+        address: selectedCustomer.address || prev.address,
+        city: selectedCustomer.city || prev.city,
+        state: selectedCustomer.state || prev.state,
+        pincode: selectedCustomer.pincode || selectedCustomer.postcode || prev.pincode,
+        // Keep existing latitude/longitude or use GPS if available
+        latitude: prev.latitude || (userLocation ? String(userLocation.latitude) : ''),
+        longitude: prev.longitude || (userLocation ? String(userLocation.longitude) : ''),
+      }))
+    }
+  }
+
   const handleSubmitVisitRequest = async () => {
     try {
-      if (!requestForm.name || !requestForm.name.trim()) {
-        alert('Please enter visit name')
+      if (!requestForm.customerId || !requestForm.customerName) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Missing Information',
+          text: 'Please select a customer',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
       const lat = requestForm.latitude ? Number(requestForm.latitude) : Number(userLocation?.latitude)
       const lng = requestForm.longitude ? Number(requestForm.longitude) : Number(userLocation?.longitude)
       if (Number.isNaN(lat) || Number.isNaN(lng)) {
-        alert('Please provide valid latitude/longitude (or allow GPS)')
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Location Required',
+          text: 'Please provide valid latitude/longitude or allow GPS access',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
@@ -180,9 +371,16 @@ const SalesTracking = () => {
 
       const result = await createVisitRequest(payload)
       if (result?.success) {
-        alert(result.message || 'Visit request submitted')
+        await Swal.fire({
+          icon: 'success',
+          title: 'Request Submitted!',
+          text: result.message || 'Your visit request has been submitted. Admin will review and approve it.',
+          confirmButtonColor: '#e9931c'
+        })
         setShowRequestVisitModal(false)
         setRequestForm({
+          customerId: '',
+          customerName: '',
           name: '',
           description: '',
           address: '',
@@ -197,13 +395,99 @@ const SalesTracking = () => {
         })
         await refreshRequestsAndTargets()
       } else {
-        alert(result?.message || 'Failed to submit visit request')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Submission Failed',
+          text: result?.message || 'Failed to submit visit request. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (e) {
       console.error('handleSubmitVisitRequest error:', e)
-      alert('Error submitting visit request')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error submitting visit request. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setRequestSubmitting(false)
+    }
+  }
+
+  // Handle visit assignment
+  const handleAssignVisits = async (date) => {
+    if (selectedVisitsForAssignment.length === 0) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'No Visits Selected',
+        text: 'Please select at least one visit to assign',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
+    if (!date) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Date Required',
+        text: 'Please select a date',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
+    setAssigningVisits(true)
+    try {
+      const updatePromises = selectedVisitsForAssignment.map(visitId => 
+        updateVisitTargetStatus(visitId, { visitDate: new Date(date).toISOString() })
+      )
+
+      const results = await Promise.all(updatePromises)
+      const successCount = results.filter(r => r.success).length
+
+      if (successCount === selectedVisitsForAssignment.length) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Visits Assigned!',
+          text: `Successfully assigned ${successCount} visit(s) to ${new Date(date).toLocaleDateString()}`,
+          confirmButtonColor: '#e9931c'
+        })
+        setShowVisitAssignmentModal(false)
+        setSelectedVisitsForAssignment([])
+        setAssignmentDate('')
+        
+        // Reload visit targets
+        const visitTargetsResult = await getVisitTargets()
+        if (visitTargetsResult.success && visitTargetsResult.data) {
+          const validTargets = visitTargetsResult.data.filter(target => {
+            const lat = parseFloat(target.latitude)
+            const lng = parseFloat(target.longitude)
+            const hasValidCoords = !isNaN(lat) && !isNaN(lng) && 
+              lat >= -90 && lat <= 90 && 
+              lng >= -180 && lng <= 180
+            return hasValidCoords
+          })
+          setVisitTargets(validTargets)
+        }
+      } else {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Partial Success',
+          text: `Failed to assign some visits. ${successCount} out of ${selectedVisitsForAssignment.length} assigned.`,
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error assigning visits:', error)
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error assigning visits. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setAssigningVisits(false)
     }
   }
 
@@ -302,6 +586,48 @@ const SalesTracking = () => {
     }
   }, [isTracking, visitTargets])
 
+  // Check for missed/remaining visits and show notifications
+  const checkMissedVisits = () => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const notifiedTargets = new Set(notifications.map(n => `${n.targetId}-${n.type}`))
+    
+    visitTargets.forEach((target) => {
+      if (target.status === 'Completed') return
+      
+      if (target.visitDate) {
+        const visitDate = new Date(target.visitDate)
+        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+        const targetId = target._id || target.id
+        const notificationKey = `${targetId}-warning`
+        const todayNotificationKey = `${targetId}-info`
+        
+        // Check if visit date has passed and visit is not completed
+        if (visitDateOnly < today) {
+          const daysPassed = Math.floor((today - visitDateOnly) / (1000 * 60 * 60 * 24))
+          
+          if (!notifiedTargets.has(notificationKey)) {
+            addNotification({
+              message: `⚠️ Missed Visit: ${target.name} (${daysPassed} day${daysPassed > 1 ? 's' : ''} ago)`,
+              type: 'warning',
+              targetId: targetId,
+            })
+          }
+        }
+        // Check if visit is today and not completed
+        else if (visitDateOnly.getTime() === today.getTime()) {
+          if (!notifiedTargets.has(todayNotificationKey)) {
+            addNotification({
+              message: `📅 Today's Visit: ${target.name} - Please complete it`,
+              type: 'info',
+              targetId: targetId,
+            })
+          }
+        }
+      }
+    })
+  }
+
   // Check proximity to visit targets and show notifications (Real-time detection)
   const checkVisitTargetProximity = (currentLocation) => {
     if (!currentLocation || visitTargets.length === 0) return
@@ -333,8 +659,15 @@ const SalesTracking = () => {
 
         if (!alreadyNotified) {
           const distanceFormatted = formatDistance(distance)
-          // Show alert
-          alert(`🎯 Visit Target Reached!\n\nTarget: ${target.name}\nDistance: ${distanceFormatted}`)
+          // Show SweetAlert
+          Swal.fire({
+            icon: 'success',
+            title: '🎯 Visit Target Reached!',
+            html: `<p><strong>Target:</strong> ${target.name}</p><p><strong>Distance:</strong> ${distanceFormatted}</p>`,
+            confirmButtonColor: '#e9931c',
+            timer: 3000,
+            timerProgressBar: true
+          })
           
           // Add notification
           addNotification({
@@ -1119,7 +1452,24 @@ const SalesTracking = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowRequestVisitModal(true)}
+              onClick={() => {
+                setShowVisitAssignmentModal(true)
+                setSelectedVisitsForAssignment(visitTargets.filter(v => v.status !== 'Completed').map(v => v._id || v.id))
+              }}
+              className="px-3 md:px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+              title="Assign visits to dates"
+            >
+              <FaCalendarAlt className="w-5 h-5" />
+              <span className="text-sm md:text-base" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Assign</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowRequestVisitModal(true)
+                // Load customers when modal opens
+                if (customers.length === 0) {
+                  loadCustomers()
+                }
+              }}
               className="px-3 md:px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 bg-[#e9931c] text-white hover:bg-[#d8820a]"
               title="Request a new visit (admin approval required)"
             >
@@ -1179,7 +1529,7 @@ const SalesTracking = () => {
               {userLocation || visitTargets.length > 0 ? (
                 <GoogleMapView
                   milestones={[]}
-                  visitTargets={visitTargets.filter(t => t.status !== 'Completed')}
+                  visitTargets={visitTargets}
                   userLocation={userLocation}
                   onMarkerClick={handleVisitTargetClick}
                   center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : selectedVisitTarget ? { lat: parseFloat(selectedVisitTarget.latitude), lng: parseFloat(selectedVisitTarget.longitude) } : { lat: 28.6139, lng: 77.2090 }}
@@ -1406,9 +1756,108 @@ const SalesTracking = () => {
                   transitionDelay: showRightPanel ? '0.1s' : '0s'
                 }}
               >
-                <h3 className="text-lg font-semibold text-gray-700 mb-4">Pending Visit Targets</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-700">Visit Targets</h3>
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                  >
+                    <option value="All">All Dates</option>
+                    <option value="Today">Today</option>
+                    <option value="Tomorrow">Tomorrow</option>
+                    <option value="This Week">This Week</option>
+                    <option value="Upcoming">Upcoming</option>
+                    <option value="Past">Past</option>
+                  </select>
+                </div>
+                
+                {/* Date-wise Grouped Visit Targets */}
+                {visitTargets.length === 0 ? (
+                  <div className="text-center py-8">
+                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    <p className="text-gray-600 font-medium">No visit targets assigned</p>
+                    <p className="text-sm text-gray-500 mt-1">Admin will assign visit targets to you</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+                    {visitTargets.map((target) => {
+                      const targetId = target._id || target.id
+                      const isSelected = selectedVisitTarget && (selectedVisitTarget._id === targetId || selectedVisitTarget.id === targetId)
+                      return (
+                        <div
+                          key={targetId}
+                          onClick={() => handleVisitTargetClick(target)}
+                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-semibold text-gray-800 text-sm">{target.name || 'Unnamed Target'}</h4>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              target.status === 'Completed'
+                                ? 'bg-green-100 text-green-800'
+                                : target.status === 'In Progress'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {target.status}
+                            </span>
+                          </div>
+                          
+                          {target.address && (
+                            <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                              <FaMapMarkerAlt className="w-3 h-3" />
+                              {target.address}
+                              {target.city && `, ${target.city}`}
+                              {target.state && `, ${target.state}`}
+                            </p>
+                          )}
+                          
+                          <div className="flex items-center gap-3 mt-2 flex-wrap">
+                            {target.visitDate && (
+                              <p className="text-xs text-gray-600 flex items-center gap-1">
+                                <FaClock className="w-3 h-3" />
+                                {new Date(target.visitDate).toLocaleDateString()}
+                              </p>
+                            )}
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              target.priority === 'High'
+                                ? 'bg-red-100 text-red-700'
+                                : target.priority === 'Medium'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {target.priority || 'Medium'}
+                            </span>
+                            {userLocation && (
+                              <p className="text-xs text-blue-600 font-medium">
+                                {getDistanceToVisitTarget(target) || 'Calculating...'}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {target.description && (
+                            <p className="text-xs text-gray-500 mt-2 line-clamp-2">{target.description}</p>
+                          )}
+                          
+                          {target.createdBy && (
+                            <p className="text-xs text-gray-400 mt-2">
+                              Assigned by: {target.createdBy.name || target.createdBy.email || 'Admin'}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                
                 {visitRequests && visitRequests.length > 0 && (
-                  <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="mt-6 mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                     <p className="text-sm font-semibold text-gray-800 mb-2">My Visit Requests (Waiting/Rejected)</p>
                     <div className="space-y-2 max-h-44 overflow-y-auto">
                       {visitRequests.map((r) => (
@@ -1429,106 +1878,339 @@ const SalesTracking = () => {
                     </div>
                   </div>
                 )}
-                {visitTargets.filter(t => t.status === 'Pending' || t.status === 'In Progress').length === 0 ? (
+                {visitTargets.length === 0 ? (
                   <div className="bg-white rounded-lg p-8 text-center border-2 border-dashed border-gray-200">
                     <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p className="text-gray-600">No pending visit targets</p>
+                    <p className="text-gray-600">No visit targets assigned</p>
+                    <p className="text-sm text-gray-500 mt-1">Admin will assign visit targets to you</p>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                    {visitTargets
-                      .filter(t => t.status === 'Pending' || t.status === 'In Progress')
-                      .sort((a, b) => {
-                        if (!userLocation) return 0
-                        const distA = calculateDistance(
-                          userLocation.latitude,
-                          userLocation.longitude,
-                          parseFloat(a.latitude),
-                          parseFloat(a.longitude)
-                        )
-                        const distB = calculateDistance(
-                          userLocation.latitude,
-                          userLocation.longitude,
-                          parseFloat(b.latitude),
-                          parseFloat(b.longitude)
-                        )
-                        return distA - distB
-                      })
-                      .map((target) => (
-                        <div
-                          key={target._id || target.id}
-                          onClick={() => {
-                            handleVisitTargetClick(target)
-                            // Only show route if tracking is started
-                            if (userLocation && isTracking) {
-                              setRouteToVisitTarget({
-                                from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-                                target: target
-                              })
-                            } else {
-                              setRouteToVisitTarget(null)
-                            }
-                          }}
-                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            selectedVisitTarget?._id === target._id || selectedVisitTarget?.id === target.id
-                              ? 'border-[#e9931c] bg-orange-50 shadow-md'
-                              : 'border-gray-200 hover:border-[#e9931c] hover:bg-orange-50'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="font-semibold text-gray-800">{target.name}</p>
-                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                  target.status === 'In Progress'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {target.status}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600 mb-2">{target.address || `${target.city || ''} ${target.state || ''}`.trim() || 'No address'}</p>
-                              {userLocation && (
-                                <p className="text-xs font-semibold text-[#e9931c]">
-                                  📍 {getDistanceToVisitTarget(target)} away
-                                </p>
-                              )}
-                              {target.priority && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Priority: <span className="font-semibold">{target.priority}</span>
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (userLocation && isTracking) {
-                                  setRouteToVisitTarget({
-                                    from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                    to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-                                    target: target
+                  <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+                    {(() => {
+                      const filteredVisits = getFilteredVisits()
+                      const grouped = dateFilter === 'All' ? groupVisitsByDate(filteredVisits) : null
+                      
+                      // If filter is "All", show grouped by date sections
+                      if (dateFilter === 'All' && grouped) {
+                        const sections = [
+                          { key: 'today', title: '📅 Today', visits: grouped.today, color: 'bg-blue-50 border-blue-200' },
+                          { key: 'tomorrow', title: '📅 Tomorrow', visits: grouped.tomorrow, color: 'bg-green-50 border-green-200' },
+                          { key: 'thisWeek', title: '📅 This Week', visits: grouped.thisWeek, color: 'bg-yellow-50 border-yellow-200' },
+                          { key: 'upcoming', title: '📅 Upcoming', visits: grouped.upcoming, color: 'bg-purple-50 border-purple-200' },
+                          { key: 'past', title: '📅 Past Visits', visits: grouped.past, color: 'bg-gray-50 border-gray-200' },
+                          { key: 'noDate', title: '📅 No Date Assigned', visits: grouped.noDate, color: 'bg-orange-50 border-orange-200' }
+                        ]
+
+                        return sections.map(section => {
+                          if (section.visits.length === 0) return null
+                          
+                          return (
+                            <div key={section.key} className={`rounded-lg border-2 p-3 ${section.color}`}>
+                              <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                {section.title} ({section.visits.length})
+                              </h4>
+                              <div className="space-y-2">
+                                {section.visits
+                                  .sort((a, b) => {
+                                    // Sort by visit date
+                                    if (a.visitDate && b.visitDate) {
+                                      return new Date(a.visitDate) - new Date(b.visitDate)
+                                    }
+                                    // Then by status
+                                    const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
+                                    return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
                                   })
-                                  handleVisitTargetClick(target)
-                                } else {
-                                  alert('Please start tracking first to see the route!')
-                                }
-                              }}
-                              className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
-                                isTracking 
-                                  ? 'bg-[#e9931c] text-white hover:bg-[#d8820a]' 
-                                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                              }`}
-                              title={isTracking ? "Show Route" : "Start tracking to see route"}
-                              disabled={!isTracking}
-                            >
-                              🗺️ Route
-                            </button>
+                                  .map((target) => {
+                        const targetId = target._id || target.id
+                        const isSelected = selectedVisitTarget && (selectedVisitTarget._id === targetId || selectedVisitTarget.id === targetId)
+                        return (
+                          <div
+                            key={targetId}
+                            onClick={() => {
+                              handleVisitTargetClick(target)
+                              // Only show route if tracking is started
+                              if (userLocation && isTracking) {
+                                setRouteToVisitTarget({
+                                  from: { lat: userLocation.latitude, lng: userLocation.longitude },
+                                  to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
+                                  target: target
+                                })
+                              } else {
+                                setRouteToVisitTarget(null)
+                              }
+                            }}
+                            className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                              isSelected
+                                ? 'border-[#e9931c] bg-orange-50 shadow-md'
+                                : 'border-gray-200 hover:border-[#e9931c] hover:bg-orange-50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-semibold text-gray-800">{target.name || 'Unnamed Target'}</p>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                    target.status === 'Completed'
+                                      ? 'bg-green-100 text-green-800'
+                                      : target.status === 'In Progress'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {target.status}
+                                  </span>
+                                </div>
+                                
+                                {/* Full Address */}
+                                <div className="text-sm text-gray-600 mb-2">
+                                  {target.address && (
+                                    <p className="flex items-center gap-1">
+                                      <FaMapMarkerAlt className="w-3 h-3" />
+                                      {target.address}
+                                      {target.city && `, ${target.city}`}
+                                      {target.state && `, ${target.state}`}
+                                      {target.pincode && ` - ${target.pincode}`}
+                                    </p>
+                                  )}
+                                  {!target.address && (target.city || target.state) && (
+                                    <p>{[target.city, target.state, target.pincode].filter(Boolean).join(', ')}</p>
+                                  )}
+                                </div>
+                                
+                                {/* Visit Date */}
+                                {target.visitDate && (
+                                  <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                                    <FaClock className="w-3 h-3" />
+                                    Visit Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                )}
+                                
+                                {/* Priority and Distance */}
+                                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                    target.priority === 'High'
+                                      ? 'bg-red-100 text-red-700'
+                                      : target.priority === 'Medium'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {target.priority || 'Medium'} Priority
+                                  </span>
+                                  {userLocation && (
+                                    <p className="text-xs font-semibold text-[#e9931c]">
+                                      📍 {getDistanceToVisitTarget(target) || 'Calculating...'}
+                                    </p>
+                                  )}
+                                </div>
+                                
+                                {/* Description */}
+                                {target.description && (
+                                  <p className="text-xs text-gray-500 mt-2 line-clamp-2">{target.description}</p>
+                                )}
+                                
+                                {/* Created By */}
+                                {target.createdBy && (
+                                  <p className="text-xs text-gray-400 mt-2">
+                                    Assigned by: {target.createdBy.name || target.createdBy.email || 'Admin'}
+                                  </p>
+                                )}
+                                
+                                {/* Notes */}
+                                {target.notes && (
+                                  <p className="text-xs text-gray-500 mt-1 italic">Note: {target.notes}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (userLocation && isTracking) {
+                                    setRouteToVisitTarget({
+                                      from: { lat: userLocation.latitude, lng: userLocation.longitude },
+                                      to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
+                                      target: target
+                                    })
+                                    handleVisitTargetClick(target)
+                                  } else {
+                                    Swal.fire({
+                                      icon: 'info',
+                                      title: 'Start Tracking',
+                                      text: 'Please start tracking first to see the route!',
+                                      confirmButtonColor: '#e9931c'
+                                    })
+                                  }
+                                }}
+                                className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
+                                  isTracking 
+                                    ? 'bg-[#e9931c] text-white hover:bg-[#d8820a]' 
+                                    : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                }`}
+                                title={isTracking ? "Show Route" : "Start tracking to see route"}
+                                disabled={!isTracking}
+                              >
+                                🗺️ Route
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
+                              </div>
+                            </div>
+                          )
+                        }).filter(Boolean)
+                      } else {
+                        // Show filtered list
+                        return filteredVisits
+                          .sort((a, b) => {
+                            // Sort by visit date
+                            if (a.visitDate && b.visitDate) {
+                              return new Date(a.visitDate) - new Date(b.visitDate)
+                            }
+                            // Then by status
+                            const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
+                            return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
+                          })
+                          .map((target) => {
+                            const targetId = target._id || target.id
+                            const isSelected = selectedVisitTarget && (selectedVisitTarget._id === targetId || selectedVisitTarget.id === targetId)
+                            return (
+                              <div
+                                key={targetId}
+                                onClick={() => {
+                                  handleVisitTargetClick(target)
+                                  if (userLocation && isTracking) {
+                                    setRouteToVisitTarget({
+                                      from: { lat: userLocation.latitude, lng: userLocation.longitude },
+                                      to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
+                                      target: target
+                                    })
+                                  } else {
+                                    setRouteToVisitTarget(null)
+                                  }
+                                }}
+                                className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'border-[#e9931c] bg-orange-50 shadow-md'
+                                    : 'border-gray-200 hover:border-[#e9931c] hover:bg-orange-50'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="font-semibold text-gray-800">{target.name || 'Unnamed Target'}</p>
+                                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                        target.status === 'Completed'
+                                          ? 'bg-green-100 text-green-800'
+                                          : target.status === 'In Progress'
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : 'bg-yellow-100 text-yellow-800'
+                                      }`}>
+                                        {target.status}
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Full Address */}
+                                    <div className="text-sm text-gray-600 mb-2">
+                                      {target.address && (
+                                        <p className="flex items-center gap-1">
+                                          <FaMapMarkerAlt className="w-3 h-3" />
+                                          {target.address}
+                                          {target.city && `, ${target.city}`}
+                                          {target.state && `, ${target.state}`}
+                                          {target.pincode && ` - ${target.pincode}`}
+                                        </p>
+                                      )}
+                                      {!target.address && (target.city || target.state) && (
+                                        <p>{[target.city, target.state, target.pincode].filter(Boolean).join(', ')}</p>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Visit Date */}
+                                    {target.visitDate && (
+                                      <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                                        <FaClock className="w-3 h-3" />
+                                        Visit Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric'
+                                        })}
+                                      </p>
+                                    )}
+                                    
+                                    {/* Priority and Distance */}
+                                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                        target.priority === 'High'
+                                          ? 'bg-red-100 text-red-700'
+                                          : target.priority === 'Medium'
+                                          ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-gray-100 text-gray-700'
+                                      }`}>
+                                        {target.priority || 'Medium'} Priority
+                                      </span>
+                                      {userLocation && (
+                                        <p className="text-xs font-semibold text-[#e9931c]">
+                                          📍 {getDistanceToVisitTarget(target) || 'Calculating...'}
+                                        </p>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Description */}
+                                    {target.description && (
+                                      <p className="text-xs text-gray-500 mt-2 line-clamp-2">{target.description}</p>
+                                    )}
+                                    
+                                    {/* Created By */}
+                                    {target.createdBy && (
+                                      <p className="text-xs text-gray-400 mt-2">
+                                        Assigned by: {target.createdBy.name || target.createdBy.email || 'Admin'}
+                                      </p>
+                                    )}
+                                    
+                                    {/* Notes */}
+                                    {target.notes && (
+                                      <p className="text-xs text-gray-500 mt-1 italic">Note: {target.notes}</p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (userLocation && isTracking) {
+                                        setRouteToVisitTarget({
+                                          from: { lat: userLocation.latitude, lng: userLocation.longitude },
+                                          to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
+                                          target: target
+                                        })
+                                        handleVisitTargetClick(target)
+                                      } else {
+                                        Swal.fire({
+                                          icon: 'info',
+                                          title: 'Start Tracking',
+                                          text: 'Please start tracking first to see the route!',
+                                          confirmButtonColor: '#e9931c'
+                                        })
+                                      }
+                                    }}
+                                    className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
+                                      isTracking 
+                                        ? 'bg-[#e9931c] text-white hover:bg-[#d8820a]' 
+                                        : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                    }`}
+                                    title={isTracking ? "Show Route" : "Start tracking to see route"}
+                                    disabled={!isTracking}
+                                  >
+                                    🗺️ Route
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })
+                      }
+                    })()}
                   </div>
                 )}
               </div>
@@ -2188,9 +2870,9 @@ const SalesTracking = () => {
       {/* Achievement Modal - Shown after completion */}
       {/* Request Visit Modal */}
       {showRequestVisitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-slideUp">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-bold text-white">Request a Visit</h3>
@@ -2207,15 +2889,57 @@ const SalesTracking = () => {
               </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Select Customer *</label>
+                  <select
+                    value={requestForm.customerId}
+                    onChange={(e) => {
+                      handleCustomerSelect(e.target.value)
+                    }}
+                    onFocus={() => {
+                      if (customers.length === 0) {
+                        loadCustomers()
+                      }
+                    }}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  >
+                    <option value="">-- Select Customer --</option>
+                    {loadingCustomers ? (
+                      <option value="" disabled>Loading customers...</option>
+                    ) : customers.length === 0 ? (
+                      <option value="" disabled>No customers found. Please add customers first.</option>
+                    ) : (
+                      customers.map((customer) => {
+                        const displayName = customer.name || 
+                                          customer.company || 
+                                          (customer.firstName ? `${customer.firstName}${customer.contactPerson ? ` ${customer.contactPerson}` : ''}` : '') ||
+                                          customer.email ||
+                                          'Customer'
+                        const companyInfo = customer.company && customer.name ? ` (${customer.company})` : ''
+                        return (
+                          <option key={customer._id} value={customer._id}>
+                            {displayName}{companyInfo}
+                          </option>
+                        )
+                      })
+                    )}
+                  </select>
+                  {requestForm.customerId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selected: {requestForm.customerName}
+                    </p>
+                  )}
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Visit Name *</label>
                   <input
                     value={requestForm.name}
                     onChange={(e) => setRequestForm(prev => ({ ...prev, name: e.target.value }))}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Shop / Area name"
+                    placeholder="Visit name (auto-filled from customer)"
+                    readOnly={!!requestForm.customerId}
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -2283,21 +3007,45 @@ const SalesTracking = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Latitude</label>
-                  <input
-                    value={requestForm.latitude}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, latitude: e.target.value }))}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder={userLocation ? String(userLocation.latitude) : 'GPS needed'}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={requestForm.latitude}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, latitude: e.target.value }))}
+                      className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      placeholder={userLocation ? String(userLocation.latitude) : 'GPS needed'}
+                    />
+                    {userLocation && (
+                      <button
+                        type="button"
+                        onClick={() => setRequestForm(prev => ({ ...prev, latitude: String(userLocation.latitude) }))}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                        title="Use current location"
+                      >
+                        📍 Use GPS
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Longitude</label>
-                  <input
-                    value={requestForm.longitude}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, longitude: e.target.value }))}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder={userLocation ? String(userLocation.longitude) : 'GPS needed'}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={requestForm.longitude}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, longitude: e.target.value }))}
+                      className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      placeholder={userLocation ? String(userLocation.longitude) : 'GPS needed'}
+                    />
+                    {userLocation && (
+                      <button
+                        type="button"
+                        onClick={() => setRequestForm(prev => ({ ...prev, longitude: String(userLocation.longitude) }))}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                        title="Use current location"
+                      >
+                        📍 Use GPS
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
@@ -2311,7 +3059,7 @@ const SalesTracking = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3 pt-2 flex-shrink-0 border-t border-gray-200 mt-4">
                 <button
                   onClick={() => setShowRequestVisitModal(false)}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
@@ -2330,6 +3078,851 @@ const SalesTracking = () => {
           </div>
         </div>
       )}
+
+      {/* Unified Assign Modal - Visits, Follow-up, Sample Track */}
+      {showVisitAssignmentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
+                    <FaCalendarAlt className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Assign</h3>
+                    <p className="text-sm text-blue-100 mt-0.5">Assign Visits, Tasks, or Sample Track to dates</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowVisitAssignmentModal(false)
+                    setSelectedVisitsForAssignment([])
+                    setSelectedFollowUpsForAssignment([])
+                    setSelectedSamplesForAssignment([])
+                    setAssignmentDate('')
+                    setSelectedDateForView('')
+                    setAssignModalActiveTab('visits')
+                  }}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+                >
+                  <FaTimes className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0">
+              <button
+                onClick={() => {
+                  setAssignModalActiveTab('visits')
+                  // Refresh visits when tab is clicked
+                  refreshRequestsAndTargets()
+                }}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  assignModalActiveTab === 'visits'
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                }`}
+              >
+                <FaMapMarkerAlt className="w-4 h-4" />
+                Visits
+              </button>
+              <button
+                onClick={() => {
+                  setAssignModalActiveTab('tasks')
+                  // Load tasks (follow-ups) when tab is clicked
+                  loadFollowUps()
+                }}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  assignModalActiveTab === 'tasks'
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                }`}
+              >
+                <FaTasks className="w-4 h-4" />
+                Tasks
+              </button>
+              <button
+                onClick={() => {
+                  setAssignModalActiveTab('sample')
+                  // Load samples when tab is clicked
+                  loadSamples()
+                }}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  assignModalActiveTab === 'sample'
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                }`}
+              >
+                <FaFlask className="w-4 h-4" />
+                Sample Track
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {/* Calendar Date Selection - Common for all tabs */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                  <FaCalendarAlt className="text-blue-600" />
+                  Select Date to View & Assign
+                </label>
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="date"
+                    value={selectedDateForView}
+                    onChange={(e) => {
+                      const selectedDate = e.target.value
+                      setSelectedDateForView(selectedDate)
+                      setAssignmentDate(selectedDate)
+                      
+                      // Show notification when date is selected
+                      if (selectedDate) {
+                        const dateObj = new Date(selectedDate)
+                        const formattedDate = dateObj.toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })
+                        
+                        const tabName = assignModalActiveTab === 'visits' ? 'visits' : assignModalActiveTab === 'tasks' ? 'tasks' : 'samples'
+                        
+                        Swal.fire({
+                          icon: 'info',
+                          title: 'Date Selected',
+                          text: `Showing ${tabName} for ${formattedDate}`,
+                          confirmButtonColor: '#e9931c',
+                          timer: 2000,
+                          timerProgressBar: true,
+                          toast: true,
+                          position: 'top-end',
+                          showConfirmButton: false
+                        })
+                        
+                        addNotification({
+                          message: `📅 Viewing ${tabName} for ${formattedDate}`,
+                          type: 'info'
+                        })
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                  {selectedDateForView && (
+                    <button
+                      onClick={() => {
+                        setSelectedDateForView('')
+                        setAssignmentDate('')
+                      }}
+                      className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Clear Date"
+                    >
+                      <FaTimes className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              {assignModalActiveTab === 'visits' && (
+                <div className="mb-4">
+                  {/* Categorized Visits Display */}
+                  {(() => {
+                    const today = new Date()
+                    today.setHours(0, 0, 0, 0)
+                    const tomorrow = new Date(today)
+                    tomorrow.setDate(tomorrow.getDate() + 1)
+                    const nextWeek = new Date(today)
+                    nextWeek.setDate(nextWeek.getDate() + 7)
+                    
+                    // Filter visits based on selectedDateForView or show all
+                    let visitsToShow = visitTargets.filter(v => v.status !== 'Completed')
+                    
+                    if (selectedDateForView) {
+                      const selectedDateObj = new Date(selectedDateForView)
+                      const selectedDateOnly = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate())
+                      
+                      visitsToShow = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitDateOnly = new Date(new Date(v.visitDate).getFullYear(), new Date(v.visitDate).getMonth(), new Date(v.visitDate).getDate())
+                        return visitDateOnly.getTime() === selectedDateOnly.getTime()
+                      })
+                    }
+                    
+                    // Categorize visits
+                    const dueVisits = visitsToShow.filter(v => {
+                      if (!v.visitDate) return false
+                      const visitDate = new Date(v.visitDate)
+                      return visitDate < today
+                    })
+                    
+                    const todayVisits = visitsToShow.filter(v => {
+                      if (!v.visitDate) return false
+                      const visitDate = new Date(v.visitDate)
+                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                      return visitDateOnly.getTime() === today.getTime()
+                    })
+                    
+                    const tomorrowVisits = visitsToShow.filter(v => {
+                      if (!v.visitDate) return false
+                      const visitDate = new Date(v.visitDate)
+                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                      return visitDateOnly.getTime() === tomorrow.getTime()
+                    })
+                    
+                    const remainingVisits = visitsToShow.filter(v => {
+                      if (!v.visitDate) return false
+                      const visitDate = new Date(v.visitDate)
+                      return visitDate > tomorrow && visitDate <= nextWeek
+                    })
+                    
+                    const upcomingVisits = visitsToShow.filter(v => {
+                      if (!v.visitDate) return false
+                      const visitDate = new Date(v.visitDate)
+                      return visitDate > nextWeek
+                    })
+                    
+                    return (
+                      <div className="space-y-4">
+                        {/* Due Visits (Past) */}
+                        {dueVisits.length > 0 && (
+                          <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaExclamationTriangle className="text-red-600" />
+                              <h4 className="font-semibold text-red-800">Due Visits ({dueVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {dueVisits.map((visit) => (
+                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-red-200">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800">{visit.name}</p>
+                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                      <p className="text-xs text-red-600 mt-1">
+                                        Due: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Today's Visits */}
+                        {todayVisits.length > 0 && (
+                          <div className="border-2 border-blue-200 bg-blue-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaClock className="text-blue-600" />
+                              <h4 className="font-semibold text-blue-800">Today's Visits ({todayVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {todayVisits.map((visit) => (
+                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-blue-200">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800">{visit.name}</p>
+                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                      <p className="text-xs text-blue-600 mt-1">
+                                        Today: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        if (!isTracking) {
+                                          setShowStartModal(true)
+                                        }
+                                      }}
+                                      className="ml-2 p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                                      title="Start Tracking"
+                                    >
+                                      <FaPlay className="w-4 h-4" />
+                                      <span className="text-xs hidden sm:inline">Start</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tomorrow's Visits */}
+                        {tomorrowVisits.length > 0 && (
+                          <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-green-600" />
+                              <h4 className="font-semibold text-green-800">Tomorrow's Visits ({tomorrowVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {tomorrowVisits.map((visit) => (
+                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-green-200">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-800">{visit.name}</p>
+                                    <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                    <p className="text-xs text-green-600 mt-1">
+                                      Tomorrow: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Remaining Visits (This Week) */}
+                        {remainingVisits.length > 0 && (
+                          <div className="border-2 border-yellow-200 bg-yellow-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaArrowRight className="text-yellow-600" />
+                              <h4 className="font-semibold text-yellow-800">This Week ({remainingVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {remainingVisits.map((visit) => (
+                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-yellow-200">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-800">{visit.name}</p>
+                                    <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                    <p className="text-xs text-yellow-600 mt-1">
+                                      Scheduled: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Upcoming Visits */}
+                        {upcomingVisits.length > 0 && (
+                          <div className="border-2 border-purple-200 bg-purple-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-purple-600" />
+                              <h4 className="font-semibold text-purple-800">Upcoming Visits ({upcomingVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {upcomingVisits.map((visit) => (
+                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-purple-200">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-800">{visit.name}</p>
+                                    <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                    <p className="text-xs text-purple-600 mt-1">
+                                      Upcoming: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {visitsToShow.length === 0 && (
+                          <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                            <FaCalendarAlt className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                            <p className="text-gray-600 font-medium">
+                              {selectedDateForView ? 'No visits scheduled for this date' : 'No visits available'}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {selectedDateForView ? 'Select another date or assign visits to this date' : 'Visits will appear here once assigned'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* Tasks Tab Content */}
+              {assignModalActiveTab === 'tasks' && (
+                <div className="mb-4">
+                  {(() => {
+                    const today = new Date()
+                    today.setHours(0, 0, 0, 0)
+                    const tomorrow = new Date(today)
+                    tomorrow.setDate(tomorrow.getDate() + 1)
+                    const nextWeek = new Date(today)
+                    nextWeek.setDate(nextWeek.getDate() + 7)
+                    
+                    // Filter tasks based on selectedDateForView or show all
+                    let tasksToShow = followUps.filter(f => f.status !== 'Completed')
+                    
+                    if (selectedDateForView) {
+                      const selectedDateObj = new Date(selectedDateForView)
+                      const selectedDateOnly = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate())
+                      
+                      tasksToShow = tasksToShow.filter(f => {
+                        // Check dueDate first
+                        if (f.dueDate) {
+                          const dueDateOnly = new Date(new Date(f.dueDate).getFullYear(), new Date(f.dueDate).getMonth(), new Date(f.dueDate).getDate())
+                          if (dueDateOnly.getTime() === selectedDateOnly.getTime()) return true
+                        }
+                        // Also check scheduledDate
+                        if (f.scheduledDate) {
+                          const scheduledDateOnly = new Date(new Date(f.scheduledDate).getFullYear(), new Date(f.scheduledDate).getMonth(), new Date(f.scheduledDate).getDate())
+                          if (scheduledDateOnly.getTime() === selectedDateOnly.getTime()) return true
+                        }
+                        return false
+                      })
+                    }
+                    
+                    // Categorize tasks
+                    const dueTasks = tasksToShow.filter(f => {
+                      const checkDate = f.dueDate ? new Date(f.dueDate) : (f.scheduledDate ? new Date(f.scheduledDate) : null)
+                      if (!checkDate) return false
+                      return checkDate < today
+                    })
+                    
+                    const todayTasks = tasksToShow.filter(f => {
+                      const checkDate = f.dueDate ? new Date(f.dueDate) : (f.scheduledDate ? new Date(f.scheduledDate) : null)
+                      if (!checkDate) return false
+                      const checkDateOnly = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate())
+                      return checkDateOnly.getTime() === today.getTime()
+                    })
+                    
+                    const tomorrowTasks = tasksToShow.filter(f => {
+                      const checkDate = f.dueDate ? new Date(f.dueDate) : (f.scheduledDate ? new Date(f.scheduledDate) : null)
+                      if (!checkDate) return false
+                      const checkDateOnly = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate())
+                      return checkDateOnly.getTime() === tomorrow.getTime()
+                    })
+                    
+                    const remainingTasks = tasksToShow.filter(f => {
+                      const checkDate = f.dueDate ? new Date(f.dueDate) : (f.scheduledDate ? new Date(f.scheduledDate) : null)
+                      if (!checkDate) return false
+                      return checkDate > tomorrow && checkDate <= nextWeek
+                    })
+                    
+                    const upcomingTasks = tasksToShow.filter(f => {
+                      const checkDate = f.dueDate ? new Date(f.dueDate) : (f.scheduledDate ? new Date(f.scheduledDate) : null)
+                      if (!checkDate) return false
+                      return checkDate > nextWeek
+                    })
+                    
+                    return (
+                      <div className="space-y-4">
+                        {/* Due Tasks (Past) */}
+                        {dueTasks.length > 0 && (
+                          <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaExclamationTriangle className="text-red-600" />
+                              <h4 className="font-semibold text-red-800">Due Tasks ({dueTasks.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {dueTasks.map((task) => {
+                                const taskDate = task.dueDate || task.scheduledDate
+                                const taskType = task.type || 'Task'
+                                return (
+                                  <div key={task._id || task.id} className="p-3 bg-white rounded-lg border border-red-200">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <p className="font-medium text-gray-800">{task.title || task.name || task.customerName || 'Task'}</p>
+                                          <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
+                                            {taskType}
+                                          </span>
+                                        </div>
+                                        {task.description && (
+                                          <p className="text-sm text-gray-600 mb-1">{task.description}</p>
+                                        )}
+                                        {task.customerName && (
+                                          <p className="text-xs text-gray-500">Customer: {task.customerName}</p>
+                                        )}
+                                        <p className="text-xs text-red-600 mt-1">
+                                          Due: {taskDate ? new Date(taskDate).toLocaleDateString() : 'No date'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Today's Tasks */}
+                        {todayTasks.length > 0 && (
+                          <div className="border-2 border-blue-200 bg-blue-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaClock className="text-blue-600" />
+                              <h4 className="font-semibold text-blue-800">Today's Tasks ({todayTasks.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {todayTasks.map((task) => {
+                                const taskDate = task.dueDate || task.scheduledDate
+                                const taskType = task.type || 'Task'
+                                return (
+                                  <div key={task._id || task.id} className="p-3 bg-white rounded-lg border border-blue-200">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <p className="font-medium text-gray-800">{task.title || task.name || task.customerName || 'Task'}</p>
+                                          <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
+                                            {taskType}
+                                          </span>
+                                        </div>
+                                        {task.description && (
+                                          <p className="text-sm text-gray-600 mb-1">{task.description}</p>
+                                        )}
+                                        {task.customerName && (
+                                          <p className="text-xs text-gray-500">Customer: {task.customerName}</p>
+                                        )}
+                                        <p className="text-xs text-blue-600 mt-1">
+                                          Today: {taskDate ? new Date(taskDate).toLocaleDateString() : 'No date'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tomorrow's Tasks */}
+                        {tomorrowTasks.length > 0 && (
+                          <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-green-600" />
+                              <h4 className="font-semibold text-green-800">Tomorrow's Tasks ({tomorrowTasks.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {tomorrowTasks.map((task) => {
+                                const taskDate = task.dueDate || task.scheduledDate
+                                const taskType = task.type || 'Task'
+                                return (
+                                  <div key={task._id || task.id} className="p-3 bg-white rounded-lg border border-green-200">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-gray-800">{task.title || task.name || task.customerName || 'Task'}</p>
+                                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
+                                          {taskType}
+                                        </span>
+                                      </div>
+                                      {task.description && (
+                                        <p className="text-sm text-gray-600 mb-1">{task.description}</p>
+                                      )}
+                                      {task.customerName && (
+                                        <p className="text-xs text-gray-500">Customer: {task.customerName}</p>
+                                      )}
+                                      <p className="text-xs text-green-600 mt-1">
+                                        Tomorrow: {taskDate ? new Date(taskDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Remaining Tasks (This Week) */}
+                        {remainingTasks.length > 0 && (
+                          <div className="border-2 border-yellow-200 bg-yellow-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaArrowRight className="text-yellow-600" />
+                              <h4 className="font-semibold text-yellow-800">This Week ({remainingTasks.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {remainingTasks.map((task) => {
+                                const taskDate = task.dueDate || task.scheduledDate
+                                const taskType = task.type || 'Task'
+                                return (
+                                  <div key={task._id || task.id} className="p-3 bg-white rounded-lg border border-yellow-200">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <p className="font-medium text-gray-800">{task.title || task.name || task.customerName || 'Task'}</p>
+                                          <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
+                                            {taskType}
+                                          </span>
+                                        </div>
+                                        {task.description && (
+                                          <p className="text-sm text-gray-600 mb-1">{task.description}</p>
+                                        )}
+                                        {task.customerName && (
+                                          <p className="text-xs text-gray-500">Customer: {task.customerName}</p>
+                                        )}
+                                        <p className="text-xs text-yellow-600 mt-1">
+                                          Scheduled: {taskDate ? new Date(taskDate).toLocaleDateString() : 'No date'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Upcoming Tasks */}
+                        {upcomingTasks.length > 0 && (
+                          <div className="border-2 border-purple-200 bg-purple-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-purple-600" />
+                              <h4 className="font-semibold text-purple-800">Upcoming Tasks ({upcomingTasks.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {upcomingTasks.map((task) => {
+                                const taskDate = task.dueDate || task.scheduledDate
+                                const taskType = task.type || 'Task'
+                                return (
+                                  <div key={task._id || task.id} className="p-3 bg-white rounded-lg border border-purple-200">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="font-medium text-gray-800">{task.title || task.name || task.customerName || 'Task'}</p>
+                                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
+                                          {taskType}
+                                        </span>
+                                      </div>
+                                      {task.description && (
+                                        <p className="text-sm text-gray-600 mb-1">{task.description}</p>
+                                      )}
+                                      {task.customerName && (
+                                        <p className="text-xs text-gray-500">Customer: {task.customerName}</p>
+                                      )}
+                                      <p className="text-xs text-purple-600 mt-1">
+                                        Upcoming: {taskDate ? new Date(taskDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {tasksToShow.length === 0 && (
+                          <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                            <FaTasks className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                            <p className="text-gray-600 font-medium">
+                              {selectedDateForView ? 'No tasks for this date' : 'No tasks available'}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {selectedDateForView ? 'Select another date or assign tasks to this date' : 'Tasks will appear here once assigned'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* Sample Track Tab Content */}
+              {assignModalActiveTab === 'sample' && (
+                <div className="mb-4">
+                  {(() => {
+                    const today = new Date()
+                    today.setHours(0, 0, 0, 0)
+                    const tomorrow = new Date(today)
+                    tomorrow.setDate(tomorrow.getDate() + 1)
+                    const nextWeek = new Date(today)
+                    nextWeek.setDate(nextWeek.getDate() + 7)
+                    
+                    // Filter samples based on selectedDateForView or show all
+                    let samplesToShow = samples.filter(s => s.status !== 'Converted')
+                    
+                    if (selectedDateForView) {
+                      const selectedDateObj = new Date(selectedDateForView)
+                      const selectedDateOnly = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate())
+                      
+                      samplesToShow = samplesToShow.filter(s => {
+                        if (s.visitDate) {
+                          const visitDateOnly = new Date(new Date(s.visitDate).getFullYear(), new Date(s.visitDate).getMonth(), new Date(s.visitDate).getDate())
+                          return visitDateOnly.getTime() === selectedDateOnly.getTime()
+                        }
+                        if (s.expectedDate) {
+                          const expectedDateOnly = new Date(new Date(s.expectedDate).getFullYear(), new Date(s.expectedDate).getMonth(), new Date(s.expectedDate).getDate())
+                          return expectedDateOnly.getTime() === selectedDateOnly.getTime()
+                        }
+                        return false
+                      })
+                    }
+                    
+                    // Categorize samples
+                    const todaySamples = samplesToShow.filter(s => {
+                      if (!s.visitDate) return false
+                      const visitDate = new Date(s.visitDate)
+                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                      return visitDateOnly.getTime() === today.getTime()
+                    })
+                    
+                    const tomorrowSamples = samplesToShow.filter(s => {
+                      if (!s.visitDate) return false
+                      const visitDate = new Date(s.visitDate)
+                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                      return visitDateOnly.getTime() === tomorrow.getTime()
+                    })
+                    
+                    const thisWeekSamples = samplesToShow.filter(s => {
+                      if (!s.visitDate) return false
+                      const visitDate = new Date(s.visitDate)
+                      return visitDate > tomorrow && visitDate <= nextWeek
+                    })
+                    
+                    const upcomingSamples = samplesToShow.filter(s => {
+                      if (!s.visitDate) return false
+                      const visitDate = new Date(s.visitDate)
+                      return visitDate > nextWeek
+                    })
+                    
+                    const pastSamples = samplesToShow.filter(s => {
+                      if (!s.visitDate) return false
+                      const visitDate = new Date(s.visitDate)
+                      return visitDate < today
+                    })
+                    
+                    return (
+                      <div className="space-y-4">
+                        {/* Past Samples */}
+                        {pastSamples.length > 0 && (
+                          <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaExclamationTriangle className="text-red-600" />
+                              <h4 className="font-semibold text-red-800">Past Samples ({pastSamples.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {pastSamples.map((sample) => (
+                                <div key={sample._id || sample.id} className="p-3 bg-white rounded-lg border border-red-200">
+                                  <p className="font-medium text-gray-800">{sample.customerName || 'Sample'}</p>
+                                  <p className="text-sm text-gray-600">{sample.productName || 'No product'}</p>
+                                  <p className="text-xs text-gray-500">Qty: {sample.quantity || 1}</p>
+                                  <p className="text-xs text-red-600 mt-1">
+                                    Visit Date: {sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'No date'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Today's Samples */}
+                        {todaySamples.length > 0 && (
+                          <div className="border-2 border-blue-200 bg-blue-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaClock className="text-blue-600" />
+                              <h4 className="font-semibold text-blue-800">Today's Samples ({todaySamples.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {todaySamples.map((sample) => (
+                                <div key={sample._id || sample.id} className="p-3 bg-white rounded-lg border border-blue-200">
+                                  <p className="font-medium text-gray-800">{sample.customerName || 'Sample'}</p>
+                                  <p className="text-sm text-gray-600">{sample.productName || 'No product'}</p>
+                                  <p className="text-xs text-gray-500">Qty: {sample.quantity || 1}</p>
+                                  <p className="text-xs text-blue-600 mt-1">
+                                    Today: {sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'No date'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tomorrow's Samples */}
+                        {tomorrowSamples.length > 0 && (
+                          <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-green-600" />
+                              <h4 className="font-semibold text-green-800">Tomorrow's Samples ({tomorrowSamples.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {tomorrowSamples.map((sample) => (
+                                <div key={sample._id || sample.id} className="p-3 bg-white rounded-lg border border-green-200">
+                                  <p className="font-medium text-gray-800">{sample.customerName || 'Sample'}</p>
+                                  <p className="text-sm text-gray-600">{sample.productName || 'No product'}</p>
+                                  <p className="text-xs text-gray-500">Qty: {sample.quantity || 1}</p>
+                                  <p className="text-xs text-green-600 mt-1">
+                                    Tomorrow: {sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'No date'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* This Week Samples */}
+                        {thisWeekSamples.length > 0 && (
+                          <div className="border-2 border-yellow-200 bg-yellow-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaArrowRight className="text-yellow-600" />
+                              <h4 className="font-semibold text-yellow-800">This Week ({thisWeekSamples.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {thisWeekSamples.map((sample) => (
+                                <div key={sample._id || sample.id} className="p-3 bg-white rounded-lg border border-yellow-200">
+                                  <p className="font-medium text-gray-800">{sample.customerName || 'Sample'}</p>
+                                  <p className="text-sm text-gray-600">{sample.productName || 'No product'}</p>
+                                  <p className="text-xs text-gray-500">Qty: {sample.quantity || 1}</p>
+                                  <p className="text-xs text-yellow-600 mt-1">
+                                    Visit Date: {sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'No date'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Upcoming Samples */}
+                        {upcomingSamples.length > 0 && (
+                          <div className="border-2 border-purple-200 bg-purple-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-purple-600" />
+                              <h4 className="font-semibold text-purple-800">Upcoming Samples ({upcomingSamples.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {upcomingSamples.map((sample) => (
+                                <div key={sample._id || sample.id} className="p-3 bg-white rounded-lg border border-purple-200">
+                                  <p className="font-medium text-gray-800">{sample.customerName || 'Sample'}</p>
+                                  <p className="text-sm text-gray-600">{sample.productName || 'No product'}</p>
+                                  <p className="text-xs text-gray-500">Qty: {sample.quantity || 1}</p>
+                                  <p className="text-xs text-purple-600 mt-1">
+                                    Visit Date: {sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'No date'}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {samplesToShow.length === 0 && (
+                          <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                            <FaFlask className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                            <p className="text-gray-600 font-medium">
+                              {selectedDateForView ? 'No samples for this date' : 'No samples available'}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {selectedDateForView ? 'Select another date or assign samples to this date' : 'Samples will appear here once assigned'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* Close Button */}
+              <div className="flex justify-end pt-4 border-t border-gray-200 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setShowVisitAssignmentModal(false)
+                    setSelectedVisitsForAssignment([])
+                    setSelectedFollowUpsForAssignment([])
+                    setSelectedSamplesForAssignment([])
+                    setAssignmentDate('')
+                    setSelectedDateForView('')
+                    setAssignModalActiveTab('visits')
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <FaTimes className="w-4 h-4" />
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAchievementModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">

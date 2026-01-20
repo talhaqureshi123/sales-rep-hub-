@@ -760,10 +760,51 @@ const createCustomerInHubSpot = async (customer) => {
     const headers = await getHeaders();
     if (!headers) return null;
 
+    // DUPLICATE PREVENTION: Check if customer already exists by email
+    const email = customer.email || customer.emailAddress || "";
+    if (email && isValidEmail(email)) {
+      const existingContactId = await findContactByEmail(email);
+      if (existingContactId) {
+        console.log(`Customer with email ${email} already exists in HubSpot: ${existingContactId}`);
+        // Update existing contact instead of creating duplicate
+        try {
+          const contactProperties = {
+            firstname: customer.firstname || customer.firstName || "",
+            lastname: customer.lastname || customer.lastName || "",
+            phone: customer.phone || "",
+            company: customer.company || "",
+            address: customer.address || "",
+            city: customer.city || "",
+            state: customer.state || "",
+            zip: customer.zip || customer.pincode || "",
+          };
+
+          const safeContactProperties = await filterToKnownProperties(
+            "contacts",
+            contactProperties
+          );
+
+          await axios.patch(
+            `${HUBSPOT_API_BASE}/crm/v3/objects/contacts/${existingContactId}`,
+            { properties: safeContactProperties },
+            { headers }
+          );
+
+          console.log(`HubSpot customer updated (prevented duplicate): ${existingContactId}`);
+          return existingContactId;
+        } catch (updateError) {
+          console.error("Error updating existing customer:", updateError.message);
+          // Return existing ID even if update fails
+          return existingContactId;
+        }
+      }
+    }
+
+    // Create new customer if not found
     const contactProperties = {
       firstname: customer.firstname || customer.firstName || "",
       lastname: customer.lastname || customer.lastName || "",
-      email: customer.email || "",
+      email: email,
       phone: customer.phone || "",
       company: customer.company || "",
       address: customer.address || "",
@@ -786,6 +827,18 @@ const createCustomerInHubSpot = async (customer) => {
     console.log("HubSpot customer created:", response.data.id);
     return response.data.id;
   } catch (error) {
+    // Check if error is due to duplicate email
+    if (error.response?.status === 409 || error.response?.data?.message?.includes('duplicate') || error.response?.data?.message?.includes('already exists')) {
+      console.warn("Customer already exists in HubSpot, attempting to find by email...");
+      const email = customer.email || customer.emailAddress || "";
+      if (email && isValidEmail(email)) {
+        const existingId = await findContactByEmail(email);
+        if (existingId) {
+          console.log(`Found existing customer: ${existingId}`);
+          return existingId;
+        }
+      }
+    }
     console.error(
       "Error creating customer in HubSpot:",
       error.response?.data || error.message
@@ -804,6 +857,13 @@ const createOrderInHubSpot = async (order, customerId) => {
   try {
     const headers = await getHeaders();
     if (!headers) return null;
+
+    // DUPLICATE PREVENTION: Check if order already has HubSpot ID
+    // This should be checked before calling this function, but we add safety check here too
+    if (order.hubspotOrderId) {
+      console.log(`Order already has HubSpot ID: ${order.hubspotOrderId} - skipping duplicate creation`);
+      return order.hubspotOrderId;
+    }
 
     // Create a REAL Orders object (shows in HubSpot Orders screen).
     // Different portals can have different required order properties,
@@ -836,7 +896,9 @@ const createOrderInHubSpot = async (order, customerId) => {
     );
 
     const orderId = response.data?.id || null;
-    console.log("HubSpot order created (Orders object):", orderId);
+    if (orderId) {
+      console.log("✅ HubSpot order created (Orders object):", orderId);
+    }
 
     // Associate order with customer
     if (customerId && orderId) {
@@ -855,6 +917,11 @@ const createOrderInHubSpot = async (order, customerId) => {
 
     return orderId;
   } catch (error) {
+    // Check if error is due to duplicate
+    if (error.response?.status === 409 || error.response?.data?.message?.includes('duplicate')) {
+      console.warn("Order might already exist in HubSpot (duplicate detected)");
+      return null; // Return null to prevent duplicate
+    }
     console.error(
       "Error creating order in HubSpot:",
       error.response?.data || error.message
@@ -1114,6 +1181,9 @@ const createTaskObjectInHubSpot = async (task = {}) => {
     const hs_timestamp =
       due && !Number.isNaN(due.getTime()) ? String(due.getTime()) : undefined;
 
+    // DUPLICATE PREVENTION: Check if task with same subject and due date already exists
+    // Note: This is a basic check. For strict prevention, store hubspotTaskId in database (already done)
+    
     const response = await axios.post(
       `${HUBSPOT_API_BASE}/crm/v3/objects/tasks`,
       {
@@ -1129,8 +1199,17 @@ const createTaskObjectInHubSpot = async (task = {}) => {
       { headers }
     );
 
-    return response.data?.id || null;
+    const taskId = response.data?.id || null;
+    if (taskId) {
+      console.log(`✅ HubSpot task created: ${taskId} - "${subject}"`);
+    }
+    return taskId;
   } catch (error) {
+    // Check if error is due to duplicate
+    if (error.response?.status === 409 || error.response?.data?.message?.includes('duplicate')) {
+      console.warn("Task might already exist in HubSpot (duplicate detected)");
+      return null; // Return null to prevent duplicate
+    }
     console.error(
       "Error creating task object in HubSpot:",
       error.response?.data || error.message

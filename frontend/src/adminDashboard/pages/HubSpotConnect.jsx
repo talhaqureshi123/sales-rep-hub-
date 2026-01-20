@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { testHubSpotConnection, syncHubSpotData, importHubSpotCustomersToDb, importHubSpotTasksToDb, pushSalesOrdersToHubSpot } from '../../services/adminservices/hubspotService'
-import { FaCheckCircle, FaUsers, FaCalendar, FaBullseye, FaChartLine, FaCloud, FaSync, FaSpinner, FaBell, FaShoppingCart, FaLink } from 'react-icons/fa'
+import { testHubSpotConnection, syncHubSpotData, importHubSpotCustomersToDb, importHubSpotTasksToDb, pushSalesOrdersToHubSpot, pushCustomersToHubSpot, pushTasksToHubSpot } from '../../services/adminservices/hubspotService'
+import { FaCheckCircle, FaUsers, FaCalendar, FaBullseye, FaChartLine, FaCloud, FaSync, FaSpinner, FaBell, FaShoppingCart, FaLink, FaTasks, FaUserPlus } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const HubSpotConnect = () => {
   const [connectionStatus, setConnectionStatus] = useState(null)
@@ -10,6 +11,8 @@ const HubSpotConnect = () => {
   const [importing, setImporting] = useState(false)
   const [importingTasks, setImportingTasks] = useState(false)
   const [pushingOrders, setPushingOrders] = useState(false)
+  const [pushingCustomers, setPushingCustomers] = useState(false)
+  const [pushingTasks, setPushingTasks] = useState(false)
 
   useEffect(() => {
     // Check connection status on mount
@@ -59,13 +62,28 @@ const HubSpotConnect = () => {
     try {
       const result = await syncHubSpotData()
       if (result.success) {
-        alert(`Sync successful! ${result.data?.customers?.length || 0} customers, ${result.data?.orders?.length || 0} orders synced.`)
+        Swal.fire({
+          icon: 'success',
+          title: 'Sync Successful!',
+          html: `Synced: ${result.data?.customers?.length || 0} customers, ${result.data?.orders?.length || 0} orders`,
+          confirmButtonColor: '#e9931c'
+        })
       } else {
-        alert('Sync failed: ' + (result.message || 'Unknown error'))
+        Swal.fire({
+          icon: 'error',
+          title: 'Sync Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error syncing data:', error)
-      alert('Error syncing data. Please check console for details.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error syncing data. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setSyncing(false)
     }
@@ -77,13 +95,37 @@ const HubSpotConnect = () => {
       const result = await importHubSpotCustomersToDb()
       if (result.success) {
         const d = result.data || {}
-        alert(`Imported from HubSpot: ${d.fetchedFromHubSpot || 0}\nCreated: ${d.created || 0}\nUpdated: ${d.updated || 0}\nSkipped (no email): ${d.skipped || 0}\n\nNow open Customers page to see them.`)
+        Swal.fire({
+          icon: 'success',
+          title: 'Import Successful!',
+          html: `
+            <div style="text-align: left;">
+              <p><strong>Imported from HubSpot:</strong> ${d.fetchedFromHubSpot || 0}</p>
+              <p><strong>Created:</strong> ${d.created || 0}</p>
+              <p><strong>Updated:</strong> ${d.updated || 0}</p>
+              <p><strong>Skipped (no email):</strong> ${d.skipped || 0}</p>
+              <hr style="margin: 10px 0;">
+              <p>Now open Customers page to see them.</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c'
+        })
       } else {
-        alert('Import failed: ' + (result.message || 'Unknown error'))
+        Swal.fire({
+          icon: 'error',
+          title: 'Import Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error importing customers:', error)
-      alert('Error importing customers. Please check console for details.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error importing customers. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setImporting(false)
     }
@@ -95,13 +137,38 @@ const HubSpotConnect = () => {
       const result = await importHubSpotTasksToDb()
       if (result.success) {
         const d = result.data || {}
-        alert(`Imported HubSpot Tasks → Follow-Ups\nFetched: ${d.fetchedFromHubSpot || 0}\nCreated: ${d.created || 0}\nUpdated: ${d.updated || 0}\nSkipped: ${d.skipped || 0}\n\nNow open Follow-Up Manager to see them.`)
+        Swal.fire({
+          icon: 'success',
+          title: 'Import Successful!',
+          html: `
+            <div style="text-align: left;">
+              <p><strong>Imported HubSpot Tasks → Follow-Ups</strong></p>
+              <p><strong>Fetched:</strong> ${d.fetchedFromHubSpot || 0}</p>
+              <p><strong>Created:</strong> ${d.created || 0}</p>
+              <p><strong>Updated:</strong> ${d.updated || 0}</p>
+              <p><strong>Skipped:</strong> ${d.skipped || 0}</p>
+              <hr style="margin: 10px 0;">
+              <p>Now open Follow-Up Manager to see them.</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c'
+        })
       } else {
-        alert('Task import failed: ' + (result.message || 'Unknown error'))
+        Swal.fire({
+          icon: 'error',
+          title: 'Task Import Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error importing tasks:', error)
-      alert('Error importing tasks. Please check console for details.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error importing tasks. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setImportingTasks(false)
     }
@@ -113,15 +180,116 @@ const HubSpotConnect = () => {
       const result = await pushSalesOrdersToHubSpot(false, 0)
       if (result.success) {
         const d = result.data || {}
-        alert(`Pushed Orders to HubSpot\nAttempted: ${d.attempted || 0}\nSynced: ${d.synced || 0}\nFailed: ${d.failed || 0}`)
+        Swal.fire({
+          icon: 'success',
+          title: 'Pushed Orders to HubSpot',
+          html: `
+            <div style="text-align: left;">
+              <p><strong>Attempted:</strong> ${d.attempted || 0}</p>
+              <p><strong>Synced:</strong> ${d.synced || 0}</p>
+              <p><strong>Failed:</strong> ${d.failed || 0}</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c'
+        })
       } else {
-        alert('Push orders failed: ' + (result.message || 'Unknown error'))
+        Swal.fire({
+          icon: 'error',
+          title: 'Push Orders Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error pushing orders:', error)
-      alert('Error pushing orders. Please check console for details.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error pushing orders. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setPushingOrders(false)
+    }
+  }
+
+  const handlePushCustomers = async () => {
+    setPushingCustomers(true)
+    try {
+      const result = await pushCustomersToHubSpot(false, 0)
+      if (result.success) {
+        const d = result.data || {}
+        Swal.fire({
+          icon: 'success',
+          title: 'Pushed Customers to HubSpot',
+          html: `
+            <div style="text-align: left;">
+              <p><strong>Attempted:</strong> ${d.attempted || 0}</p>
+              <p><strong>Synced:</strong> ${d.synced || 0}</p>
+              <p><strong>Skipped:</strong> ${d.skipped || 0}</p>
+              <p><strong>Failed:</strong> ${d.failed || 0}</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c'
+        })
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Push Customers Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error pushing customers:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error pushing customers. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setPushingCustomers(false)
+    }
+  }
+
+  const handlePushTasks = async () => {
+    setPushingTasks(true)
+    try {
+      const result = await pushTasksToHubSpot(false, 0)
+      if (result.success) {
+        const d = result.data || {}
+        Swal.fire({
+          icon: 'success',
+          title: 'Pushed Tasks to HubSpot',
+          html: `
+            <div style="text-align: left;">
+              <p><strong>Attempted:</strong> ${d.attempted || 0}</p>
+              <p><strong>Synced:</strong> ${d.synced || 0}</p>
+              <p><strong>Skipped:</strong> ${d.skipped || 0}</p>
+              <p><strong>Failed:</strong> ${d.failed || 0}</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c'
+        })
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Push Tasks Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error pushing tasks:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error pushing tasks. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setPushingTasks(false)
     }
   }
 
@@ -270,6 +438,44 @@ const HubSpotConnect = () => {
               <>
                 <FaShoppingCart />
                 Push Orders (Auto-Link)
+              </>
+            )}
+          </button>
+
+          {/* Push Customers Button */}
+          <button
+            onClick={handlePushCustomers}
+            disabled={pushingCustomers || connectionStatus !== 'connected'}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+          >
+            {pushingCustomers ? (
+              <>
+                <FaSpinner className="animate-spin" />
+                Pushing Customers...
+              </>
+            ) : (
+              <>
+                <FaUserPlus />
+                Push Customers
+              </>
+            )}
+          </button>
+
+          {/* Push Tasks Button */}
+          <button
+            onClick={handlePushTasks}
+            disabled={pushingTasks || connectionStatus !== 'connected'}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+          >
+            {pushingTasks ? (
+              <>
+                <FaSpinner className="animate-spin" />
+                Pushing Tasks...
+              </>
+            ) : (
+              <>
+                <FaTasks />
+                Push Tasks
               </>
             )}
           </button>

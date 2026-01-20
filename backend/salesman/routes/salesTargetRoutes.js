@@ -1,14 +1,18 @@
 const express = require('express');
 const router = express.Router();
+const {
+  getMySalesTargets,
+  getMySalesTarget,
+  getMySalesTargetStats,
+} = require('../controller/salesTargetController');
 const { protect, authorize } = require('../../middleware/auth');
-const { getMyFollowUps, getMyFollowUp, createMyFollowUp, updateMyFollowUp } = require('../controller/followUpController');
 
 // All routes require authentication and salesman role
 router.use(protect);
 router.use(authorize('salesman'));
 
-router.route('/').get(getMyFollowUps).post(createMyFollowUp);
-router.route('/:id').get(getMyFollowUp).put(updateMyFollowUp);
+router.get('/stats', getMySalesTargetStats);
+router.route('/').get(getMySalesTargets);
+router.route('/:id').get(getMySalesTarget);
 
 module.exports = router;
-

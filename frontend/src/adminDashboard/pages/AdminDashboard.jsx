@@ -18,6 +18,8 @@ import ShiftPhotos from './ShiftPhotos'
 import LiveTracking from './LiveTracking'
 import HubSpotConnect from './HubSpotConnect'
 import HubSpotTasks from './HubSpotTasks'
+import Tasks from './Tasks'
+import SalesSubmissions from './SalesSubmissions'
 import AdminSidebar from '../components/AdminSidebar'
 import AdminBottomNavbar from '../components/AdminBottomNavbar'
 import { logoutService } from '../../services/adminservices/loginservice'
@@ -35,7 +37,7 @@ const AdminDashboard = ({ onLogout }) => {
   // Listen for navigation events from dashboard
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sample-tracker', 'follow-up-manager', 'sales-targets', 'user-management', 'customer-management', 'customer-allotment', 'assign-target', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
+      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sample-tracker', 'follow-up-manager', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'assign-target', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
         setActivePage(event.detail)
       }
     }
@@ -55,7 +57,7 @@ const AdminDashboard = ({ onLogout }) => {
       case 'hubspot-connect':
         return <HubSpotConnect />
       case 'hubspot-tasks':
-        return <HubSpotTasks />
+        return <Tasks />
       case 'sales-orders':
         return <SalesOrders />
       case 'quotes':
@@ -66,6 +68,8 @@ const AdminDashboard = ({ onLogout }) => {
         return <FollowUpManager />
       case 'sales-targets':
         return <SalesTargets />
+      case 'sales-submissions':
+        return <SalesSubmissions />
       case 'user-management':
         return <UserManagement />
       case 'customer-management':

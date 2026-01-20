@@ -12,6 +12,7 @@ const {
   getHubSpotOrdersRequiredFields,
   pushSalesOrdersToHubSpot,
   pushCustomersToHubSpot,
+  pushTasksToHubSpot,
   repairOrderAssociations,
 } = require('../controllers/hubspotController');
 const { protect, authorize } = require('../../middleware/auth');
@@ -64,6 +65,9 @@ router.post('/push-orders', pushSalesOrdersToHubSpot);
 
 // Push existing Customers from website DB to HubSpot Contacts
 router.post('/push-customers', pushCustomersToHubSpot);
+
+// Push existing approved Tasks (Follow-ups) to HubSpot
+router.post('/push-tasks', pushTasksToHubSpot);
 
 // Repair order->contact associations for already-synced orders
 router.post('/repair-order-associations', repairOrderAssociations);

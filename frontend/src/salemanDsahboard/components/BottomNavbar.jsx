@@ -3,7 +3,10 @@ import {
   FaMapMarkerAlt, 
   FaFileInvoice, 
   FaUsers,
-  FaTrophy 
+  FaTrophy,
+  FaTasks,
+  FaBullseye,
+  FaUpload
 } from 'react-icons/fa'
 
 const BottomNavbar = ({ activeTab, setActiveTab }) => {
@@ -12,6 +15,9 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
     { id: 'sales-tracking', label: 'Tracking', icon: FaMapMarkerAlt },
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },
     { id: 'customers', label: 'Customers', icon: FaUsers },
+    { id: 'tasks', label: 'Tasks', icon: FaTasks },
+    { id: 'sales-targets', label: 'Targets', icon: FaBullseye },
+    { id: 'sales-submissions', label: 'Upload', icon: FaUpload },
     { id: 'achievements', label: 'Achievements', icon: FaTrophy },
   ]
 

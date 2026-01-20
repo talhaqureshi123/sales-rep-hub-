@@ -17,7 +17,8 @@ import {
   FaCamera,
   FaMapMarkedAlt,
   FaCloud,
-  FaTasks
+  FaTasks,
+  FaUpload
 } from 'react-icons/fa'
 
 const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
@@ -32,6 +33,7 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
     { id: 'sample-tracker', icon: FaFlask, label: 'Sample Tracker' },
     { id: 'follow-up-manager', icon: FaBell, label: 'Follow-Up Manager' },
     { id: 'sales-targets', icon: FaBullseye, label: 'Sales Targets' },
+    { id: 'sales-submissions', icon: FaUpload, label: 'Sales Submissions' },
     { id: 'user-management', icon: FaUsers, label: 'Salesman Management' },
     { id: 'customer-management', icon: FaUser, label: 'Customer Management' },
     { id: 'customer-allotment', icon: FaLink, label: 'Customer Allotment' },

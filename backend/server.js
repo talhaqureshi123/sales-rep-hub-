@@ -1,7 +1,7 @@
 const app = require("./app");
 const config = require("./config");
 
-const PORT = config.PORT || 5000;
+const PORT = config.PORT || 4000;
 
 const server = app.listen(PORT, () => {
   console.log(`Server running in ${config.NODE_ENV} mode on port ${PORT}`);

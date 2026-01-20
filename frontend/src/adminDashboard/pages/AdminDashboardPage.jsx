@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { getUsers } from '../../services/adminservices/userService'
 import { getCustomers } from '../../services/adminservices/customerService'
 import { getVisitTargets } from '../../services/adminservices/visitTargetService'
+import { getFollowUps } from '../../services/adminservices/followUpService'
+import { getSalesTargets } from '../../services/adminservices/salesTargetService'
 import { 
   FaCalendarAlt, 
   FaChartLine, 
@@ -12,7 +14,10 @@ import {
   FaClock,
   FaUsers,
   FaUser,
-  FaBox
+  FaBox,
+  FaTasks,
+  FaBullseye,
+  FaArrowRight
 } from 'react-icons/fa'
 import {
   LineChart,
@@ -58,6 +63,9 @@ const AdminDashboardPage = () => {
     try {
       setLoading(true)
       
+      // Get current admin user ID
+      const currentUserId = localStorage.getItem('userId')
+      
       // Load salesmen
       const salesmenResult = await getUsers({ role: 'salesman' })
       const salesmen = salesmenResult.success && salesmenResult.data ? salesmenResult.data : []
@@ -69,6 +77,26 @@ const AdminDashboardPage = () => {
       // Load visit targets
       const visitTargetsResult = await getVisitTargets()
       const visitTargets = visitTargetsResult.success && visitTargetsResult.data ? visitTargetsResult.data : []
+      
+      // Load tasks (follow-ups)
+      const tasksResult = await getFollowUps({})
+      const tasks = tasksResult.success && tasksResult.data ? tasksResult.data : []
+      
+      // Load sales targets
+      const salesTargetsResult = await getSalesTargets({})
+      const salesTargets = salesTargetsResult.success && salesTargetsResult.data ? salesTargetsResult.data : []
+      
+      // Filter items created by current admin
+      const filterByCreatedBy = (item) => {
+        if (!currentUserId) return false
+        const createdById = item.createdBy?._id || item.createdBy || item.createdBy?.id
+        return String(createdById) === String(currentUserId)
+      }
+      
+      const myTasks = tasks.filter(filterByCreatedBy).slice(0, 5)
+      const myCustomers = customers.filter(filterByCreatedBy).slice(0, 5)
+      const myVisits = visitTargets.filter(filterByCreatedBy).slice(0, 5)
+      const mySalesTargets = salesTargets.filter(filterByCreatedBy).slice(0, 5)
       
       // Calculate stats
       const activeSalesmen = salesmen.filter(s => s.status === 'Active').length
@@ -187,7 +215,7 @@ const AdminDashboardPage = () => {
     )
   }
 
-  const { kpis, todaySchedule, recentActivity, charts, overall } = dashboardData
+  const { kpis, todaySchedule, recentActivity, charts, overall, myCreations } = dashboardData
 
   const handleManageSalesmen = () => {
     window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'user-management' }))
@@ -199,6 +227,22 @@ const AdminDashboardPage = () => {
 
   const handleProductCatalog = () => {
     window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'product-catalog' }))
+  }
+
+  const handleViewTasks = () => {
+    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'hubspot-tasks' }))
+  }
+
+  const handleViewCustomers = () => {
+    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'customer-management' }))
+  }
+
+  const handleViewVisits = () => {
+    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'assign-target' }))
+  }
+
+  const handleViewSalesTargets = () => {
+    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'sales-targets' }))
   }
 
   return (
@@ -416,6 +460,173 @@ const AdminDashboardPage = () => {
           <div>
             <p className="text-sm opacity-90">Active Customers</p>
             <p className="text-2xl font-bold">{overall.activeCustomers}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* My Creations Section */}
+      <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-xl font-bold text-gray-800">My Creations</h3>
+            <p className="text-sm text-gray-600 mt-1">Items created by you</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* My Tasks */}
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FaTasks className="w-5 h-5 text-blue-600" />
+                <h4 className="font-semibold text-gray-800">My Tasks</h4>
+              </div>
+              <button
+                onClick={handleViewTasks}
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+              >
+                View All
+                <FaArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            {myCreations.tasks.length === 0 ? (
+              <p className="text-sm text-gray-500">No tasks created</p>
+            ) : (
+              <div className="space-y-2">
+                {myCreations.tasks.map((task, index) => (
+                  <div key={task._id || index} className="bg-white rounded p-2 border border-blue-100">
+                    <p className="text-sm font-medium text-gray-800 truncate">{task.title || task.customerName || 'Task'}</p>
+                    <p className="text-xs text-gray-500">{task.type || 'Task'}</p>
+                    {task.dueDate && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* My Customers */}
+          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FaUser className="w-5 h-5 text-green-600" />
+                <h4 className="font-semibold text-gray-800">My Customers</h4>
+              </div>
+              <button
+                onClick={handleViewCustomers}
+                className="text-green-600 hover:text-green-700 text-sm font-medium flex items-center gap-1"
+              >
+                View All
+                <FaArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            {myCreations.customers.length === 0 ? (
+              <p className="text-sm text-gray-500">No customers created</p>
+            ) : (
+              <div className="space-y-2">
+                {myCreations.customers.map((customer, index) => (
+                  <div key={customer._id || index} className="bg-white rounded p-2 border border-green-100">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {customer.name || customer.firstName || customer.company || 'Customer'}
+                    </p>
+                    {customer.email && (
+                      <p className="text-xs text-gray-500 truncate">{customer.email}</p>
+                    )}
+                    {customer.phone && (
+                      <p className="text-xs text-gray-400 mt-1">{customer.phone}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* My Visits */}
+          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FaMapMarkerAlt className="w-5 h-5 text-orange-600" />
+                <h4 className="font-semibold text-gray-800">My Visits</h4>
+              </div>
+              <button
+                onClick={handleViewVisits}
+                className="text-orange-600 hover:text-orange-700 text-sm font-medium flex items-center gap-1"
+              >
+                View All
+                <FaArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            {myCreations.visits.length === 0 ? (
+              <p className="text-sm text-gray-500">No visits created</p>
+            ) : (
+              <div className="space-y-2">
+                {myCreations.visits.map((visit, index) => (
+                  <div key={visit._id || index} className="bg-white rounded p-2 border border-orange-100">
+                    <p className="text-sm font-medium text-gray-800 truncate">{visit.name || 'Visit'}</p>
+                    <p className="text-xs text-gray-500 truncate">{visit.address || visit.city || 'Location'}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                        visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {visit.status || 'Pending'}
+                      </span>
+                      {visit.visitDate && (
+                        <p className="text-xs text-gray-400">
+                          {new Date(visit.visitDate).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* My Sales Targets */}
+          <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FaBullseye className="w-5 h-5 text-purple-600" />
+                <h4 className="font-semibold text-gray-800">My Sales Targets</h4>
+              </div>
+              <button
+                onClick={handleViewSalesTargets}
+                className="text-purple-600 hover:text-purple-700 text-sm font-medium flex items-center gap-1"
+              >
+                View All
+                <FaArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            {myCreations.salesTargets.length === 0 ? (
+              <p className="text-sm text-gray-500">No sales targets created</p>
+            ) : (
+              <div className="space-y-2">
+                {myCreations.salesTargets.map((target, index) => (
+                  <div key={target._id || index} className="bg-white rounded p-2 border border-purple-100">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {target.salesman?.name || 'Salesman'} - {target.period || 'Period'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Target: ₹{target.targetAmount?.toLocaleString() || '0'}
+                    </p>
+                    {target.status && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${
+                        target.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                        target.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {target.status}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

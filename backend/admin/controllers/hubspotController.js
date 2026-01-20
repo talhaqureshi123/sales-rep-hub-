@@ -490,6 +490,7 @@ const importHubSpotTasksToDb = async (req, res) => {
         description: subject || body || `HubSpot Task ${taskId}`,
         notes: body || '',
         createdBy: req.user?._id,
+        approvalStatus: 'Approved', // Imported tasks from HubSpot are auto-approved
       };
 
       // If completed, mark completed; otherwise pre-save hook will compute Overdue/Today/Upcoming
@@ -510,6 +511,7 @@ const importHubSpotTasksToDb = async (req, res) => {
         existing.dueDate = payload.dueDate || existing.dueDate;
         existing.description = payload.description || existing.description;
         existing.notes = payload.notes || existing.notes;
+        existing.approvalStatus = 'Approved'; // Ensure imported tasks are approved
         if (payload.status) existing.status = payload.status;
         if (payload.completedDate) existing.completedDate = payload.completedDate;
         await existing.save();
@@ -871,6 +873,105 @@ const pushCustomersToHubSpot = async (req, res) => {
   }
 };
 
+// @desc    Push existing approved Tasks (Follow-ups) to HubSpot
+// @route   POST /api/admin/hubspot/push-tasks
+// @access  Private/Admin
+// Body: { force?: boolean, limit?: number }
+const pushTasksToHubSpot = async (req, res) => {
+  try {
+    const force = Boolean(req.body?.force || false);
+    const limit = Number(req.body?.limit || 0);
+
+    // Only push approved tasks that don't have hubspotTaskId yet
+    const query = force
+      ? { approvalStatus: 'Approved' }
+      : {
+          approvalStatus: 'Approved',
+          $or: [
+            { hubspotTaskId: { $exists: false } },
+            { hubspotTaskId: '' },
+            { hubspotTaskId: null },
+          ],
+        };
+
+    let q = FollowUp.find(query).sort({ createdAt: -1 });
+    if (limit && !Number.isNaN(limit)) q = q.limit(limit);
+    const tasks = await q;
+
+    let attempted = 0;
+    let synced = 0;
+    let skipped = 0;
+    const failures = [];
+
+    for (const task of tasks) {
+      attempted += 1;
+      try {
+        // Skip if already has hubspotTaskId (unless force)
+        if (task.hubspotTaskId && !force) {
+          skipped += 1;
+          continue;
+        }
+
+        const subject = task.description || `Follow-up: ${task.customerName}`;
+        const body = task.notes || '';
+
+        // Map local priority to HubSpot priority values
+        let hsPriority = 'NONE';
+        const pr = (task.priority || '').toLowerCase();
+        if (pr === 'urgent' || pr === 'high') hsPriority = 'HIGH';
+        else if (pr === 'medium') hsPriority = 'MEDIUM';
+        else if (pr === 'low') hsPriority = 'LOW';
+
+        const hubspotTaskId = await hubspotService.createTaskObjectInHubSpot({
+          subject,
+          body,
+          status: 'NOT_STARTED',
+          priority: hsPriority,
+          type: 'TODO',
+          dueDate: task.dueDate,
+        });
+
+        if (hubspotTaskId) {
+          task.hubspotTaskId = hubspotTaskId;
+          await task.save();
+          synced += 1;
+        } else {
+          failures.push({
+            taskId: task._id,
+            followUpNumber: task.followUpNumber,
+            message: 'HubSpot task creation returned null',
+          });
+        }
+      } catch (e) {
+        const msg = e.response?.data?.message || e.message || 'Unknown error';
+        failures.push({
+          taskId: task._id,
+          followUpNumber: task.followUpNumber,
+          message: msg,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Task push completed: ${synced} synced, ${skipped} skipped, ${failures.length} failed`,
+      data: {
+        attempted,
+        synced,
+        skipped,
+        failed: failures.length,
+        failures: failures.slice(0, 10), // Limit failures in response
+      },
+    });
+  } catch (error) {
+    console.error('Error pushing tasks to HubSpot:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Error pushing tasks to HubSpot',
+    });
+  }
+};
+
 module.exports = {
   createCustomerAndOrder,
   getHubSpotCustomers,
@@ -883,5 +984,6 @@ module.exports = {
   getHubSpotOrdersRequiredFields,
   pushSalesOrdersToHubSpot,
   pushCustomersToHubSpot,
+  pushTasksToHubSpot,
   repairOrderAssociations,
 };

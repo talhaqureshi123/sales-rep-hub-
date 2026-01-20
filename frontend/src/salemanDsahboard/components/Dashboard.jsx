@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getDashboardStats } from '../../services/salemanservices/dashboardService'
+import { getMySalesTargets } from '../../services/salemanservices/salesTargetService'
 import { 
   FaCalendarAlt, 
   FaChartLine, 
@@ -10,7 +11,9 @@ import {
   FaClock,
   FaPlay,
   FaUserPlus,
-  FaCamera
+  FaCamera,
+  FaBullseye,
+  FaTrophy
 } from 'react-icons/fa'
 import {
   LineChart,
@@ -27,6 +30,7 @@ import {
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true)
+  const [salesTargets, setSalesTargets] = useState([])
   const [dashboardData, setDashboardData] = useState({
     kpis: {
       visitsToday: 0,
@@ -50,6 +54,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadDashboardData()
+    loadSalesTargets()
   }, [])
 
   const loadDashboardData = async () => {
@@ -65,6 +70,17 @@ const Dashboard = () => {
       console.error('Error loading dashboard data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadSalesTargets = async () => {
+    try {
+      const result = await getMySalesTargets({ status: 'Active' })
+      if (result.success && result.data) {
+        setSalesTargets(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error loading sales targets:', error)
     }
   }
 
@@ -299,6 +315,94 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Sales Targets Section */}
+      {salesTargets.length > 0 && (
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <FaBullseye className="w-5 h-5 text-[#e9931c]" />
+              My Sales Targets
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {salesTargets.slice(0, 6).map((target) => {
+              const progressPercentage = target.targetValue > 0 
+                ? Math.min((target.currentProgress / target.targetValue) * 100, 100) 
+                : 0
+              const isCompleted = progressPercentage >= 100
+              
+              return (
+                <div
+                  key={target._id}
+                  className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-800 text-sm">{target.targetName}</h4>
+                      <p className="text-xs text-gray-600 mt-1">{target.targetType}</p>
+                    </div>
+                    {isCompleted && (
+                      <FaTrophy className="w-5 h-5 text-yellow-500" />
+                    )}
+                  </div>
+                  
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-gray-600">Progress</span>
+                      <span className="font-semibold text-gray-800">
+                        {target.currentProgress?.toLocaleString() || 0} / {target.targetValue?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          isCompleted 
+                            ? 'bg-green-500' 
+                            : progressPercentage >= 75 
+                            ? 'bg-blue-500' 
+                            : progressPercentage >= 50 
+                            ? 'bg-yellow-500' 
+                            : 'bg-orange-500'
+                        }`}
+                        style={{ width: `${progressPercentage}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs font-semibold text-gray-700">
+                        {progressPercentage.toFixed(1)}%
+                      </span>
+                      <span className={`text-xs font-semibold ${
+                        target.status === 'Completed' 
+                          ? 'text-green-600' 
+                          : target.status === 'Failed' 
+                          ? 'text-red-600' 
+                          : 'text-blue-600'
+                      }`}>
+                        {target.status}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-2 text-xs text-gray-500">
+                    <p>Period: {target.period}</p>
+                    <p>
+                      {new Date(target.startDate).toLocaleDateString()} - {new Date(target.endDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {salesTargets.length > 6 && (
+            <div className="mt-4 text-center">
+              <p className="text-sm text-gray-600">
+                +{salesTargets.length - 6} more target{salesTargets.length - 6 !== 1 ? 's' : ''}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Overall Stats */}
       <div className="bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-lg p-6 text-white">

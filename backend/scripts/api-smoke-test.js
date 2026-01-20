@@ -2,7 +2,7 @@
  * API Smoke Test Script (Salesman + Admin)
  *
  * Usage:
- *   1) Start backend server (PORT default 5000)
+ *   1) Start backend server (PORT default 4000)
  *   2) Run:
  *        node scripts/api-smoke-test.js
  *
@@ -10,7 +10,7 @@
  *   --salesman-email="x" --salesman-password="y"
  *
  * Optional env vars:
- *   API_BASE_URL=http://localhost:5000
+ *   API_BASE_URL=http://localhost:4000
  *   SALESMAN_EMAIL=salesman@example.com
  *   SALESMAN_PASSWORD=salesman123
  */
@@ -41,7 +41,7 @@ const args = parseArgs(process.argv.slice(2));
 const API_BASE_URL =
   args["api-base-url"] ||
   process.env.API_BASE_URL ||
-  `http://localhost:${config.PORT || 5000}`;
+  `http://localhost:${config.PORT || 4000}`;
 
 // Salesman-only smoke test (as requested)
 const SALESMAN_EMAIL =

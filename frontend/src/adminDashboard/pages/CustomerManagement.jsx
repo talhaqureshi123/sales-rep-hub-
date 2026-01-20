@@ -3,6 +3,7 @@ import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustom
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
 import { FaUsers, FaCheckSquare, FaFileExcel, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaEdit, FaTrash, FaWhatsapp, FaEnvelope, FaSyncAlt, FaCloudDownloadAlt, FaDatabase } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const CustomerManagement = () => {
   const [customers, setCustomers] = useState([])
@@ -206,13 +207,28 @@ const CustomerManagement = () => {
         setShowAddForm(false)
         resetForm()
         await loadCustomers()
-        alert('Customer added successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Customer Added!',
+          text: 'Customer added successfully!',
+          confirmButtonColor: '#e9931c'
+        })
       } else {
-        alert(result.message || 'Failed to create customer')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to create customer',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error creating customer:', error)
-      alert('Error creating customer')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating customer',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -220,7 +236,12 @@ const CustomerManagement = () => {
 
   const handleEditCustomer = (customer) => {
     if (customer?.source === 'hubspot' || String(customer?._id || '').startsWith('hubspot:')) {
-      alert('HubSpot contact is read-only here. Import to DB if you want to edit in app.')
+      Swal.fire({
+        icon: 'info',
+        title: 'Read-Only Contact',
+        text: 'HubSpot contact is read-only here. Import to DB if you want to edit in app.',
+        confirmButtonColor: '#e9931c'
+      })
       return
     }
     setEditingCustomer(customer)
@@ -281,7 +302,12 @@ const CustomerManagement = () => {
 
   const handleDeleteCustomer = async (id) => {
     if (String(id || '').startsWith('hubspot:')) {
-      alert('HubSpot contact cannot be deleted from here. Switch to DB Customers to delete local customers.')
+      Swal.fire({
+        icon: 'info',
+        title: 'Cannot Delete',
+        text: 'HubSpot contact cannot be deleted from here. Switch to DB Customers to delete local customers.',
+        confirmButtonColor: '#e9931c'
+      })
       return
     }
     if (!window.confirm('Are you sure you want to delete this customer?')) {
@@ -293,14 +319,29 @@ const CustomerManagement = () => {
       const result = await deleteCustomer(id)
       
       if (result.success) {
-        alert('Customer deleted successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Customer Deleted!',
+          text: 'Customer deleted successfully!',
+          confirmButtonColor: '#e9931c'
+        })
         loadCustomers()
       } else {
-        alert(result.message || 'Failed to delete customer')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to delete customer',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error deleting customer:', error)
-      alert('Error deleting customer')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting customer',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -317,11 +358,21 @@ const CustomerManagement = () => {
         )
         await loadCustomers()
       } else {
-        alert(result?.message || 'Failed to import HubSpot contacts')
+        Swal.fire({
+          icon: 'error',
+          title: 'Import Failed',
+          text: result?.message || 'Failed to import HubSpot contacts',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (e) {
       console.error('Error importing HubSpot contacts:', e)
-      alert('Error importing HubSpot contacts')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error importing HubSpot contacts',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setHubspotImporting(false)
     }
@@ -337,11 +388,21 @@ const CustomerManagement = () => {
           `Pushed App Customers to HubSpot ✅\n\nAttempted: ${meta.attempted ?? '-'}\nSynced: ${meta.synced ?? '-'}\nSkipped (no valid email): ${meta.skippedNoValidEmail ?? '-'}\nFailed: ${meta.failed ?? '-'}`
         )
       } else {
-        alert(result?.message || 'Failed to push customers to HubSpot')
+        Swal.fire({
+          icon: 'error',
+          title: 'Push Failed',
+          text: result?.message || 'Failed to push customers to HubSpot',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (e) {
       console.error('Error pushing customers to HubSpot:', e)
-      alert('Error pushing customers to HubSpot')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error pushing customers to HubSpot',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setHubspotPushing(false)
     }

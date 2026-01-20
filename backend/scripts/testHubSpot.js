@@ -7,7 +7,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const axios = require('axios');
 const config = require('../config');
 
-const API_BASE = 'http://localhost:5000';
+const API_BASE = 'http://localhost:4000';
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 
 async function testHubSpot() {
@@ -119,7 +119,7 @@ async function testHubSpot() {
     console.log('   2. Get the JWT token');
     console.log('   3. Use that token in Authorization header');
     console.log('\n   Example:');
-    console.log('   GET http://localhost:5000/api/admin/hubspot/test');
+    console.log('   GET http://localhost:4000/api/admin/hubspot/test');
     console.log('   Headers: Authorization: Bearer YOUR_JWT_TOKEN');
     
   } catch (error) {

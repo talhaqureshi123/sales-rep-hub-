@@ -4,7 +4,10 @@ import {
   FaFileInvoice, 
   FaTrophy,
   FaUsers,
-  FaSignOutAlt 
+  FaSignOutAlt,
+  FaTasks,
+  FaBullseye,
+  FaUpload
 } from 'react-icons/fa'
 
 const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
@@ -13,6 +16,9 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
     { id: 'sales-tracking', label: 'Sales Tracking', icon: FaMapMarkerAlt },
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },
     { id: 'customers', label: 'Customers', icon: FaUsers },
+    { id: 'tasks', label: 'Tasks', icon: FaTasks },
+    { id: 'sales-targets', label: 'Sales Targets', icon: FaBullseye },
+    { id: 'sales-submissions', label: 'Sales Upload', icon: FaUpload },
     { id: 'achievements', label: 'Achievements', icon: FaTrophy },
   ]
 

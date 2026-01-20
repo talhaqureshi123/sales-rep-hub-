@@ -138,6 +138,79 @@ export const deleteFollowUp = async (followUpId) => {
   }
 }
 
+// Approve follow-up
+export const approveFollowUp = async (followUpId) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${followUpId}/approve`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error approving follow-up:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
+// Reject follow-up
+export const rejectFollowUp = async (followUpId, rejectionReason = '') => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${followUpId}/reject`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ rejectionReason }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error rejecting follow-up:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
+// Push task to HubSpot manually (duplicate prevention enforced)
+export const pushToHubSpot = async (followUpId) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${followUpId}/push-to-hubspot`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error pushing task to HubSpot:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Get follow-up statistics
 export const getFollowUpStats = async () => {
   try {

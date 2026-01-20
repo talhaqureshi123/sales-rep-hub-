@@ -11,6 +11,8 @@ const locationRoutes = require("./routes/locationRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
 const sampleRoutes = require("./routes/sampleRoutes");
 const followUpRoutes = require("./routes/followUpRoutes");
+const salesTargetRoutes = require("./routes/salesTargetRoutes");
+const salesSubmissionRoutes = require("./routes/salesSubmissionRoutes");
 
 // Mount routes
 router.use("/products", productRoutes);
@@ -24,5 +26,7 @@ router.use("/location", locationRoutes);
 router.use("/tracking", trackingRoutes);
 router.use("/samples", sampleRoutes);
 router.use("/follow-ups", followUpRoutes);
+router.use("/sales-targets", salesTargetRoutes);
+router.use("/sales-submissions", salesSubmissionRoutes);
 
 module.exports = router;

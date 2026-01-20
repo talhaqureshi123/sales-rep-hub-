@@ -1,4 +1,5 @@
 const FollowUp = require('../../database/models/FollowUp');
+const hubspotService = require('../../services/hubspotService');
 
 // @desc    Get follow-ups assigned to logged-in salesman
 // @route   GET /api/salesman/follow-ups
@@ -20,11 +21,15 @@ const getMyFollowUps = async (req, res) => {
       ];
     }
 
+    // Salesman can see all tasks assigned to them (including admin-created and their own)
+    // No need to filter by approvalStatus - show all (Pending, Approved, Rejected)
+
     const followUps = await FollowUp.find(filter)
-      .populate('customer', 'name email phone')
+      .populate('customer', 'name email phone company')
       .populate('relatedQuotation', 'quotationNumber total')
       .populate('relatedSample', 'sampleNumber productName')
       .populate('visitTarget', 'name address status visitDate')
+      .populate('createdBy', 'name email role')
       .sort({ dueDate: 1, priority: -1 });
 
     res.status(200).json({
@@ -49,10 +54,11 @@ const getMyFollowUp = async (req, res) => {
       _id: req.params.id,
       salesman: req.user._id,
     })
-      .populate('customer', 'name email phone address')
+      .populate('customer', 'name email phone address company')
       .populate('relatedQuotation', 'quotationNumber total status')
       .populate('relatedSample', 'sampleNumber productName status')
-      .populate('visitTarget', 'name address city status visitDate');
+      .populate('visitTarget', 'name address city status visitDate')
+      .populate('createdBy', 'name email role');
 
     if (!followUp) {
       return res.status(404).json({
@@ -69,6 +75,75 @@ const getMyFollowUp = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Error fetching follow-up',
+    });
+  }
+};
+
+// @desc    Create follow-up (salesman creates their own task)
+// @route   POST /api/salesman/follow-ups
+// @access  Private/Salesman
+const createMyFollowUp = async (req, res) => {
+  try {
+    const {
+      customer,
+      customerName,
+      customerEmail,
+      customerPhone,
+      type,
+      priority,
+      scheduledDate,
+      dueDate,
+      description,
+      notes,
+      relatedQuotation,
+      relatedSample,
+      relatedOrder,
+      visitTarget,
+    } = req.body;
+
+    if (!customerName || !type || !dueDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields (customerName, type, dueDate)',
+      });
+    }
+
+    const followUp = await FollowUp.create({
+      salesman: req.user._id, // Always use logged-in salesman
+      customer,
+      customerName,
+      customerEmail,
+      customerPhone,
+      type,
+      priority: priority || 'Medium',
+      scheduledDate: scheduledDate || dueDate,
+      dueDate,
+      description,
+      notes,
+      relatedQuotation,
+      relatedSample,
+      relatedOrder,
+      visitTarget,
+      createdBy: req.user._id,
+      approvalStatus: 'Pending', // Salesman tasks need admin approval
+    });
+
+    // ❌ NO HUBSPOT SYNC - Will be posted to HubSpot only after admin approval
+
+    const populatedFollowUp = await FollowUp.findById(followUp._id)
+      .populate('customer', 'name email phone company')
+      .populate('relatedQuotation', 'quotationNumber total')
+      .populate('relatedSample', 'sampleNumber productName');
+
+    res.status(201).json({
+      success: true,
+      message: 'Follow-up created successfully. It will also be posted to HubSpot.',
+      data: populatedFollowUp,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error creating follow-up',
     });
   }
 };
@@ -94,8 +169,14 @@ const updateMyFollowUp = async (req, res) => {
 
     if (notes !== undefined) followUp.notes = notes;
 
-    // Salesman can only mark as Completed (or leave as-is)
+    // Salesman can only mark as Completed if task is approved
     if (status && status === 'Completed') {
+      if (followUp.approvalStatus !== 'Approved') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot complete task. Task must be approved first.',
+        });
+      }
       followUp.status = 'Completed';
       if (!followUp.completedDate) {
         followUp.completedDate = completedDate || new Date();
@@ -120,6 +201,7 @@ const updateMyFollowUp = async (req, res) => {
 module.exports = {
   getMyFollowUps,
   getMyFollowUp,
+  createMyFollowUp,
   updateMyFollowUp,
 };
 

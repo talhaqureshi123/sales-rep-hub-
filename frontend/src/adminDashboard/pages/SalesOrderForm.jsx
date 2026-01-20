@@ -1,18 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
-import { FaShoppingCart, FaPlus, FaTrash, FaSave, FaTimes } from 'react-icons/fa'
+import { FaShoppingCart, FaPlus, FaTrash, FaSave, FaTimes, FaSpinner } from 'react-icons/fa'
 import { getSalesOrder, createSalesOrder, updateSalesOrder } from '../../services/adminservices/salesOrderService'
 import { getCustomers } from '../../services/adminservices/customerService'
 import { getProducts } from '../../services/adminservices/productService'
 import { getUsers } from '../../services/adminservices/userService'
+import Swal from 'sweetalert2'
 
 const SalesOrderForm = ({ orderId = null, onClose = null }) => {
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [salesPersons, setSalesPersons] = useState([])
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const [showProductDropdown, setShowProductDropdown] = useState({})
+  const [productSearch, setProductSearch] = useState({})
   const signatureCanvasRef = useRef(null)
   const [isDrawing, setIsDrawing] = useState(false)
 
@@ -116,23 +119,76 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
     }
   }, [orderId])
 
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.dropdown-container')) {
+        setShowCustomerDropdown(false)
+        setShowProductDropdown({})
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   useEffect(() => {
     calculateTotals()
   }, [formData.items, formData.discount, formData.deliveryCharges])
 
   const loadInitialData = async () => {
     try {
+      setInitialLoading(true)
       const [customersResult, productsResult, usersResult] = await Promise.all([
         getCustomers(),
         getProducts(),
         getUsers({ role: 'salesman' }),
       ])
 
-      if (customersResult.success) setCustomers(customersResult.data || [])
-      if (productsResult.success) setProducts(productsResult.data || [])
-      if (usersResult.success) setSalesPersons(usersResult.data || [])
+      if (customersResult.success) {
+        setCustomers(customersResult.data || [])
+        console.log(`✅ Loaded ${customersResult.data?.length || 0} customers`)
+      } else {
+        console.error('Failed to load customers:', customersResult.message)
+        Swal.fire({
+          icon: 'warning',
+          title: 'Customers Load Failed',
+          text: customersResult.message || 'Could not load customers',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+
+      if (productsResult.success) {
+        setProducts(productsResult.data || [])
+        console.log(`✅ Loaded ${productsResult.data?.length || 0} products`)
+      } else {
+        console.error('Failed to load products:', productsResult.message)
+        Swal.fire({
+          icon: 'warning',
+          title: 'Products Load Failed',
+          text: productsResult.message || 'Could not load products',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+
+      if (usersResult.success) {
+        setSalesPersons(usersResult.data || [])
+        console.log(`✅ Loaded ${usersResult.data?.length || 0} salespersons`)
+      } else {
+        console.error('Failed to load salespersons:', usersResult.message)
+      }
     } catch (error) {
       console.error('Error loading initial data:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error loading form data. Please refresh the page.',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setInitialLoading(false)
     }
   }
 
@@ -209,14 +265,15 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
     updatedItems[itemIndex] = {
       ...updatedItems[itemIndex],
       productId: product._id || product.id,
-      productCode: product.productCode || '',
+      productCode: product.productCode || product.code || '',
       productName: product.name || '',
-      unitPrice: product.price || 0,
-      spec: product.keyFeatures?.[0] || '',
+      unitPrice: product.price || product.unitPrice || 0,
+      spec: product.keyFeatures?.[0] || product.spec || product.description || '',
     }
     updatedItems[itemIndex].lineTotal = (updatedItems[itemIndex].unitPrice || 0) * (updatedItems[itemIndex].quantity || 0)
     setFormData(prev => ({ ...prev, items: updatedItems }))
     setShowProductDropdown(prev => ({ ...prev, [itemIndex]: false }))
+    setProductSearch(prev => ({ ...prev, [itemIndex]: '' }))
   }
 
   const handleItemChange = (index, field, value) => {
@@ -311,6 +368,38 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
 
   const handleSubmit = async (e, saveAsDraft = false) => {
     e.preventDefault()
+    
+    // Validation
+    if (!formData.customer || !formData.customerName) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Customer Required',
+        text: 'Please select a customer',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
+    if (!formData.items || formData.items.length === 0 || !formData.items.some(item => item.productId && item.productName)) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Products Required',
+        text: 'Please add at least one product to the order',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
+    if (!formData.salesPerson) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Sales Person Required',
+        text: 'Please select a sales person',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -320,6 +409,16 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
         orderDate: new Date(formData.orderDate),
         expectedDispatchDate: formData.expectedDispatchDate ? new Date(formData.expectedDispatchDate) : null,
         actualDispatchDate: formData.actualDispatchDate ? new Date(formData.actualDispatchDate) : null,
+        // Ensure items have required fields
+        items: formData.items.map(item => ({
+          ...item,
+          productId: item.productId || null,
+          productCode: item.productCode || '',
+          productName: item.productName || '',
+          unitPrice: item.unitPrice || 0,
+          quantity: item.quantity || 1,
+          lineTotal: (item.unitPrice || 0) * (item.quantity || 1),
+        }))
       }
 
       let result
@@ -330,24 +429,66 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
       }
 
       if (result.success) {
-        alert(orderId ? 'Order updated successfully!' : 'Order created successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: orderId ? 'Order updated successfully!' : 'Order created successfully!',
+          confirmButtonColor: '#e9931c'
+        })
         if (onClose) onClose()
         else window.location.reload()
       } else {
-        alert(result.message || 'Failed to save order')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to save order',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error saving order:', error)
-      alert('Error saving order')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error saving order. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredCustomers = customers.filter(c =>
-    (c.firstName || c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
-    (c.email || '').toLowerCase().includes(customerSearch.toLowerCase())
-  )
+  const filteredCustomers = customers.filter(c => {
+    const searchTerm = customerSearch.toLowerCase()
+    const name = (c.firstName || c.name || '').toLowerCase()
+    const email = (c.email || '').toLowerCase()
+    const phone = (c.phone || '').toLowerCase()
+    return name.includes(searchTerm) || email.includes(searchTerm) || phone.includes(searchTerm)
+  })
+
+  const getFilteredProducts = (itemIndex) => {
+    const searchTerm = (productSearch[itemIndex] || '').toLowerCase()
+    if (!searchTerm) return products.slice(0, 10) // Show first 10 if no search
+    
+    return products.filter(p => {
+      const name = (p.name || '').toLowerCase()
+      const code = (p.productCode || '').toLowerCase()
+      const description = (p.description || '').toLowerCase()
+      return name.includes(searchTerm) || code.includes(searchTerm) || description.includes(searchTerm)
+    }).slice(0, 20) // Limit to 20 results
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="w-full bg-white rounded-lg shadow-lg p-12">
+        <div className="flex flex-col items-center justify-center">
+          <FaSpinner className="w-12 h-12 text-[#e9931c] animate-spin mb-4" />
+          <p className="text-gray-600 text-lg">Loading form data...</p>
+          <p className="text-gray-500 text-sm mt-2">Fetching products, customers, and salespersons</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full bg-white rounded-lg shadow-lg">
@@ -393,15 +534,31 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sales Person</label>
-              <input
-                type="text"
-                name="salesPersonEmail"
-                value={formData.salesPersonEmail}
-                onChange={handleInputChange}
+              <label className="block text-sm font-medium text-gray-700 mb-2">Sales Person <span className="text-red-500">*</span></label>
+              <select
+                name="salesPerson"
+                value={formData.salesPerson}
+                onChange={(e) => {
+                  const selectedPerson = salesPersons.find(p => (p._id || p.id) === e.target.value)
+                  setFormData(prev => ({
+                    ...prev,
+                    salesPerson: e.target.value,
+                    salesPersonEmail: selectedPerson?.email || prev.salesPersonEmail
+                  }))
+                }}
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                readOnly
-              />
+                required
+              >
+                <option value="">Select sales person</option>
+                {salesPersons.map(person => (
+                  <option key={person._id || person.id} value={person._id || person.id}>
+                    {person.name} ({person.email})
+                  </option>
+                ))}
+              </select>
+              {formData.salesPersonEmail && (
+                <p className="text-xs text-gray-500 mt-1">Email: {formData.salesPersonEmail}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">PO Number (Optional)</label>
@@ -446,23 +603,48 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
                   setCustomerSearch(e.target.value)
                   setShowCustomerDropdown(true)
                 }}
-                onFocus={() => setShowCustomerDropdown(true)}
+                onFocus={() => {
+                  setShowCustomerDropdown(true)
+                  if (!customerSearch && formData.customerName) {
+                    setCustomerSearch(formData.customerName)
+                  }
+                }}
+                onBlur={() => {
+                  // Delay hiding dropdown to allow click
+                  setTimeout(() => {
+                    setShowCustomerDropdown(false)
+                  }, 200)
+                }}
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                placeholder="Search customers..."
+                placeholder={initialLoading ? "Loading customers..." : "Search customers by name, email, or phone..."}
                 required
+                disabled={initialLoading}
               />
-              {showCustomerDropdown && filteredCustomers.length > 0 && (
+              {showCustomerDropdown && (
                 <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredCustomers.map(customer => (
-                    <div
-                      key={customer._id || customer.id}
-                      onClick={() => handleCustomerSelect(customer)}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    >
-                      <p className="font-medium">{customer.firstName || customer.name}</p>
-                      <p className="text-sm text-gray-600">{customer.email}</p>
+                  {filteredCustomers.length > 0 ? (
+                    filteredCustomers.map(customer => (
+                      <div
+                        key={customer._id || customer.id}
+                        onClick={() => handleCustomerSelect(customer)}
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
+                      >
+                        <p className="font-medium text-gray-800">{customer.firstName || customer.name}</p>
+                        <p className="text-sm text-gray-600">
+                          {customer.email && `Email: ${customer.email}`}
+                          {customer.phone && ` | Phone: ${customer.phone}`}
+                        </p>
+                        {customer.address && (
+                          <p className="text-xs text-gray-500 mt-1">{customer.address}</p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-3 text-center text-gray-500">
+                      <p>No customers found</p>
+                      <p className="text-xs mt-1">Try a different search term</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -558,36 +740,62 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
                         placeholder="Code"
                       />
                     </td>
-                    <td className="px-4 py-2 relative">
+                    <td className="px-4 py-2 relative dropdown-container">
                       <input
                         type="text"
                         value={item.productName}
                         onChange={(e) => {
-                          handleItemChange(index, 'productName', e.target.value)
+                          const value = e.target.value
+                          handleItemChange(index, 'productName', value)
+                          setProductSearch(prev => ({ ...prev, [index]: value }))
                           setShowProductDropdown(prev => ({ ...prev, [index]: true }))
                         }}
-                        onFocus={() => setShowProductDropdown(prev => ({ ...prev, [index]: true }))}
+                        onFocus={() => {
+                          setShowProductDropdown(prev => ({ ...prev, [index]: true }))
+                          if (!productSearch[index]) {
+                            setProductSearch(prev => ({ ...prev, [index]: item.productName }))
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay hiding dropdown to allow click
+                          setTimeout(() => {
+                            setShowProductDropdown(prev => ({ ...prev, [index]: false }))
+                          }, 200)
+                        }}
                         className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
-                        placeholder="Search products..."
+                        placeholder={initialLoading ? "Loading products..." : "Search products by name or code..."}
                         required
+                        disabled={initialLoading}
                       />
-                      {showProductDropdown[index] && products.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {products
-                            .filter(p => 
-                              (p.name || '').toLowerCase().includes(item.productName.toLowerCase()) ||
-                              (p.productCode || '').toLowerCase().includes(item.productName.toLowerCase())
-                            )
-                            .map(product => (
+                      {showProductDropdown[index] && !initialLoading && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {getFilteredProducts(index).length > 0 ? (
+                            getFilteredProducts(index).map(product => (
                               <div
                                 key={product._id || product.id}
-                                onClick={() => handleProductSelect(product, index)}
-                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                                onClick={() => {
+                                  handleProductSelect(product, index)
+                                  setShowProductDropdown(prev => ({ ...prev, [index]: false }))
+                                  setProductSearch(prev => ({ ...prev, [index]: '' }))
+                                }}
+                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
                               >
-                                <p className="font-medium">{product.name}</p>
-                                <p className="text-sm text-gray-600">Code: {product.productCode} | £{product.price}</p>
+                                <p className="font-medium text-gray-800">{product.name}</p>
+                                <p className="text-sm text-gray-600">
+                                  Code: {product.productCode || 'N/A'} | Price: £{product.price || 0}
+                                  {product.category && ` | Category: ${product.category}`}
+                                </p>
+                                {product.description && (
+                                  <p className="text-xs text-gray-500 mt-1 truncate">{product.description}</p>
+                                )}
                               </div>
-                            ))}
+                            ))
+                          ) : (
+                            <div className="px-4 py-3 text-center text-gray-500">
+                              <p>No products found</p>
+                              <p className="text-xs mt-1">Try a different search term</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
@@ -597,7 +805,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
                         value={item.spec}
                         onChange={(e) => handleItemChange(index, 'spec', e.target.value)}
                         className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
-                        placeholder="Spec"
+                        placeholder="Spec/Micron"
                       />
                     </td>
                     <td className="px-4 py-2">
@@ -957,22 +1165,22 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-2"
+              disabled={loading}
+              className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <FaSave className="w-4 h-4" />
-              <span>Submit Order</span>
+              {loading ? (
+                <>
+                  <FaSpinner className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <FaSave className="w-4 h-4" />
+                  <span>Submit Order</span>
+                </>
+              )}
             </button>
           </div>
-          {!orderId && (
-            <div className="flex justify-center">
-              <button
-                type="button"
-                className="px-4 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-              >
-                Select
-              </button>
-            </div>
-          )}
         </div>
       </form>
       </div>

@@ -14,7 +14,7 @@ const LiveTracking = () => {
 
   useEffect(() => {
     loadSalesmenLocations()
-    
+
     // Auto-refresh every 10 seconds if enabled
     let intervalId
     if (autoRefresh) {
@@ -69,7 +69,7 @@ const LiveTracking = () => {
           (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
         )
-      )
+      })
     }
 
     setFilteredSalesmen(filtered)
@@ -192,13 +192,13 @@ const LiveTracking = () => {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 {autoRefresh ? (
-                  <FaToggleOn 
-                    className="w-8 h-8 text-[#e9931c] cursor-pointer" 
+                  <FaToggleOn
+                    className="w-8 h-8 text-[#e9931c] cursor-pointer"
                     onClick={() => setAutoRefresh(false)}
                   />
                 ) : (
-                  <FaToggleOff 
-                    className="w-8 h-8 text-gray-400 cursor-pointer" 
+                  <FaToggleOff
+                    className="w-8 h-8 text-gray-400 cursor-pointer"
                     onClick={() => setAutoRefresh(true)}
                   />
                 )}
@@ -261,31 +261,28 @@ const LiveTracking = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => setFilter('All')}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filter === 'All'
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === 'All'
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   All
                 </button>
                 <button
                   onClick={() => setFilter('Online')}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filter === 'Online'
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === 'Online'
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   Online
                 </button>
                 <button
                   onClick={() => setFilter('Offline')}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filter === 'Offline'
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === 'Offline'
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   Offline
                 </button>
@@ -310,13 +307,12 @@ const LiveTracking = () => {
                     const salesman = row.salesman || {}
                     const loc = row.latestLocation
                     const isOnline = !!row.isOnline
-                    
+
                     return (
                       <div
                         key={salesman._id}
-                        className={`p-3 rounded-lg border ${
-                          isOnline ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
-                        }`}
+                        className={`p-3 rounded-lg border ${isOnline ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">

@@ -205,6 +205,31 @@ export const pushCustomersToHubSpot = async (force = false, limit = 0) => {
   }
 }
 
+// Push existing approved Tasks (Follow-ups) to HubSpot
+export const pushTasksToHubSpot = async (force = false, limit = 0) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/push-tasks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ force, limit }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error pushing tasks to HubSpot:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Create task in HubSpot
 export const createHubSpotTask = async (subject, contactId = null) => {
   try {
@@ -268,4 +293,5 @@ export default {
   importHubSpotTasksToDb,
   pushSalesOrdersToHubSpot,
   pushCustomersToHubSpot,
+  pushTasksToHubSpot,
 }
