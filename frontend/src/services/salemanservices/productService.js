@@ -42,6 +42,11 @@ export const getProducts = async () => {
   }
 };
 
+// Alias for getProducts (for consistency with other services)
+export const getMyProducts = async () => {
+  return getProducts();
+};
+
 // Get product by code (for QR scanning)
 export const getProductByCode = async (productCode) => {
   try {

@@ -166,6 +166,7 @@ const updateProduct = async (req, res) => {
       stock,
       image,
       qrCode,
+      keyFeatures,
       isActive,
     } = req.body;
 
@@ -265,10 +266,103 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+// @desc    Download QR code for product
+// @route   GET /api/admin/products/:id/qr-code
+// @access  Private/Admin
+const downloadQRCode = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    if (!product.productCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Product code not found",
+      });
+    }
+
+    // Generate QR code with full product details
+    const qrCodeData = {
+      productCode: product.productCode,
+      name: product.name,
+      description: product.description || "",
+      price: product.price,
+      category: product.category,
+      stock: product.stock,
+      image: product.image || "",
+      keyFeatures: product.keyFeatures || [],
+      productId: product._id.toString(),
+      timestamp: new Date().toISOString(),
+    };
+
+    const qrDataString = JSON.stringify(qrCodeData);
+    const qrCodeURL = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataString)}`;
+
+    // Return the QR code URL so frontend can download it
+    res.status(200).json({
+      success: true,
+      qrCodeURL: qrCodeURL,
+      filename: `${product.productCode}_QR.png`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error generating QR code",
+    });
+  }
+};
+
+// @desc    Download barcode for product
+// @route   GET /api/admin/products/:id/barcode
+// @access  Private/Admin
+const downloadBarcode = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    if (!product.productCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Product code not found",
+      });
+    }
+
+    // Generate barcode using barcode API (Code128 format)
+    // Using barcode.tec-it.com API for barcode generation
+    const barcodeURL = `https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(product.productCode)}&code=Code128&translate-esc=on&dpi=96&imagetype=Png&unit=Fit&dmsize=Default`;
+
+    // Return the barcode URL so frontend can download it
+    res.status(200).json({
+      success: true,
+      barcodeURL: barcodeURL,
+      filename: `${product.productCode}_Barcode.png`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error generating barcode",
+    });
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
   createProduct,
   updateProduct,
   deleteProduct,
+  downloadQRCode,
+  downloadBarcode,
 };

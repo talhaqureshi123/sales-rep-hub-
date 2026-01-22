@@ -13,6 +13,8 @@
     "admin:list": "node scripts/adminManager.js list",
     "password:link": "node scripts/generatePasswordLink.js",
     "test:tasks": "node scripts/testTaskCreation.js",
+    "test:endpoints": "node scripts/testAllEndpoints.js",
+    "test:database": "node scripts/testDatabaseEndpoints.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

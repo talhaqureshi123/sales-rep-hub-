@@ -53,6 +53,12 @@ const AdminDashboardPage = () => {
       totalCustomers: 0,
       activeCustomers: 0,
     },
+    myCreations: {
+      tasks: [],
+      customers: [],
+      visits: [],
+      salesTargets: [],
+    },
   })
 
   useEffect(() => {
@@ -195,6 +201,12 @@ const AdminDashboardPage = () => {
           activeSalesmen,
           totalCustomers: customers.length,
           activeCustomers,
+        },
+        myCreations: {
+          tasks: myTasks,
+          customers: myCustomers,
+          visits: myVisits,
+          salesTargets: mySalesTargets,
         },
       })
     } catch (error) {
@@ -489,11 +501,11 @@ const AdminDashboardPage = () => {
                 <FaArrowRight className="w-3 h-3" />
               </button>
             </div>
-            {myCreations.tasks.length === 0 ? (
+            {(!myCreations || !myCreations.tasks || myCreations.tasks.length === 0) ? (
               <p className="text-sm text-gray-500">No tasks created</p>
             ) : (
               <div className="space-y-2">
-                {myCreations.tasks.map((task, index) => (
+                {(myCreations?.tasks || []).map((task, index) => (
                   <div key={task._id || index} className="bg-white rounded p-2 border border-blue-100">
                     <p className="text-sm font-medium text-gray-800 truncate">{task.title || task.customerName || 'Task'}</p>
                     <p className="text-xs text-gray-500">{task.type || 'Task'}</p>
@@ -523,11 +535,11 @@ const AdminDashboardPage = () => {
                 <FaArrowRight className="w-3 h-3" />
               </button>
             </div>
-            {myCreations.customers.length === 0 ? (
+            {(!myCreations || !myCreations.customers || myCreations.customers.length === 0) ? (
               <p className="text-sm text-gray-500">No customers created</p>
             ) : (
               <div className="space-y-2">
-                {myCreations.customers.map((customer, index) => (
+                {(myCreations?.customers || []).map((customer, index) => (
                   <div key={customer._id || index} className="bg-white rounded p-2 border border-green-100">
                     <p className="text-sm font-medium text-gray-800 truncate">
                       {customer.name || customer.firstName || customer.company || 'Customer'}
@@ -559,11 +571,11 @@ const AdminDashboardPage = () => {
                 <FaArrowRight className="w-3 h-3" />
               </button>
             </div>
-            {myCreations.visits.length === 0 ? (
+            {(!myCreations || !myCreations.visits || myCreations.visits.length === 0) ? (
               <p className="text-sm text-gray-500">No visits created</p>
             ) : (
               <div className="space-y-2">
-                {myCreations.visits.map((visit, index) => (
+                {(myCreations?.visits || []).map((visit, index) => (
                   <div key={visit._id || index} className="bg-white rounded p-2 border border-orange-100">
                     <p className="text-sm font-medium text-gray-800 truncate">{visit.name || 'Visit'}</p>
                     <p className="text-xs text-gray-500 truncate">{visit.address || visit.city || 'Location'}</p>
@@ -602,11 +614,11 @@ const AdminDashboardPage = () => {
                 <FaArrowRight className="w-3 h-3" />
               </button>
             </div>
-            {myCreations.salesTargets.length === 0 ? (
+            {(!myCreations || !myCreations.salesTargets || myCreations.salesTargets.length === 0) ? (
               <p className="text-sm text-gray-500">No sales targets created</p>
             ) : (
               <div className="space-y-2">
-                {myCreations.salesTargets.map((target, index) => (
+                {(myCreations?.salesTargets || []).map((target, index) => (
                   <div key={target._id || index} className="bg-white rounded p-2 border border-purple-100">
                     <p className="text-sm font-medium text-gray-800 truncate">
                       {target.salesman?.name || 'Salesman'} - {target.period || 'Period'}

@@ -405,58 +405,58 @@ const SalesSubmissions = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-            <FaUpload className="w-6 h-6 text-[#e9931c]" />
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1 sm:mb-2 flex items-center gap-2">
+            <FaUpload className="w-5 h-5 sm:w-6 sm:h-6 text-[#e9931c]" />
             Uploads
           </h2>
-          <p className="text-gray-600">Upload sales, tasks, or samples for admin approval</p>
+          <p className="text-sm sm:text-base text-gray-600">Upload sales, tasks, or samples for admin approval</p>
         </div>
         <button
           onClick={() => {
             resetForm()
             setShowForm(!showForm)
           }}
-          className="flex items-center gap-2 px-5 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
+          className="flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-[#e9931c] text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-[#d8820a] transition-colors w-full sm:w-auto justify-center"
         >
-          <FaPlus className="w-5 h-5" />
+          <FaPlus className="w-4 h-4 sm:w-5 sm:h-5" />
           <span>{showForm ? 'Cancel' : `Upload ${activeTab === 'sales' ? 'Sales' : activeTab === 'tasks' ? 'Task' : 'Sample'}`}</span>
         </button>
       </div>
 
       {/* Tabs */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => {
               setActiveTab('sales')
               setShowForm(false)
             }}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2 ${
+            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
               activeTab === 'sales'
                 ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                 : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-50'
             }`}
           >
-            <FaFileInvoice className="w-5 h-5" />
-            Sales Upload
+            <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="whitespace-nowrap">Sales Upload</span>
           </button>
           <button
             onClick={() => {
               setActiveTab('tasks')
               setShowForm(false)
             }}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2 ${
+            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
               activeTab === 'tasks'
                 ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                 : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-50'
             }`}
           >
-            <FaTasks className="w-5 h-5" />
-            Task Upload
+            <FaTasks className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="whitespace-nowrap">Task Upload</span>
           </button>
           <button
             onClick={() => {
@@ -466,68 +466,68 @@ const SalesSubmissions = () => {
                 loadProducts()
               }
             }}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors flex items-center justify-center gap-2 ${
+            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
               activeTab === 'samples'
                 ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                 : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-50'
             }`}
           >
-            <FaFlask className="w-5 h-5" />
-            Sample Track Upload
+            <FaFlask className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="whitespace-nowrap">Sample Track Upload</span>
           </button>
         </div>
       </div>
 
       {/* Statistics Cards - Only for Sales */}
       {activeTab === 'sales' && stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-5 border border-blue-200 shadow-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-5 border border-blue-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Total Submissions</p>
-              <FaFileInvoice className="w-5 h-5 text-blue-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Total Submissions</p>
+              <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
-            <p className="text-3xl font-bold text-blue-700">{stats.total || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">All time</p>
+            <p className="text-2xl sm:text-3xl font-bold text-blue-700">{stats.total || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">All time</p>
           </div>
 
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-5 border border-yellow-200 shadow-sm">
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 sm:p-5 border border-yellow-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Pending</p>
-              <FaClock className="w-5 h-5 text-yellow-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Pending</p>
+              <FaClock className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
             </div>
-            <p className="text-3xl font-bold text-yellow-700">{stats.pending || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">Awaiting approval</p>
+            <p className="text-2xl sm:text-3xl font-bold text-yellow-700">{stats.pending || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Awaiting approval</p>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-5 border border-green-200 shadow-sm">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-5 border border-green-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Approved</p>
-              <FaCheckCircle className="w-5 h-5 text-green-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Approved</p>
+              <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             </div>
-            <p className="text-3xl font-bold text-green-700">{stats.approved || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">Approved sales</p>
+            <p className="text-2xl sm:text-3xl font-bold text-green-700">{stats.approved || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Approved sales</p>
           </div>
 
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-5 border border-orange-200 shadow-sm">
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-5 border border-orange-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Total Amount</p>
-              <FaFileInvoice className="w-5 h-5 text-orange-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Total Amount</p>
+              <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
             </div>
-            <p className="text-3xl font-bold text-orange-700">£{stats.approvedAmount?.toLocaleString() || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">Approved sales</p>
+            <p className="text-2xl sm:text-3xl font-bold text-orange-700">£{stats.approvedAmount?.toLocaleString() || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Approved sales</p>
           </div>
         </div>
       )}
 
       {/* Upload Form */}
       {showForm && (
-        <div className="bg-white rounded-lg p-6 border-2 border-gray-200 shadow-lg">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">
+        <div className="bg-white rounded-lg p-4 sm:p-6 border-2 border-gray-200 shadow-lg">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4">
             {activeTab === 'sales' && (editingSubmission ? 'Edit Sales Submission' : 'Upload New Sales')}
             {activeTab === 'tasks' && 'Create New Task'}
             {activeTab === 'samples' && 'Upload Sample Track'}
           </h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
             {/* Common Customer Selection */}
             <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -875,18 +875,18 @@ const SalesSubmissions = () => {
               </>
             )}
 
-            <div className="flex gap-3 justify-end">
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                className="px-4 sm:px-6 py-2 bg-gray-300 text-gray-700 rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-400 transition-colors w-full sm:w-auto"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-2 disabled:opacity-50"
+                className="px-4 sm:px-6 py-2 bg-[#e9931c] text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 w-full sm:w-auto"
               >
                 {loading ? (
                   <>
@@ -911,8 +911,8 @@ const SalesSubmissions = () => {
 
       {/* Filter and Search - Only for Sales */}
       {activeTab === 'sales' && (
-        <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
+        <div className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200 shadow-sm">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center">
             <div className="flex-1 w-full">
               <div className="relative">
                 <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -926,7 +926,7 @@ const SalesSubmissions = () => {
             <select
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c]"
+              className="px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c] w-full sm:w-auto"
             >
               <option value="All">All Status</option>
               <option value="Pending">Pending</option>

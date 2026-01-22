@@ -250,12 +250,16 @@ const getHeaders = async () => {
 /**
  * Create or update contact in HubSpot
  * @param {Object} customerData - Customer data from our system
+ * @param {Object} options - Options for creating/updating contact
+ * @param {Boolean} options.assignToMe - If true, assign contact to current user
  * @returns {Object} HubSpot contact object or null if failed
  */
-const createOrUpdateContact = async (customerData) => {
+const createOrUpdateContact = async (customerData, options = {}) => {
   try {
     const headers = await getHeaders();
     if (!headers) return null;
+
+    const { assignToMe = false } = options;
 
     const firstName =
       customerData.name?.split(" ")[0] || customerData.name || "";
@@ -279,10 +283,28 @@ const createOrUpdateContact = async (customerData) => {
       notes: customerData.notes,
     });
 
+    // If assignToMe is true, get current user ID and assign contact to them
+    let ownerIdToAssign = null;
+    if (assignToMe) {
+      const currentUserId = await getCurrentHubSpotUserId();
+      if (currentUserId) {
+        ownerIdToAssign = currentUserId;
+        contactProperties.hubspot_owner_id = currentUserId;
+        console.log(`Assigning contact to owner ID: ${currentUserId}`);
+      } else {
+        console.warn('⚠️ assignToMe is true but could not determine current HubSpot owner ID. Contact will not be assigned.');
+      }
+    }
+
     const safeContactProperties = await filterToKnownProperties(
       "contacts",
       contactProperties
     );
+
+    // Ensure hubspot_owner_id is preserved after filtering (in case it was filtered out)
+    if (ownerIdToAssign) {
+      safeContactProperties.hubspot_owner_id = ownerIdToAssign;
+    }
 
     // Try to find existing contact by email
     let contactId = null;
@@ -931,10 +953,191 @@ const createOrderInHubSpot = async (order, customerId) => {
 };
 
 /**
+ * Get current HubSpot user ID from access token
+ * @returns {String|null} HubSpot owner ID or null if failed
+ */
+const getCurrentHubSpotUserId = async () => {
+  try {
+    const headers = await getHeaders();
+    if (!headers) {
+      console.warn('No HubSpot headers available');
+      return null;
+    }
+
+    console.log('Attempting to get current HubSpot user/owner ID...');
+
+    // Method 1: Try /integrations/v1/me endpoint (works with OAuth and some private apps)
+    try {
+      const userResponse = await axios.get(
+        `${HUBSPOT_API_BASE}/integrations/v1/me`,
+        { headers }
+      );
+      const userId = userResponse.data?.user_id || userResponse.data?.userId;
+      if (userId) {
+        console.log(`✅ Current HubSpot user ID (from /me): ${userId}`);
+        // For /me endpoint, userId might be user ID, not owner ID
+        // We need to convert it to owner ID
+        return await convertUserIdToOwnerId(userId, headers) || String(userId);
+      }
+    } catch (meError) {
+      console.log('Method 1 (/me) failed:', meError.response?.status, meError.response?.data?.message || meError.message);
+    }
+
+    // Method 2: Try token metadata endpoint (for OAuth tokens)
+    try {
+      const accessToken = headers.Authorization?.replace('Bearer ', '');
+      if (accessToken) {
+        const response = await axios.get(
+          `${HUBSPOT_API_BASE}/oauth/v1/access-tokens/${accessToken}`,
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+        
+        const userId = response.data?.user_id;
+        if (userId) {
+          console.log(`✅ Current HubSpot user ID (from token metadata): ${userId}`);
+          // Convert user ID to owner ID
+          return await convertUserIdToOwnerId(userId, headers) || String(userId);
+        }
+      }
+    } catch (tokenError) {
+      console.log('Method 2 (token metadata) failed:', tokenError.response?.status, tokenError.response?.data?.message || tokenError.message);
+    }
+
+    // Method 3: Try to get owners list and use first active owner (for Private Apps)
+    // This is a fallback - assumes first owner is the token owner
+    try {
+      const ownersResponse = await axios.get(
+        `${HUBSPOT_API_BASE}/crm/v3/owners`,
+        { 
+          headers,
+          params: { limit: 100 }
+        }
+      );
+      
+      const owners = ownersResponse.data?.results || [];
+      if (owners.length > 0) {
+        // Find first active (non-archived) owner
+        const activeOwner = owners.find(o => !o.archived) || owners[0];
+        if (activeOwner?.id) {
+          console.log(`✅ Using first active owner ID (Private App fallback): ${activeOwner.id}`);
+          console.log(`   Owner: ${activeOwner.firstName || ''} ${activeOwner.lastName || ''} (${activeOwner.email || 'no email'})`);
+          return String(activeOwner.id);
+        }
+      }
+    } catch (ownersError) {
+      console.log('Method 3 (owners list) failed:', ownersError.response?.status, ownersError.response?.data?.message || ownersError.message);
+    }
+
+    // Method 4: Try to fetch a sample contact and check its owner_id
+    // This assumes the token owner has at least one contact
+    try {
+      const sampleResponse = await axios.get(
+        `${HUBSPOT_API_BASE}/crm/v3/objects/contacts`,
+        {
+          headers,
+          params: {
+            limit: 1,
+            properties: 'hubspot_owner_id'
+          }
+        }
+      );
+      
+      const sampleContact = sampleResponse.data?.results?.[0];
+      const ownerId = sampleContact?.properties?.hubspot_owner_id;
+      if (ownerId) {
+        console.log(`✅ Found owner ID from sample contact: ${ownerId}`);
+        console.log(`   ⚠️  WARNING: This might not be YOUR owner ID, just a sample contact's owner`);
+        return String(ownerId);
+      }
+    } catch (sampleError) {
+      console.log('Method 4 (sample contact) failed:', sampleError.response?.status);
+    }
+
+    // All methods failed
+    console.warn('❌ Could not determine HubSpot user/owner ID. All methods failed.');
+    console.warn('   This might be a Private App token without user context.');
+    console.warn('   Will fetch all contacts instead of filtering by owner.');
+    return null;
+  } catch (error) {
+    console.error('Error getting HubSpot user ID:', error.message);
+    return null;
+  }
+};
+
+/**
+ * Convert HubSpot user ID to owner ID
+ * @param {String} userId - HubSpot user ID
+ * @param {Object} headers - API headers
+ * @returns {String|null} Owner ID or null if failed
+ */
+const convertUserIdToOwnerId = async (userId, headers) => {
+  try {
+    // Fetch owners list and find owner with matching userId
+    const ownersResponse = await axios.get(
+      `${HUBSPOT_API_BASE}/crm/v3/owners`,
+      { 
+        headers,
+        params: { limit: 100 }
+      }
+    );
+    
+    const owners = ownersResponse.data?.results || [];
+    const matchingOwner = owners.find(o => String(o.userId) === String(userId));
+    
+    if (matchingOwner?.id) {
+      console.log(`   Converted user ID ${userId} to owner ID ${matchingOwner.id}`);
+      return String(matchingOwner.id);
+    }
+    
+    return null;
+  } catch (error) {
+    console.log('Error converting user ID to owner ID:', error.message);
+    return null;
+  }
+};
+
+/**
+ * Get HubSpot owner details by owner ID
+ * @param {String} ownerId - HubSpot owner ID
+ * @returns {Object|null} Owner object with { id, firstName, lastName, email } or null if failed
+ */
+const getOwnerById = async (ownerId) => {
+  try {
+    if (!ownerId) return null;
+    
+    const headers = await getHeaders();
+    if (!headers) return null;
+    
+    const ownersResponse = await axios.get(
+      `${HUBSPOT_API_BASE}/crm/v3/owners/${ownerId}`,
+      { headers, timeout: 10000 }
+    );
+    
+    const owner = ownersResponse.data;
+    if (owner?.id) {
+      return {
+        id: String(owner.id),
+        firstName: owner.firstName || '',
+        lastName: owner.lastName || '',
+        email: owner.email || '',
+        fullName: `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || owner.email || 'No Owner'
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.log(`Error fetching owner ${ownerId}:`, error.message);
+    return null;
+  }
+};
+
+/**
  * Fetch all customers from HubSpot
+ * @param {Object} options - Options for fetching customers
+ * @param {Boolean} options.myContactsOnly - If true, only fetch contacts owned by current user
  * @returns {Array} Array of customer objects or empty array if failed
  */
-const fetchCustomers = async () => {
+const fetchCustomers = async (options = {}) => {
   try {
     const headers = await getHeaders();
     if (!headers) {
@@ -942,12 +1145,7 @@ const fetchCustomers = async () => {
       return [];
     }
 
-    console.log("Fetching customers from HubSpot...");
-    console.log("API URL:", `${HUBSPOT_API_BASE}/crm/v3/objects/contacts`);
-    console.log(
-      "Token present:",
-      !!(config.HUBSPOT_API_KEY || config.HUBSPOT_ACCESS_TOKEN)
-    );
+    const { myContactsOnly = false } = options;
 
     // HubSpot API expects properties as comma-separated string in query params
     const properties = [
@@ -960,7 +1158,89 @@ const fetchCustomers = async () => {
       "city",
       "state",
       "zip",
+      "hubspot_owner_id", // Include owner ID to filter
     ].join(",");
+
+    // If filtering by owner, use search API
+    if (myContactsOnly) {
+      console.log("Fetching MY contacts from HubSpot (owner filter)...");
+      
+      // Get current user's HubSpot ID
+      const currentUserId = await getCurrentHubSpotUserId();
+      
+      if (!currentUserId) {
+        console.error("❌ ERROR: Could not determine current HubSpot user/owner ID.");
+        console.error("   This usually happens with Private App tokens that don't have user context.");
+        console.error("   'My Contacts' filter cannot work without knowing your owner ID.");
+        console.error("   Returning empty array. Please check backend logs for details.");
+        // Return empty array instead of falling back to all contacts
+        // This makes it clear that "My Contacts" filter failed
+        return [];
+      }
+      
+      console.log(`✅ Using owner ID: ${currentUserId} to filter MY contacts`);
+
+      // Use search API to filter by owner with pagination support
+      let allCustomers = [];
+      let after = null;
+      let hasMore = true;
+      const pageSize = 100; // HubSpot max per request
+
+      while (hasMore) {
+        const searchPayload = {
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: "hubspot_owner_id",
+                  operator: "EQ",
+                  value: currentUserId,
+                },
+              ],
+            },
+          ],
+          properties: properties.split(','),
+          limit: pageSize,
+        };
+
+        // Add pagination cursor if available
+        if (after) {
+          searchPayload.after = after;
+        }
+
+        const searchResponse = await axios.post(
+          `${HUBSPOT_API_BASE}/crm/v3/objects/contacts/search`,
+          searchPayload,
+          { headers }
+        );
+
+        const pageResults = searchResponse.data?.results || [];
+        allCustomers = allCustomers.concat(pageResults);
+
+        // Check if there are more pages
+        const paging = searchResponse.data?.paging;
+        after = paging?.next?.after || null;
+        hasMore = !!after && pageResults.length === pageSize;
+
+        console.log(`Fetched ${pageResults.length} contacts (Total so far: ${allCustomers.length})`);
+      }
+
+      console.log(`Successfully fetched ${allCustomers.length} MY contacts from HubSpot`);
+      
+      if (allCustomers.length > 0) {
+        console.log("Sample MY contact:", JSON.stringify(allCustomers[0], null, 2));
+      }
+      
+      return allCustomers;
+    }
+
+    // Otherwise, fetch all contacts (original behavior)
+    console.log("Fetching all customers from HubSpot...");
+    console.log("API URL:", `${HUBSPOT_API_BASE}/crm/v3/objects/contacts`);
+    console.log(
+      "Token present:",
+      !!(config.HUBSPOT_API_KEY || config.HUBSPOT_ACCESS_TOKEN)
+    );
 
     const response = await axios.get(
       `${HUBSPOT_API_BASE}/crm/v3/objects/contacts`,
@@ -1015,9 +1295,13 @@ const fetchCustomers = async () => {
 
 /**
  * Fetch all orders from HubSpot
+ * @param {Object} options - Options for fetching orders
+ * @param {Boolean} options.currentMonthOnly - If true, only fetch orders from current month (default: true)
  * @returns {Array} Array of order objects or empty array if failed
  */
-const fetchOrders = async () => {
+const fetchOrders = async (options = {}) => {
+  const currentMonthOnly = options.currentMonthOnly !== false; // Default to true
+  
   try {
     const headers = await getHeaders();
     if (!headers) {
@@ -1025,7 +1309,11 @@ const fetchOrders = async () => {
       return [];
     }
 
-    console.log("Fetching orders from HubSpot...");
+    console.log(`Fetching orders from HubSpot (Current Month Only: ${currentMonthOnly})...`);
+
+    const { startDate, endDate } = getCurrentMonthRange();
+    const startTimestamp = startDate.getTime();
+    const endTimestamp = endDate.getTime();
 
     // Prefer Orders object first (matches HubSpot Orders screen)
     try {
@@ -1038,20 +1326,76 @@ const fetchOrders = async () => {
         "hs_timestamp",
         "hs_createdate",
         "hs_lastmodifieddate",
-      ].join(",");
+      ];
 
-      const response = await axios.get(
-        `${HUBSPOT_API_BASE}/crm/v3/objects/orders`,
-        {
-          headers,
-          params: { limit: 100, properties: orderProperties },
+      let orders = [];
+
+      if (currentMonthOnly) {
+        // Use search API to filter by current month
+        console.log(`Filtering orders from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+        
+        const searchPayload = {
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: "hs_createdate",
+                  operator: "BETWEEN",
+                  value: startTimestamp,
+                  highValue: endTimestamp,
+                },
+              ],
+            },
+          ],
+          properties: orderProperties,
+          limit: 100,
+        };
+
+        try {
+          const searchResponse = await axios.post(
+            `${HUBSPOT_API_BASE}/crm/v3/objects/orders/search`,
+            searchPayload,
+            { headers }
+          );
+          orders = searchResponse.data?.results || [];
+          console.log(`Fetched ${orders.length} orders from current month using search API`);
+        } catch (searchError) {
+          console.warn("Orders search API failed, falling back to get API with client-side filtering:", searchError.message);
+          // Fallback to get API and filter client-side
+          const response = await axios.get(
+            `${HUBSPOT_API_BASE}/crm/v3/objects/orders`,
+            {
+              headers,
+              params: { limit: 100, properties: orderProperties.join(",") },
+            }
+          );
+          const allOrders = response.data?.results || [];
+          
+          // Filter by current month client-side
+          orders = allOrders.filter((order) => {
+            const createdDate = order?.properties?.hs_createdate;
+            if (!createdDate) return false;
+            const createdMs = Date.parse(createdDate);
+            if (isNaN(createdMs)) return false;
+            return createdMs >= startTimestamp && createdMs <= endTimestamp;
+          });
+          console.log(`Filtered ${orders.length} orders from current month (from ${allOrders.length} total)`);
         }
-      );
+      } else {
+        // Fetch all orders
+        const response = await axios.get(
+          `${HUBSPOT_API_BASE}/crm/v3/objects/orders`,
+          {
+            headers,
+            params: { limit: 100, properties: orderProperties.join(",") },
+          }
+        );
+        orders = response.data?.results || [];
+        console.log(`Fetched ${orders.length} orders (all orders, no date filter)`);
+      }
 
-      console.log("Orders API Response Status:", response.status);
-      const orders = response.data?.results || [];
       console.log(
-        `Successfully fetched ${orders.length} orders from HubSpot (Orders API)`
+        `Successfully fetched ${orders.length} orders from HubSpot (Orders API${currentMonthOnly ? ' - current month only' : ''})`
       );
       if (orders.length > 0)
         console.log("Sample order:", JSON.stringify(orders[0], null, 2));
@@ -1073,19 +1417,78 @@ const fetchOrders = async () => {
       "pipeline",
       "closedate",
       "description",
-    ].join(",");
-    const response = await axios.get(
-      `${HUBSPOT_API_BASE}/crm/v3/objects/deals`,
-      {
-        headers,
-        params: { limit: 100, properties: dealProperties },
-      }
-    );
+      "hs_createdate",
+      "hs_lastmodifieddate",
+    ];
 
-    console.log("Deals API Response Status:", response.status);
-    const deals = response.data?.results || [];
+    let deals = [];
+
+    if (currentMonthOnly) {
+      // Use search API to filter deals by current month
+      console.log(`Filtering deals from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+      
+      const searchPayload = {
+        filterGroups: [
+          {
+            filters: [
+              {
+                propertyName: "hs_createdate",
+                operator: "BETWEEN",
+                value: startTimestamp,
+                highValue: endTimestamp,
+              },
+            ],
+          },
+        ],
+        properties: dealProperties,
+        limit: 100,
+      };
+
+      try {
+        const searchResponse = await axios.post(
+          `${HUBSPOT_API_BASE}/crm/v3/objects/deals/search`,
+          searchPayload,
+          { headers }
+        );
+        deals = searchResponse.data?.results || [];
+        console.log(`Fetched ${deals.length} deals from current month using search API`);
+      } catch (searchError) {
+        console.warn("Deals search API failed, falling back to get API with client-side filtering:", searchError.message);
+        // Fallback to get API and filter client-side
+        const response = await axios.get(
+          `${HUBSPOT_API_BASE}/crm/v3/objects/deals`,
+          {
+            headers,
+            params: { limit: 100, properties: dealProperties.join(",") },
+          }
+        );
+        const allDeals = response.data?.results || [];
+        
+        // Filter by current month client-side
+        deals = allDeals.filter((deal) => {
+          const createdDate = deal?.properties?.hs_createdate;
+          if (!createdDate) return false;
+          const createdMs = Date.parse(createdDate);
+          if (isNaN(createdMs)) return false;
+          return createdMs >= startTimestamp && createdMs <= endTimestamp;
+        });
+        console.log(`Filtered ${deals.length} deals from current month (from ${allDeals.length} total)`);
+      }
+    } else {
+      // Fetch all deals
+      const response = await axios.get(
+        `${HUBSPOT_API_BASE}/crm/v3/objects/deals`,
+        {
+          headers,
+          params: { limit: 100, properties: dealProperties.join(",") },
+        }
+      );
+      deals = response.data?.results || [];
+      console.log(`Fetched ${deals.length} deals (all deals, no date filter)`);
+    }
+
     console.log(
-      `Successfully fetched ${deals.length} deals from HubSpot (Deals API fallback)`
+      `Successfully fetched ${deals.length} deals from HubSpot (Deals API fallback${currentMonthOnly ? ' - current month only' : ''})`
     );
     if (deals.length > 0)
       console.log("Sample deal:", JSON.stringify(deals[0], null, 2));
@@ -1108,10 +1511,103 @@ const fetchOrders = async () => {
 };
 
 /**
+ * Get current month date range (start and end of current month)
+ * @returns {Object} { startDate: Date, endDate: Date }
+ */
+const getCurrentMonthRange = () => {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return { startDate, endDate };
+};
+
+/**
+ * Get week ranges for current month (previous week, current week, next week)
+ * Only includes weeks that fall within the current month
+ * @returns {Object} { startDate: Date, endDate: Date }
+ */
+const getCurrentMonthWeekRange = () => {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const currentDate = now.getDate();
+  
+  // Get start of current week (Monday)
+  // If Sunday (0), go back 6 days; otherwise go back (day - 1) days
+  const daysToMonday = currentDay === 0 ? 6 : currentDay - 1;
+  const currentWeekStart = new Date(now);
+  currentWeekStart.setDate(currentDate - daysToMonday);
+  currentWeekStart.setHours(0, 0, 0, 0);
+  
+  // Get end of current week (Sunday)
+  const currentWeekEnd = new Date(currentWeekStart);
+  currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
+  currentWeekEnd.setHours(23, 59, 59, 999);
+  
+  // Get previous week (7 days before current week start)
+  const previousWeekStart = new Date(currentWeekStart);
+  previousWeekStart.setDate(currentWeekStart.getDate() - 7);
+  previousWeekStart.setHours(0, 0, 0, 0);
+  
+  const previousWeekEnd = new Date(previousWeekStart);
+  previousWeekEnd.setDate(previousWeekStart.getDate() + 6);
+  previousWeekEnd.setHours(23, 59, 59, 999);
+  
+  // Get next week (7 days after current week start)
+  const nextWeekStart = new Date(currentWeekStart);
+  nextWeekStart.setDate(currentWeekStart.getDate() + 7);
+  nextWeekStart.setHours(0, 0, 0, 0);
+  
+  const nextWeekEnd = new Date(nextWeekStart);
+  nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+  nextWeekEnd.setHours(23, 59, 59, 999);
+  
+  // Get current month boundaries
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  
+  // Find the earliest start date (previous week start, but not before month start)
+  let startDate = previousWeekStart;
+  if (startDate < monthStart) {
+    startDate = monthStart;
+  }
+  
+  // CRITICAL FIX: Always extend endDate to month end to ensure ALL dates in current month are included
+  // This ensures tasks like 30 Jan are included even if they're beyond the "next week" range
+  // Week-wise means we start from previous week, but we include ALL dates in the current month
+  let endDate = new Date(monthEnd); // Always use full month end, not just next week end
+  
+  console.log(`📅 Week range calculation:`);
+  console.log(`   Previous week: ${previousWeekStart.toLocaleDateString('en-GB')} to ${previousWeekEnd.toLocaleDateString('en-GB')}`);
+  console.log(`   Current week: ${currentWeekStart.toLocaleDateString('en-GB')} to ${currentWeekEnd.toLocaleDateString('en-GB')}`);
+  console.log(`   Next week: ${nextWeekStart.toLocaleDateString('en-GB')} to ${nextWeekEnd.toLocaleDateString('en-GB')}`);
+  console.log(`   Month range: ${monthStart.toLocaleDateString('en-GB')} to ${monthEnd.toLocaleDateString('en-GB')}`);
+  console.log(`   Final range: ${startDate.toLocaleDateString('en-GB')} to ${endDate.toLocaleDateString('en-GB')} (extended to month end to include all month dates)`);
+  
+  // Check if 30 Jan (if current month is January) is in range
+  if (now.getMonth() === 0) { // January is month 0
+    const jan30 = new Date(now.getFullYear(), 0, 30, 12, 0, 0, 0);
+    const jan30Timestamp = jan30.getTime();
+    const inRange = jan30Timestamp >= startDate.getTime() && jan30Timestamp <= endDate.getTime();
+    console.log(`   📌 30 Jan check: ${jan30.toLocaleDateString('en-GB')} is ${inRange ? '✅ IN RANGE' : '❌ OUT OF RANGE'}`);
+  }
+  
+  return { startDate, endDate };
+};
+
+/**
  * Fetch tasks from HubSpot
+ * @param {Object} options - Options for fetching tasks
+ * @param {Number} options.limit - Maximum number of tasks to fetch (default: 100, max: 100)
+ * @param {Boolean} options.currentMonthOnly - If true, only fetch tasks from current month weeks (default: false)
+ * @param {Boolean} options.weekWise - If true, fetch tasks from previous week, current week, and next week within current month (default: true when currentMonthOnly is true)
  * @returns {Array} Array of task objects or empty array if failed
  */
-const fetchTasks = async () => {
+const fetchTasks = async (options = {}) => {
+  // HubSpot API allows maximum 100 objects per request
+  const limit = Math.min(options.limit || 100, 100);
+  const currentMonthOnly = options.currentMonthOnly === true; // Default to false
+  const weekWise = options.weekWise !== false; // Default to true when filtering
+  
   try {
     const headers = await getHeaders();
     if (!headers) {
@@ -1119,7 +1615,7 @@ const fetchTasks = async () => {
       return [];
     }
 
-    console.log("Fetching tasks from HubSpot...");
+    console.log(`Fetching tasks from HubSpot (Current Month Only: ${currentMonthOnly}, Week Wise: ${weekWise})...`);
 
     // HubSpot tasks are CRM object "tasks"
     const taskProperties = [
@@ -1131,24 +1627,172 @@ const fetchTasks = async () => {
       "hs_timestamp", // commonly used as due date/time
       "hs_createdate",
       "hs_lastmodifieddate",
-    ].join(",");
+      "hubspot_owner_id", // Owner/assigned user ID
+      "hs_task_queue", // Queue field
+      "hs_task_reminder", // Reminder field
+    ];
 
-    const response = await axios.get(
-      `${HUBSPOT_API_BASE}/crm/v3/objects/tasks`,
-      {
-        headers,
-        params: {
-          limit: 100,
-          properties: taskProperties,
-          associations: "contacts",
-        },
+    let tasks = [];
+
+    if (currentMonthOnly) {
+      // Use week-wise filtering: previous week, current week, next week within current month
+      const { startDate, endDate } = weekWise ? getCurrentMonthWeekRange() : getCurrentMonthRange();
+      const startTimestamp = startDate.getTime();
+      const endTimestamp = endDate.getTime();
+
+      console.log(`Filtering tasks by due date (hs_timestamp) from ${startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} to ${endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}`);
+
+      // Use search API with date filter on hs_timestamp (due date) instead of hs_createdate
+      // This ensures all tasks for a day are imported regardless of time
+      const searchPayload = {
+        filterGroups: [
+          {
+            filters: [
+              {
+                propertyName: "hs_timestamp", // Filter by due date, not creation date
+                operator: "BETWEEN",
+                value: startTimestamp,
+                highValue: endTimestamp,
+              },
+            ],
+          },
+        ],
+        properties: taskProperties,
+        limit: limit,
+        associations: ["contacts", "companies"], // Request associations for contacts and companies
+      };
+      
+      console.log(`🔍 Search payload for tasks (filtering by due date):`, JSON.stringify(searchPayload, null, 2));
+
+      try {
+        const searchResponse = await axios.post(
+          `${HUBSPOT_API_BASE}/crm/v3/objects/tasks/search`,
+          searchPayload,
+          { headers }
+        );
+        tasks = searchResponse.data?.results || [];
+        const totalCount = searchResponse.data?.total || tasks.length;
+        console.log(`Fetched ${tasks.length} tasks from current month weeks using search API (with associations)`);
+        console.log(`📊 Total tasks available in HubSpot for this date range: ${totalCount}`);
+        
+        // Warn if we hit the limit and there are more tasks
+        if (totalCount > limit && tasks.length === limit) {
+          console.warn(`⚠️ WARNING: HubSpot has ${totalCount} tasks in this date range, but we only fetched ${limit} (limit reached). Some tasks may be missing!`);
+          console.warn(`   Consider increasing the limit or implementing pagination to fetch all tasks.`);
+        }
+        
+        // Debug: Check if associations are present
+        if (tasks.length > 0) {
+          const sampleTask = tasks[0];
+          console.log(`🔍 Sample task associations:`, {
+            hasAssociations: !!sampleTask?.associations,
+            associationKeys: Object.keys(sampleTask?.associations || {}),
+            contactCount: (sampleTask?.associations?.contacts?.results || []).length,
+            companyCount: (sampleTask?.associations?.companies?.results || []).length
+          });
+          
+          // Log tasks with 30 Jan 13:00 specifically
+          const jan30_13_00_tasks = tasks.filter(t => {
+            const tsRaw = t?.properties?.hs_timestamp;
+            if (!tsRaw) return false;
+            let tsNum = Number(tsRaw);
+            if (tsNum > 0 && tsNum < 946684800000) {
+              tsNum = tsNum * 1000;
+            }
+            if (isNaN(tsNum) || tsNum <= 0) return false;
+            const dueDate = new Date(tsNum);
+            return dueDate.getDate() === 30 && dueDate.getMonth() === 0 && dueDate.getHours() === 13 && dueDate.getMinutes() === 0;
+          });
+          
+          if (jan30_13_00_tasks.length > 0) {
+            console.log(`\n✅ Found ${jan30_13_00_tasks.length} task(s) with due date 30 Jan 2026 13:00 in fetched results:`);
+            jan30_13_00_tasks.forEach((t, idx) => {
+              const subj = (t?.properties?.hs_task_subject || '').trim() || 'No subject';
+              const taskId = String(t?.id || '').trim() || 'No ID';
+              console.log(`   ${idx + 1}. Task ${taskId}: "${subj}"`);
+            });
+          } else {
+            console.log(`\n⚠️ No tasks found with due date 30 Jan 2026 13:00 in fetched results.`);
+            console.log(`   This might indicate they're beyond the limit or not in the date range.`);
+          }
+        }
+      } catch (searchError) {
+        console.warn("Search API failed, falling back to get API with client-side filtering:", searchError.message);
+        // Fallback to get API and filter client-side
+        const response = await axios.get(
+          `${HUBSPOT_API_BASE}/crm/v3/objects/tasks`,
+          {
+            headers,
+            params: {
+              limit: limit,
+              properties: taskProperties.join(","),
+              associations: "contacts,companies", // Request both contacts and companies associations
+            },
+          }
+        );
+        const allTasks = response.data?.results || [];
+        
+        // Filter by due date (hs_timestamp) client-side - includes all times in the day
+        tasks = allTasks.filter((task) => {
+          const dueDate = task?.properties?.hs_timestamp;
+          if (!dueDate) return false;
+          const dueMs = Number(dueDate);
+          if (isNaN(dueMs) || dueMs <= 0) return false;
+          return dueMs >= startTimestamp && dueMs <= endTimestamp;
+        });
+        console.log(`Filtered ${tasks.length} tasks from current month weeks by due date (from ${allTasks.length} total)`);
       }
-    );
-
-    const tasks = response.data?.results || [];
-    console.log(`Successfully fetched ${tasks.length} tasks from HubSpot`);
+    } else {
+      // Fetch all tasks (original behavior)
+      console.log(`Fetching all tasks from HubSpot (limit: ${limit}, no date filter)`);
+      const response = await axios.get(
+        `${HUBSPOT_API_BASE}/crm/v3/objects/tasks`,
+        {
+          headers,
+          params: {
+            limit: limit,
+            properties: taskProperties.join(","),
+            associations: "contacts,companies", // Request both contacts and companies associations
+          },
+        }
+      );
+      tasks = response.data?.results || [];
+      console.log(`Fetched ${tasks.length} tasks (all tasks, no date filter)`);
+    }
+    
+    // Sort by due date (hs_timestamp) or creation date (newest first)
+    tasks.sort((a, b) => {
+      const aTimestamp = a?.properties?.hs_timestamp ? Number(a.properties.hs_timestamp) : 0;
+      const bTimestamp = b?.properties?.hs_timestamp ? Number(b.properties.hs_timestamp) : 0;
+      const aCreated = a?.properties?.hs_createdate ? new Date(a.properties.hs_createdate).getTime() : 0;
+      const bCreated = b?.properties?.hs_createdate ? new Date(b.properties.hs_createdate).getTime() : 0;
+      
+      const aDate = aTimestamp || aCreated;
+      const bDate = bTimestamp || bCreated;
+      
+      return bDate - aDate; // Descending order (newest first)
+    });
+    
+    console.log(`Successfully fetched ${tasks.length} tasks from HubSpot${currentMonthOnly ? (weekWise ? ' (current month: previous week, current week, next week)' : ' (current month only)') : ''}`);
     if (tasks.length > 0) {
-      console.log("Sample task:", JSON.stringify(tasks[0], null, 2));
+      const newestTask = tasks[0];
+      const oldestTask = tasks[tasks.length - 1];
+      
+      // Helper to parse timestamp safely
+      const parseTimestamp = (ts) => {
+        if (!ts) return null;
+        const num = Number(ts);
+        if (!isNaN(num) && num > 0) {
+          return new Date(num);
+        }
+        return null;
+      };
+      
+      const newestDue = parseTimestamp(newestTask?.properties?.hs_timestamp);
+      const oldestDue = parseTimestamp(oldestTask?.properties?.hs_timestamp);
+      
+      console.log("Newest task due date:", newestDue ? newestDue.toLocaleDateString() : 'N/A');
+      console.log("Oldest task due date:", oldestDue ? oldestDue.toLocaleDateString() : 'N/A');
     }
     return tasks;
   } catch (error) {
@@ -1161,8 +1805,59 @@ const fetchTasks = async () => {
 };
 
 /**
- * Create task in HubSpot (CRM v3 tasks object)
+ * Update task in HubSpot (CRM v3 tasks object)
+ * @param {String} taskId - HubSpot task ID
  * @param {Object} task - { subject, body, status, priority, type, dueDate }
+ * @returns {Boolean} Success status
+ */
+const updateTaskObjectInHubSpot = async (taskId, task = {}) => {
+  try {
+    const headers = await getHeaders();
+    if (!headers || !taskId) return false;
+
+    const subject = (task.subject || "").toString();
+    const body = (task.body || "").toString();
+    const status = (task.status || "NOT_STARTED").toString();
+    const priority = (task.priority || "NONE").toString();
+    const type = (task.type || "TODO").toString();
+
+    // HubSpot expects hs_timestamp as epoch millis
+    const due = task.dueDate ? new Date(task.dueDate) : null;
+    const hs_timestamp =
+      due && !Number.isNaN(due.getTime()) ? String(due.getTime()) : undefined;
+
+    const properties = {
+      hs_task_subject: subject,
+      hs_task_body: body,
+      hs_task_status: status,
+      hs_task_priority: priority,
+      hs_task_type: type,
+    };
+    
+    if (hs_timestamp) {
+      properties.hs_timestamp = hs_timestamp;
+    }
+
+    await axios.patch(
+      `${HUBSPOT_API_BASE}/crm/v3/objects/tasks/${taskId}`,
+      { properties },
+      { headers }
+    );
+
+    console.log(`✅ HubSpot task updated: ${taskId} - "${subject}"`);
+    return true;
+  } catch (error) {
+    console.error(
+      "Error updating task object in HubSpot:",
+      error.response?.data || error.message
+    );
+    return false;
+  }
+};
+
+/**
+ * Create task in HubSpot (CRM v3 tasks object)
+ * @param {Object} task - { subject, body, status, priority, type, dueDate, contactId, contactEmail }
  * @returns {String|null} HubSpot task id
  */
 const createTaskObjectInHubSpot = async (task = {}) => {
@@ -1200,9 +1895,34 @@ const createTaskObjectInHubSpot = async (task = {}) => {
     );
 
     const taskId = response.data?.id || null;
-    if (taskId) {
-      console.log(`✅ HubSpot task created: ${taskId} - "${subject}"`);
+    if (!taskId) {
+      return null;
     }
+
+    // Associate task with contact if contactId or contactEmail is provided
+    let contactId = task.contactId;
+    if (!contactId && task.contactEmail && isValidEmail(task.contactEmail)) {
+      // Try to find contact by email
+      contactId = await findContactByEmail(task.contactEmail);
+    }
+
+    if (contactId) {
+      try {
+        // Associate task with contact using v4 associations API
+        const associated = await associateObjects("tasks", taskId, "contacts", contactId);
+        if (associated) {
+          console.log(`✅ HubSpot task created: ${taskId} - "${subject}" (associated with contact: ${contactId})`);
+        } else {
+          console.log(`✅ HubSpot task created: ${taskId} - "${subject}" (contact association failed)`);
+        }
+      } catch (assocError) {
+        console.warn(`⚠️ Task ${taskId} created but contact association failed:`, assocError.message);
+        console.log(`✅ HubSpot task created: ${taskId} - "${subject}"`);
+      }
+    } else {
+      console.log(`✅ HubSpot task created: ${taskId} - "${subject}" (no contact association)`);
+    }
+
     return taskId;
   } catch (error) {
     // Check if error is due to duplicate
@@ -1272,13 +1992,14 @@ const createTaskInHubSpot = async (subject, contactId = null) => {
  * Fetches customers and orders from HubSpot
  * @returns {Object} Object with customers and orders arrays
  */
-const syncHubSpotData = async () => {
+const syncHubSpotData = async (options = {}) => {
   try {
+    const currentMonthOnly = options.currentMonthOnly !== false; // Default to true
     const customers = await fetchCustomers();
-    const orders = await fetchOrders();
+    const orders = await fetchOrders({ currentMonthOnly });
 
     console.log(
-      `HubSpot sync: ${customers.length} customers, ${orders.length} orders fetched`
+      `HubSpot sync: ${customers.length} customers, ${orders.length} orders fetched${currentMonthOnly ? ' (current month only)' : ''}`
     );
 
     return {
@@ -1314,6 +2035,9 @@ module.exports = {
   fetchOrders,
   fetchTasks,
   createTaskObjectInHubSpot,
+  updateTaskObjectInHubSpot,
   createTaskInHubSpot,
   syncHubSpotData,
+  getCurrentHubSpotUserId,
+  getOwnerById,
 };

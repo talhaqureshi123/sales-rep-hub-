@@ -57,11 +57,8 @@ const customerSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
-  assignedSalesman: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null,
-  },
+  // REMOVED: assignedSalesman - Customers and Salesmen are separate entities
+  // Salesmen are assigned to Tasks/FollowUps, not directly to Customers
   status: {
     type: String,
     enum: ['Active', 'Inactive', 'Not Visited', 'Visited', 'Follow-up Needed', 'Qualified Lead', 'Not Interested'],
@@ -80,6 +77,11 @@ const customerSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  source: {
+    type: String,
+    enum: ['app', 'hubspot'],
+    default: 'app',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -96,7 +98,7 @@ customerSchema.pre('save', async function () {
 });
 
 // Index for efficient queries
-customerSchema.index({ assignedSalesman: 1 });
+// REMOVED: assignedSalesman index (field removed)
 customerSchema.index({ createdBy: 1 });
 customerSchema.index({ status: 1 });
 

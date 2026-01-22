@@ -94,7 +94,7 @@ const SalesmanDashboard = ({ onLogout }) => {
         </div>
 
         {/* Main Content */}
-        <div className={`flex-1 overflow-y-auto ${activeTab === 'quotation' ? 'p-0' : 'p-4'} pb-20 lg:pb-4`}>
+        <div className={`flex-1 overflow-y-auto ${activeTab === 'quotation' ? 'p-0' : 'p-2 sm:p-4'} pb-20 md:pb-24 lg:pb-4`}>
           {renderContent()}
         </div>
 

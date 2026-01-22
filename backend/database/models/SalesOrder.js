@@ -232,20 +232,30 @@ const salesOrderSchema = new mongoose.Schema(
 );
 
 // Calculate totals before saving
-salesOrderSchema.pre('save', function (next) {
+salesOrderSchema.pre('save', async function () {
   // Calculate subtotal from items
-  this.subtotal = this.items.reduce((sum, item) => sum + (item.lineTotal || 0), 0);
+  if (this.items && Array.isArray(this.items) && this.items.length > 0) {
+    this.subtotal = this.items.reduce((sum, item) => {
+      // Calculate lineTotal if not provided
+      const lineTotal = item.lineTotal || ((item.unitPrice || 0) * (item.quantity || 0));
+      return sum + lineTotal;
+    }, 0);
+  } else {
+    this.subtotal = this.subtotal || 0;
+  }
   
   // Calculate VAT (20%)
-  this.vat = (this.subtotal - this.discount + this.deliveryCharges) * (this.vatRate / 100);
+  const subtotal = this.subtotal || 0;
+  const discount = this.discount || 0;
+  const deliveryCharges = this.deliveryCharges || 0;
+  const vatRate = this.vatRate || 20;
+  this.vat = (subtotal - discount + deliveryCharges) * (vatRate / 100);
   
   // Calculate grand total
-  this.grandTotal = this.subtotal - this.discount + this.deliveryCharges + this.vat;
+  this.grandTotal = subtotal - discount + deliveryCharges + this.vat;
   
   // Calculate balance remaining
-  this.balanceRemaining = this.grandTotal - this.amountPaid;
-  
-  next();
+  this.balanceRemaining = this.grandTotal - (this.amountPaid || 0);
 });
 
 module.exports = mongoose.model('SalesOrder', salesOrderSchema);

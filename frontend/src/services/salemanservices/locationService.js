@@ -111,6 +111,43 @@ export const formatDistance = (distanceInMeters) => {
   }
 }
 
+// Save location to backend (for live tracking)
+const API_BASE_URL = '/api/salesman/location'
+
+const getAuthToken = () => {
+  return localStorage.getItem('token')
+}
+
+// Save current location to backend
+export const saveLocation = async (latitude, longitude, accuracy = null) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      // Not logged in, don't send location
+      return { success: false, message: 'Not authenticated' }
+    }
+
+    const response = await fetch(API_BASE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        latitude,
+        longitude,
+        accuracy,
+      }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error saving location:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 export default {
   getCurrentLocation,
   watchPosition,
@@ -118,5 +155,6 @@ export default {
   calculateDistance,
   isWithinRadius,
   formatDistance,
+  saveLocation,
 }
 

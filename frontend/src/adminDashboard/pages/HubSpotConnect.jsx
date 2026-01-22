@@ -13,6 +13,7 @@ const HubSpotConnect = () => {
   const [pushingOrders, setPushingOrders] = useState(false)
   const [pushingCustomers, setPushingCustomers] = useState(false)
   const [pushingTasks, setPushingTasks] = useState(false)
+  const [myContactsOnly, setMyContactsOnly] = useState(false)
 
   useEffect(() => {
     // Check connection status on mount
@@ -92,7 +93,7 @@ const HubSpotConnect = () => {
   const handleImportCustomers = async () => {
     setImporting(true)
     try {
-      const result = await importHubSpotCustomersToDb()
+      const result = await importHubSpotCustomersToDb(myContactsOnly)
       if (result.success) {
         const d = result.data || {}
         Swal.fire({
@@ -104,6 +105,7 @@ const HubSpotConnect = () => {
               <p><strong>Created:</strong> ${d.created || 0}</p>
               <p><strong>Updated:</strong> ${d.updated || 0}</p>
               <p><strong>Skipped (no email):</strong> ${d.skipped || 0}</p>
+              ${myContactsOnly ? '<p class="text-blue-600 font-semibold mt-2">✓ Only MY contacts imported</p>' : ''}
               <hr style="margin: 10px 0;">
               <p>Now open Customers page to see them.</p>
             </div>
@@ -216,7 +218,7 @@ const HubSpotConnect = () => {
   const handlePushCustomers = async () => {
     setPushingCustomers(true)
     try {
-      const result = await pushCustomersToHubSpot(false, 0)
+      const result = await pushCustomersToHubSpot(false, 0, myContactsOnly)
       if (result.success) {
         const d = result.data || {}
         Swal.fire({
@@ -228,6 +230,7 @@ const HubSpotConnect = () => {
               <p><strong>Synced:</strong> ${d.synced || 0}</p>
               <p><strong>Skipped:</strong> ${d.skipped || 0}</p>
               <p><strong>Failed:</strong> ${d.failed || 0}</p>
+              ${myContactsOnly ? '<p class="text-blue-600 font-semibold mt-2">✓ Contacts assigned to YOU in HubSpot</p>' : ''}
             </div>
           `,
           confirmButtonColor: '#e9931c'
@@ -346,6 +349,24 @@ const HubSpotConnect = () => {
 
       {/* Actions Section */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        {/* My Contacts Only Toggle */}
+        <div className="mb-4 pb-4 border-b border-gray-200">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={myContactsOnly}
+              onChange={(e) => setMyContactsOnly(e.target.checked)}
+              className="w-5 h-5 text-[#e9931c] rounded focus:ring-[#e9931c]"
+            />
+            <div>
+              <span className="text-sm font-semibold text-gray-800">My Contacts Only</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Import/export only contacts assigned to you in HubSpot
+              </p>
+            </div>
+          </label>
+        </div>
+
         <div className="flex flex-wrap gap-3">
           {/* Test Connection Button */}
           <button

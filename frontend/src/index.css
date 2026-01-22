@@ -5,6 +5,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -21,14 +30,10 @@
   margin: 0;
   padding: 0;
   background-color: white;
-}
-
-/* Leaflet Map Custom Styles */
+}/* Leaflet Map Custom Styles */
 .leaflet-container {
   font-family: inherit;
-}
-
-.custom-milestone-marker,
+}.custom-milestone-marker,
 .custom-user-marker {
   background: transparent !important;
   border: none !important;
@@ -55,9 +60,7 @@
 
 .animate-fadeIn {
   animation: fadeIn 0.2s ease-out;
-}
-
-.animate-slideUp {
+}.animate-slideUp {
   animation: slideUp 0.3s ease-out;
 }
 

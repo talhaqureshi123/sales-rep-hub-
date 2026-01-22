@@ -2,33 +2,103 @@ const Customer = require('../../database/models/Customer');
 const User = require('../../database/models/User');
 const hubspotService = require('../../services/hubspotService');
 
-// @desc    Get customers assigned to logged-in salesman or created by salesman
+// @desc    Get customers for logged-in salesman (through tasks/visits or created by salesman) with filters
 // @route   GET /api/salesman/customers
 // @access  Private/Salesman
+// NOTE: Customers and Salesmen are separate. Shows customers with tasks/visits assigned to this salesman.
+// Query params: status, search, city, state, company, orderPotential, monthlySpendMin, monthlySpendMax
 const getMyCustomers = async (req, res) => {
   try {
-    const { status, search } = req.query;
+    const { 
+      status, 
+      search,
+      city,
+      state,
+      company,
+      orderPotential,
+      monthlySpendMin,
+      monthlySpendMax
+    } = req.query;
+    
+    // Get customers through tasks/visits assigned to this salesman
+    const FollowUp = require('../../database/models/FollowUp');
+    const VisitTarget = require('../../database/models/VisitTarget');
+    
+    // Get unique customer IDs from tasks
+    const taskCustomerIds = await FollowUp.find({ salesman: req.user._id }).distinct('customer');
+    // Get unique customer IDs from visits
+    const visitCustomerIds = await VisitTarget.find({ salesman: req.user._id }).distinct('customer');
+    
+    // Combine and get unique customer IDs, plus customers created by this salesman
+    const relatedCustomerIds = [...new Set([...taskCustomerIds, ...visitCustomerIds].filter(id => id))];
+    
     const filter = {
       $or: [
-        { assignedSalesman: req.user._id },
-        { createdBy: req.user._id }, // Also show customers created by this salesman
+        { _id: { $in: relatedCustomerIds } }, // Customers with tasks/visits
+        { createdBy: req.user._id }, // Customers created by this salesman
       ],
     };
+
+    // Apply additional filters
+    if (status && status !== 'All') {
+      filter.status = status;
+    }
+
+    if (city) {
+      filter.city = { $regex: city, $options: 'i' };
+    }
+
+    if (state) {
+      filter.state = { $regex: state, $options: 'i' };
+    }
+
+    if (company) {
+      filter.company = { $regex: company, $options: 'i' };
+    }
+
+    if (orderPotential) {
+      filter.orderPotential = { $regex: orderPotential, $options: 'i' };
+    }
+
+    if (monthlySpendMin || monthlySpendMax) {
+      filter.monthlySpend = {};
+      if (monthlySpendMin) {
+        filter.monthlySpend.$gte = Number(monthlySpendMin);
+      }
+      if (monthlySpendMax) {
+        filter.monthlySpend.$lte = Number(monthlySpendMax);
+      }
+    }
 
     if (status) {
       filter.status = status;
     }
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { company: { $regex: search, $options: 'i' } },
+      // Combine search with existing $or filter
+      const searchFilter = {
+        $or: [
+          { firstName: { $regex: search, $options: 'i' } },
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { company: { $regex: search, $options: 'i' } },
+          { contactPerson: { $regex: search, $options: 'i' } },
+          { address: { $regex: search, $options: 'i' } },
+          { city: { $regex: search, $options: 'i' } },
+          { state: { $regex: search, $options: 'i' } },
+        ],
+      };
+      
+      // Merge search filter with existing filter
+      filter.$and = [
+        { $or: filter.$or },
+        searchFilter
       ];
+      delete filter.$or;
     }
 
     const customers = await Customer.find(filter)
-      .populate('assignedSalesman', 'name email')
+      .populate('createdBy', 'name email')
       .sort({ name: 1 });
 
     res.status(200).json({
@@ -49,12 +119,37 @@ const getMyCustomers = async (req, res) => {
 // @access  Private/Salesman
 const getCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findOne({
-      _id: req.params.id,
-      assignedSalesman: req.user._id,
-    }).populate('assignedSalesman', 'name email');
+    const customer = await Customer.findById(req.params.id)
+      .populate('createdBy', 'name email');
 
     if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    // Check if customer is accessible to this salesman:
+    // 1. Customer was created by this salesman, OR
+    // 2. Customer has tasks assigned to this salesman, OR
+    // 3. Customer name matches visits assigned to this salesman
+    const FollowUp = require('../../database/models/FollowUp');
+    const VisitTarget = require('../../database/models/VisitTarget');
+    
+    const isCreatedBySalesman = customer.createdBy && customer.createdBy._id.toString() === req.user._id.toString();
+    const hasTasks = await FollowUp.findOne({ 
+      customer: customer._id, 
+      salesman: req.user._id 
+    });
+    
+    // VisitTarget doesn't have customer field, check by customer name
+    const customerName = customer.name || customer.firstName || '';
+    const hasVisits = customerName ? await VisitTarget.findOne({ 
+      name: { $regex: customerName, $options: 'i' },
+      salesman: req.user._id 
+    }) : null;
+
+    if (!isCreatedBySalesman && !hasTasks && !hasVisits) {
       return res.status(404).json({
         success: false,
         message: 'Customer not found or not assigned to you',
@@ -122,7 +217,7 @@ const createCustomer = async (req, res) => {
       }
     }
 
-    // Create customer - automatically assign to logged-in salesman and set createdBy
+    // Create customer - set createdBy (no direct salesman assignment)
     const customer = await Customer.create({
       firstName: customerName,
       name: customerName, // Keep name for backward compatibility
@@ -137,7 +232,7 @@ const createCustomer = async (req, res) => {
       company,
       orderPotential,
       monthlySpend: monthlySpend || 0,
-      assignedSalesman: req.user._id, // Auto-assign to logged-in salesman
+      // REMOVED: assignedSalesman - Customers and Salesmen are separate
       status: status || 'Active',
       notes,
       competitorInfo,
@@ -145,7 +240,7 @@ const createCustomer = async (req, res) => {
     });
 
     const populatedCustomer = await Customer.findById(customer._id)
-      .populate('assignedSalesman', 'name email')
+      // REMOVED: .populate('assignedSalesman', 'name email') - field removed
       .populate('createdBy', 'name email');
 
     // Sync to HubSpot (async, non-blocking)

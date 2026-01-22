@@ -2,20 +2,98 @@ const Customer = require('../../database/models/Customer');
 const User = require('../../database/models/User');
 const hubspotService = require('../../services/hubspotService');
 
-// @desc    Get all customers
+// @desc    Get all customers with comprehensive filters
 // @route   GET /api/admin/customers
 // @access  Private/Admin
+// Query params: status, search, city, state, company, orderPotential, monthlySpendMin, monthlySpendMax, createdBy, createdFrom, createdTo, updatedFrom, updatedTo
 const getCustomers = async (req, res) => {
   try {
-    const { salesman, status, search } = req.query;
+    const { 
+      salesman, 
+      status, 
+      search,
+      city,
+      state,
+      company,
+      orderPotential,
+      monthlySpendMin,
+      monthlySpendMax,
+      createdBy,
+      createdFrom,
+      createdTo,
+      updatedFrom,
+      updatedTo
+    } = req.query;
+    
     const filter = {};
 
-    if (salesman) {
-      filter.assignedSalesman = salesman;
-    }
-    if (status) {
+    // Status filter
+    if (status && status !== 'All') {
       filter.status = status;
     }
+
+    // City filter
+    if (city) {
+      filter.city = { $regex: city, $options: 'i' };
+    }
+
+    // State filter
+    if (state) {
+      filter.state = { $regex: state, $options: 'i' };
+    }
+
+    // Company filter
+    if (company) {
+      filter.company = { $regex: company, $options: 'i' };
+    }
+
+    // Order Potential filter
+    if (orderPotential) {
+      filter.orderPotential = { $regex: orderPotential, $options: 'i' };
+    }
+
+    // Monthly Spend range filter
+    if (monthlySpendMin || monthlySpendMax) {
+      filter.monthlySpend = {};
+      if (monthlySpendMin) {
+        filter.monthlySpend.$gte = Number(monthlySpendMin);
+      }
+      if (monthlySpendMax) {
+        filter.monthlySpend.$lte = Number(monthlySpendMax);
+      }
+    }
+
+    // Created By filter
+    if (createdBy) {
+      filter.createdBy = createdBy;
+    }
+
+    // Date range filters
+    if (createdFrom || createdTo) {
+      filter.createdAt = {};
+      if (createdFrom) {
+        filter.createdAt.$gte = new Date(createdFrom);
+      }
+      if (createdTo) {
+        const toDate = new Date(createdTo);
+        toDate.setHours(23, 59, 59, 999); // End of day
+        filter.createdAt.$lte = toDate;
+      }
+    }
+
+    if (updatedFrom || updatedTo) {
+      filter.updatedAt = {};
+      if (updatedFrom) {
+        filter.updatedAt.$gte = new Date(updatedFrom);
+      }
+      if (updatedTo) {
+        const toDate = new Date(updatedTo);
+        toDate.setHours(23, 59, 59, 999); // End of day
+        filter.updatedAt.$lte = toDate;
+      }
+    }
+
+    // Search filter (searches across multiple fields)
     if (search) {
       filter.$or = [
         { firstName: { $regex: search, $options: 'i' } },
@@ -24,18 +102,45 @@ const getCustomers = async (req, res) => {
         { phone: { $regex: search, $options: 'i' } },
         { company: { $regex: search, $options: 'i' } },
         { contactPerson: { $regex: search, $options: 'i' } },
+        { address: { $regex: search, $options: 'i' } },
+        { city: { $regex: search, $options: 'i' } },
+        { state: { $regex: search, $options: 'i' } },
+        { pincode: { $regex: search, $options: 'i' } },
+        { postcode: { $regex: search, $options: 'i' } },
+        { orderPotential: { $regex: search, $options: 'i' } },
       ];
     }
 
     const customers = await Customer.find(filter)
-      .populate('assignedSalesman', 'name email')
-      .populate('createdBy', 'name email')
+      .populate('createdBy', 'name email role')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
       count: customers.length,
       data: customers,
+      filters: {
+        status: status || 'All',
+        city: city || null,
+        state: state || null,
+        company: company || null,
+        orderPotential: orderPotential || null,
+        monthlySpendRange: monthlySpendMin || monthlySpendMax ? {
+          min: monthlySpendMin || 0,
+          max: monthlySpendMax || null
+        } : null,
+        createdBy: createdBy || null,
+        dateRanges: {
+          created: createdFrom || createdTo ? {
+            from: createdFrom || null,
+            to: createdTo || null
+          } : null,
+          updated: updatedFrom || updatedTo ? {
+            from: updatedFrom || null,
+            to: updatedTo || null
+          } : null
+        }
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -51,7 +156,7 @@ const getCustomers = async (req, res) => {
 const getCustomer = async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id)
-      .populate('assignedSalesman', 'name email customerLimit')
+      // REMOVED: .populate('assignedSalesman', 'name email customerLimit') - field removed
       .populate('createdBy', 'name email');
 
     if (!customer) {
@@ -107,31 +212,8 @@ const createCustomer = async (req, res) => {
       });
     }
 
-    // If salesman is assigned, check customer limit
-    if (assignedSalesman) {
-      const salesman = await User.findById(assignedSalesman);
-      if (!salesman || salesman.role !== 'salesman') {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid salesman selected',
-        });
-      }
-
-      // Check if salesman has customer limit
-      if (salesman.customerLimit !== null && salesman.customerLimit !== undefined) {
-        const assignedCustomersCount = await Customer.countDocuments({
-          assignedSalesman: assignedSalesman,
-          status: 'Active',
-        });
-
-        if (assignedCustomersCount >= salesman.customerLimit) {
-          return res.status(400).json({
-            success: false,
-            message: `Salesman has reached customer limit (${salesman.customerLimit}). Cannot assign more customers.`,
-          });
-        }
-      }
-    }
+    // REMOVED: Salesman assignment logic - Customers and Salesmen are separate entities
+    // Salesmen are assigned to Tasks/FollowUps, not directly to Customers
 
     const customer = await Customer.create({
       firstName: firstName || customerName,
@@ -147,15 +229,15 @@ const createCustomer = async (req, res) => {
       company: company || undefined,
       orderPotential: orderPotential || undefined,
       monthlySpend: monthlySpend || 0,
-      assignedSalesman: assignedSalesman || null,
+      // REMOVED: assignedSalesman - Customers and Salesmen are separate
       status: status || 'Not Visited',
       notes: notes || undefined,
       competitorInfo: competitorInfo || undefined,
       createdBy: req.user._id,
+      source: 'app', // Mark app-created customers as 'app' source
     });
 
     const populatedCustomer = await Customer.findById(customer._id)
-      .populate('assignedSalesman', 'name email customerLimit')
       .populate('createdBy', 'name email');
 
     // Sync to HubSpot (async, non-blocking)
@@ -206,7 +288,7 @@ const updateCustomer = async (req, res) => {
       company,
       orderPotential,
       monthlySpend,
-      assignedSalesman,
+      // REMOVED: assignedSalesman - Customers and Salesmen are separate
       status,
       notes,
       competitorInfo,
@@ -221,32 +303,7 @@ const updateCustomer = async (req, res) => {
       });
     }
 
-    // If salesman is being assigned or changed, check customer limit
-    if (assignedSalesman && assignedSalesman !== customer.assignedSalesman?.toString()) {
-      const salesman = await User.findById(assignedSalesman);
-      if (!salesman || salesman.role !== 'salesman') {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid salesman selected',
-        });
-      }
-
-      // Check if salesman has customer limit
-      if (salesman.customerLimit !== null && salesman.customerLimit !== undefined) {
-        const assignedCustomersCount = await Customer.countDocuments({
-          assignedSalesman: assignedSalesman,
-          status: 'Active',
-          _id: { $ne: customer._id }, // Exclude current customer
-        });
-
-        if (assignedCustomersCount >= salesman.customerLimit) {
-          return res.status(400).json({
-            success: false,
-            message: `Salesman has reached customer limit (${salesman.customerLimit}). Cannot assign more customers.`,
-          });
-        }
-      }
-    }
+    // REMOVED: Salesman assignment logic - Customers and Salesmen are separate entities
 
     // Update fields
     const customerName = firstName || name;
@@ -265,9 +322,7 @@ const updateCustomer = async (req, res) => {
     if (company !== undefined) customer.company = company;
     if (orderPotential !== undefined) customer.orderPotential = orderPotential;
     if (monthlySpend !== undefined) customer.monthlySpend = monthlySpend;
-    if (assignedSalesman !== undefined) {
-      customer.assignedSalesman = assignedSalesman || null;
-    }
+    // REMOVED: assignedSalesman assignment - field removed
     if (status) customer.status = status;
     if (notes !== undefined) customer.notes = notes;
     if (competitorInfo !== undefined) customer.competitorInfo = competitorInfo;
@@ -275,7 +330,6 @@ const updateCustomer = async (req, res) => {
     await customer.save();
 
     const populatedCustomer = await Customer.findById(customer._id)
-      .populate('assignedSalesman', 'name email customerLimit')
       .populate('createdBy', 'name email');
 
     res.status(200).json({
@@ -319,9 +373,116 @@ const deleteCustomer = async (req, res) => {
   }
 };
 
-// @desc    Get customers by salesman with limit info
+// @desc    Get customer details with all related data (tasks, visits, samples, quotations)
+// @route   GET /api/admin/customers/:id/details
+// @access  Private/Admin
+const getCustomerDetails = async (req, res) => {
+  try {
+    const customerId = req.params.id;
+    
+    // Get customer
+    const customer = await Customer.findById(customerId)
+      .populate('createdBy', 'name email role');
+    
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    // Get all related data in parallel
+    const FollowUp = require('../../database/models/FollowUp');
+    const VisitTarget = require('../../database/models/VisitTarget');
+    const Sample = require('../../database/models/Sample');
+    const Quotation = require('../../database/models/Quotation');
+    const SalesOrder = require('../../database/models/SalesOrder');
+
+    // Build customer search criteria
+    const customerName = customer.name || customer.firstName || '';
+    const customerEmail = customer.email || '';
+    
+    const [tasks, visits, samples, quotations, orders] = await Promise.all([
+      // Tasks related to this customer (by customer ObjectId)
+      FollowUp.find({ customer: customerId })
+        .populate('salesman', 'name email')
+        .populate('createdBy', 'name email role')
+        .populate('approvedBy', 'name email')
+        .sort({ dueDate: -1, createdAt: -1 }),
+      
+      // Visits related to this customer (by name match - VisitTarget doesn't have customer field)
+      // Search by visit name matching customer name
+      VisitTarget.find({
+        $or: [
+          { name: { $regex: customerName, $options: 'i' } },
+          { address: customer.address ? { $regex: customer.address, $options: 'i' } : null }
+        ].filter(condition => condition !== null && Object.values(condition)[0] !== null)
+      })
+        .populate('salesman', 'name email')
+        .populate('createdBy', 'name email role')
+        .sort({ visitDate: -1, createdAt: -1 }),
+      
+      // Samples related to this customer (by customer ObjectId)
+      Sample.find({ customer: customerId })
+        .populate('salesman', 'name email')
+        .populate('product', 'name')
+        .populate('createdBy', 'name email role')
+        .sort({ createdAt: -1 }),
+      
+      // Quotations related to this customer (by customerName or customerEmail)
+      // Note: Quotation model doesn't have createdBy field
+      Quotation.find({
+        $or: [
+          customerName ? { customerName: { $regex: customerName, $options: 'i' } } : null,
+          customerEmail ? { customerEmail: customerEmail.toLowerCase() } : null
+        ].filter(condition => condition !== null)
+      })
+        .populate('salesman', 'name email')
+        .sort({ createdAt: -1 }),
+      
+      // Orders related to this customer (by email or customer name)
+      SalesOrder.find({
+        $or: [
+          customerEmail ? { emailAddress: customerEmail.toLowerCase() } : null,
+          customerName ? { customerName: { $regex: customerName, $options: 'i' } } : null
+        ].filter(condition => condition !== null)
+      })
+        .sort({ orderDate: -1, createdAt: -1 })
+        .limit(50), // Limit to recent 50 orders
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        customer,
+        relatedData: {
+          tasks: tasks || [],
+          visits: visits || [],
+          samples: samples || [],
+          quotations: quotations || [],
+          orders: orders || [],
+        },
+        counts: {
+          tasks: tasks.length,
+          visits: visits.length,
+          samples: samples.length,
+          quotations: quotations.length,
+          orders: orders.length,
+        }
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error fetching customer details',
+    });
+  }
+};
+
+// @desc    Get customers by salesman (through tasks/visits)
 // @route   GET /api/admin/customers/salesman/:salesmanId
 // @access  Private/Admin
+// NOTE: Customers and Salesmen are separate. This returns customers that have tasks/visits assigned to the salesman.
 const getCustomersBySalesman = async (req, res) => {
   try {
     const { salesmanId } = req.params;
@@ -334,11 +495,21 @@ const getCustomersBySalesman = async (req, res) => {
       });
     }
 
-    const customers = await Customer.find({ assignedSalesman: salesmanId })
-      .populate('assignedSalesman', 'name email customerLimit')
+    // Get customers through tasks/visits assigned to this salesman
+    const FollowUp = require('../../database/models/FollowUp');
+    const VisitTarget = require('../../database/models/VisitTarget');
+    
+    // Get unique customer IDs from tasks
+    const tasks = await FollowUp.find({ salesman: salesmanId }).distinct('customer');
+    // Get unique customer IDs from visits
+    const visits = await VisitTarget.find({ salesman: salesmanId }).distinct('customer');
+    
+    // Combine and get unique customer IDs
+    const customerIds = [...new Set([...tasks, ...visits].filter(id => id))];
+    
+    const customers = await Customer.find({ _id: { $in: customerIds } })
+      .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
-
-    const assignedCount = customers.filter(c => c.status === 'Active').length;
 
     res.status(200).json({
       success: true,
@@ -347,14 +518,10 @@ const getCustomersBySalesman = async (req, res) => {
           id: salesman._id,
           name: salesman.name,
           email: salesman.email,
-          customerLimit: salesman.customerLimit,
-          assignedCustomers: assignedCount,
-          remainingSlots: salesman.customerLimit !== null 
-            ? Math.max(0, salesman.customerLimit - assignedCount)
-            : null,
         },
         customers,
         count: customers.length,
+        note: 'Customers shown are those with tasks/visits assigned to this salesman',
       },
     });
   } catch (error) {
@@ -372,6 +539,7 @@ module.exports = {
   updateCustomer,
   deleteCustomer,
   getCustomersBySalesman,
+  getCustomerDetails,
 };
 
 

@@ -117,64 +117,64 @@ const SalesTargets = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-            <FaBullseye className="w-6 h-6 text-[#e9931c]" />
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1 sm:mb-2 flex items-center gap-2">
+            <FaBullseye className="w-5 h-5 sm:w-6 sm:h-6 text-[#e9931c]" />
             My Sales Targets
           </h2>
-          <p className="text-gray-600">View and track your assigned sales targets</p>
+          <p className="text-sm sm:text-base text-gray-600">View and track your assigned sales targets</p>
         </div>
       </div>
 
       {/* Statistics Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-5 border border-blue-200 shadow-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-5 border border-blue-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Total Targets</p>
-              <FaBullseye className="w-5 h-5 text-blue-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Total Targets</p>
+              <FaBullseye className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
-            <p className="text-3xl font-bold text-blue-700">{stats.total || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">All time</p>
+            <p className="text-2xl sm:text-3xl font-bold text-blue-700">{stats.total || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">All time</p>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-5 border border-green-200 shadow-sm">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-5 border border-green-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Active</p>
-              <FaClock className="w-5 h-5 text-green-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Active</p>
+              <FaClock className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             </div>
-            <p className="text-3xl font-bold text-green-700">{stats.active || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">In progress</p>
+            <p className="text-2xl sm:text-3xl font-bold text-green-700">{stats.active || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">In progress</p>
           </div>
 
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-5 border border-yellow-200 shadow-sm">
+          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 sm:p-5 border border-yellow-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Completed</p>
-              <FaCheckCircle className="w-5 h-5 text-yellow-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Completed</p>
+              <FaCheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
             </div>
-            <p className="text-3xl font-bold text-yellow-700">{stats.completed || 0}</p>
-            <p className="text-xs text-gray-600 mt-1">Achieved</p>
+            <p className="text-2xl sm:text-3xl font-bold text-yellow-700">{stats.completed || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Achieved</p>
           </div>
 
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-5 border border-orange-200 shadow-sm">
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-5 border border-orange-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Completion Rate</p>
-              <FaChartLine className="w-5 h-5 text-orange-600" />
+              <p className="text-xs sm:text-sm text-gray-600">Completion Rate</p>
+              <FaChartLine className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
             </div>
-            <p className="text-3xl font-bold text-orange-700">
+            <p className="text-2xl sm:text-3xl font-bold text-orange-700">
               {stats.completionPercentage || 0}%
             </p>
-            <p className="text-xs text-gray-600 mt-1">Overall progress</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Overall progress</p>
           </div>
         </div>
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
             <select
@@ -237,7 +237,7 @@ const SalesTargets = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {targets.map((target) => {
             const progressPercentage = target.targetValue > 0
               ? (target.currentProgress / target.targetValue) * 100
@@ -250,7 +250,7 @@ const SalesTargets = () => {
             return (
               <div
                 key={target._id}
-                className={`bg-white rounded-lg p-6 border-2 shadow-lg hover:shadow-xl transition-all ${
+                className={`bg-white rounded-lg p-4 sm:p-6 border-2 shadow-lg hover:shadow-xl transition-all ${
                   isExceeded 
                     ? 'border-green-400 bg-gradient-to-br from-green-50 to-white' 
                     : 'border-gray-200'

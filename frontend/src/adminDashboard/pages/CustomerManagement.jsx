@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react'
-import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman } from '../../services/adminservices/customerService'
+import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
-import { FaUsers, FaCheckSquare, FaFileExcel, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaEdit, FaTrash, FaWhatsapp, FaEnvelope, FaSyncAlt, FaCloudDownloadAlt, FaDatabase } from 'react-icons/fa'
+import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = () => {
   const [customers, setCustomers] = useState([])
-  const [dataSource, setDataSource] = useState('db') // 'db' | 'hubspot'
   const [salesmen, setSalesmen] = useState([])
   const [loading, setLoading] = useState(false)
   const [hubspotImporting, setHubspotImporting] = useState(false)
-  const [hubspotFetching, setHubspotFetching] = useState(false)
   const [hubspotPushing, setHubspotPushing] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
@@ -19,7 +17,17 @@ const CustomerManagement = () => {
   const [filterStatus, setFilterStatus] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
-  const [selectedCustomers, setSelectedCustomers] = useState([])
+  // Customer Detail Modal State
+  const [showCustomerDetailModal, setShowCustomerDetailModal] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [customerDetailData, setCustomerDetailData] = useState(null)
+  const [loadingCustomerDetails, setLoadingCustomerDetails] = useState(false)
+  const [customerDetailTab, setCustomerDetailTab] = useState('overview') // 'overview', 'tasks', 'visits', 'samples', 'quotations', 'orders'
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(20)
+  // My Contacts Only (HubSpot) - Always true for import
+  const [myContactsOnly] = useState(true)
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -46,21 +54,14 @@ const CustomerManagement = () => {
 
   // Load data on mount
   useEffect(() => {
-    if (dataSource === 'hubspot') {
-      loadHubSpotCustomers()
-    } else {
-      loadCustomers()
-    }
+    loadCustomers()
     loadSalesmen()
   }, [])
 
   // Reload when filters change
   useEffect(() => {
-    if (dataSource === 'hubspot') {
-      loadHubSpotCustomers()
-    } else {
-      loadCustomers()
-    }
+    setCurrentPage(1) // Reset to first page when filters change
+    loadCustomers()
   }, [filterSalesman, filterStatus, searchTerm])
 
   const loadCustomers = async () => {
@@ -97,80 +98,6 @@ const CustomerManagement = () => {
     }
   }
 
-  const mapHubSpotContactToCustomerRow = (c) => {
-    const p = c?.properties || {}
-    const firstname = (p.firstname || '').trim()
-    const lastname = (p.lastname || '').trim()
-    const fullName = `${firstname} ${lastname}`.trim()
-    const email = (p.email || '').trim()
-    const fallbackName = email ? email.split('@')[0] : 'HubSpot Contact'
-    const name = fullName || firstname || lastname || fallbackName
-
-    return {
-      _id: `hubspot:${c?.id}`,
-      hubspotId: c?.id,
-      hubspotUrl: c?.url,
-      source: 'hubspot',
-      firstName: name,
-      name,
-      email: email || '',
-      phone: (p.phone || '').trim(),
-      address: p.address || '',
-      city: p.city || '',
-      state: p.state || '',
-      postcode: p.zip || '',
-      company: p.company || '',
-      status: 'HubSpot',
-      assignedSalesman: null,
-    }
-  }
-
-  const loadHubSpotCustomers = async () => {
-    setHubspotFetching(true)
-    try {
-      const result = await getHubSpotCustomers()
-      const rows = Array.isArray(result?.data) ? result.data.map(mapHubSpotContactToCustomerRow) : []
-
-      let filtered = rows
-      const q = String(searchTerm || '').trim().toLowerCase()
-      if (q) {
-        filtered = filtered.filter((r) => {
-          return (
-            (r.name || '').toLowerCase().includes(q) ||
-            (r.email || '').toLowerCase().includes(q) ||
-            (r.phone || '').toLowerCase().includes(q) ||
-            (r.company || '').toLowerCase().includes(q)
-          )
-        })
-      }
-
-      // In HubSpot view, ignore salesman/status filters (keep UI stable)
-      setCustomers(filtered)
-    } catch (e) {
-      console.error('Error fetching HubSpot customers:', e)
-      setCustomers([])
-    } finally {
-      setHubspotFetching(false)
-    }
-  }
-
-  const handleShowHubSpotContactsLive = async () => {
-    setSelectedCustomers([])
-    setViewMode('grid')
-    setShowAddForm(false)
-    setEditingCustomer(null)
-    setDataSource('hubspot')
-    // keep filters simple in HubSpot view
-    setFilterSalesman('')
-    setFilterStatus('All')
-    await loadHubSpotCustomers()
-  }
-
-  const handleShowDbCustomers = async () => {
-    setSelectedCustomers([])
-    setDataSource('db')
-    await loadCustomers()
-  }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -235,15 +162,7 @@ const CustomerManagement = () => {
   }
 
   const handleEditCustomer = (customer) => {
-    if (customer?.source === 'hubspot' || String(customer?._id || '').startsWith('hubspot:')) {
-      Swal.fire({
-        icon: 'info',
-        title: 'Read-Only Contact',
-        text: 'HubSpot contact is read-only here. Import to DB if you want to edit in app.',
-        confirmButtonColor: '#e9931c'
-      })
-      return
-    }
+    // HubSpot-imported customers can be edited (they're in DB now)
     setEditingCustomer(customer)
     setFormData({
       firstName: customer.firstName || customer.name || '',
@@ -347,15 +266,63 @@ const CustomerManagement = () => {
     }
   }
 
+  // Load customer details with all related data
+  const loadCustomerDetails = async (customerId) => {
+    setLoadingCustomerDetails(true)
+    try {
+      const result = await getCustomerDetails(customerId)
+      if (result.success && result.data) {
+        setCustomerDetailData(result.data)
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: result.message || 'Failed to load customer details',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error loading customer details:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error loading customer details',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoadingCustomerDetails(false)
+    }
+  }
+
+  // Handle customer click - open detail modal
+  const handleCustomerClick = (customer) => {
+    setSelectedCustomer(customer)
+    setShowCustomerDetailModal(true)
+    setCustomerDetailTab('overview')
+    loadCustomerDetails(customer._id)
+  }
+
   const handleImportHubSpotContacts = async () => {
     setHubspotImporting(true)
     try {
-      const result = await importHubSpotCustomersToDb()
+      // Always import "My Contacts Only" (myContactsOnly is always true)
+      const result = await importHubSpotCustomersToDb(true)
       if (result?.success) {
         const meta = result?.data || {}
-        alert(
-          `HubSpot contacts imported ✅\n\nFetched: ${meta.fetchedFromHubSpot ?? '-'}\nCreated: ${meta.created ?? '-'}\nUpdated: ${meta.updated ?? '-'}\nSkipped (no email): ${meta.skipped ?? '-'}`
-        )
+        Swal.fire({
+          icon: 'success',
+          title: 'Import Successful!',
+          html: `
+            <div style="text-align: left;">
+              <p><strong>Imported from HubSpot (My Contacts Only):</strong> ${meta.fetchedFromHubSpot || 0}</p>
+              <p><strong>Created:</strong> ${meta.created || 0}</p>
+              <p><strong>Updated:</strong> ${meta.updated || 0}</p>
+              <p><strong>Skipped (no email):</strong> ${meta.skipped || 0}</p>
+              <p class="text-blue-600 font-semibold mt-2">✓ Only MY contacts imported</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c'
+        })
         await loadCustomers()
       } else {
         Swal.fire({
@@ -378,29 +345,50 @@ const CustomerManagement = () => {
     }
   }
 
-  const handlePushAppCustomersToHubSpot = async () => {
+  // Push single customer to HubSpot
+  const handlePushSingleCustomer = async (customer, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+
+    if (!customer.email) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Email Required',
+        text: 'Customer must have an email address to push to HubSpot',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
     setHubspotPushing(true)
     try {
-      const result = await pushCustomersToHubSpot(false, 0)
-      if (result?.success) {
-        const meta = result?.data || {}
-        alert(
-          `Pushed App Customers to HubSpot ✅\n\nAttempted: ${meta.attempted ?? '-'}\nSynced: ${meta.synced ?? '-'}\nSkipped (no valid email): ${meta.skippedNoValidEmail ?? '-'}\nFailed: ${meta.failed ?? '-'}`
-        )
+      // Always push with myContactsOnly=true (assign to current user)
+      const result = await pushCustomersToHubSpot(false, 0, true, [customer._id])
+      
+      if (result?.success && result?.data?.synced > 0) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Pushed to HubSpot!',
+          text: `${customer.name || customer.firstName} has been pushed to HubSpot and assigned to your contacts.`,
+          confirmButtonColor: '#e9931c'
+        })
+        // Reload to refresh customer list
+        await loadCustomers()
       } else {
         Swal.fire({
           icon: 'error',
           title: 'Push Failed',
-          text: result?.message || 'Failed to push customers to HubSpot',
+          text: result?.message || 'Failed to push customer to HubSpot',
           confirmButtonColor: '#e9931c'
         })
       }
     } catch (e) {
-      console.error('Error pushing customers to HubSpot:', e)
+      console.error('Error pushing customer to HubSpot:', e)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error pushing customers to HubSpot',
+        text: 'Error pushing customer to HubSpot',
         confirmButtonColor: '#e9931c'
       })
     } finally {
@@ -431,50 +419,6 @@ const CustomerManagement = () => {
     setLoading(false)
   }
 
-  const handleExportToExcel = () => {
-    // Simple CSV export
-    const headers = ['Name', 'Email', 'Phone', 'Company', 'Address', 'Assigned Salesman', 'Status']
-    const rows = customers.map(c => [
-      c.name || '',
-      c.email || '',
-      c.phone || '',
-      c.company || '',
-      c.address || '',
-      c.assignedSalesman?.name || 'Not Assigned',
-      c.status || ''
-    ])
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `customers_${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handleSelectCustomer = (customerId) => {
-    setSelectedCustomers(prev => 
-      prev.includes(customerId) 
-        ? prev.filter(id => id !== customerId)
-        : [...prev, customerId]
-    )
-  }
-
-  const handleSelectAll = () => {
-    if (selectedCustomers.length === customers.length) {
-      setSelectedCustomers([])
-    } else {
-      setSelectedCustomers(customers.map(c => c._id))
-    }
-  }
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -516,89 +460,35 @@ const CustomerManagement = () => {
         <h1 className="text-3xl font-bold text-gray-900">Customers</h1>
 
         <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2">
-          {/* Data source toggle */}
-          <div className="flex items-center rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
-            <button
-              onClick={handleShowDbCustomers}
-              disabled={dataSource === 'db' || loading || hubspotFetching}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-                dataSource === 'db'
-                  ? 'bg-[#e9931c] text-white'
-                  : 'text-gray-700 hover:bg-orange-50'
-              }`}
-              title="Show customers from your app database"
-            >
-              <FaDatabase className="w-4 h-4" />
-              <span className="whitespace-nowrap">App Customers</span>
-            </button>
-            <button
-              onClick={handleShowHubSpotContactsLive}
-              disabled={hubspotFetching || loading}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-                dataSource === 'hubspot'
-                  ? 'bg-[#e9931c] text-white'
-                  : 'text-gray-700 hover:bg-orange-50'
-              }`}
-              title="Fetch contacts live from HubSpot"
-            >
-              <FaCloudDownloadAlt className={`w-4 h-4 ${hubspotFetching ? 'animate-pulse' : ''}`} />
-              <span className="whitespace-nowrap">
-                {hubspotFetching ? 'Fetching...' : 'Live HubSpot'}
-              </span>
-            </button>
-          </div>
-
-          {/* Actions */}
-          <button
-            onClick={handleSelectAll}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
-            title="Select customers"
-          >
-            <FaCheckSquare className="w-4 h-4" />
-            <span className="hidden sm:inline whitespace-nowrap">Select</span>
-          </button>
-
-          <button
-            onClick={handleExportToExcel}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
-            title="Export customers"
-          >
-            <FaFileExcel className="w-4 h-4" />
-            <span className="hidden sm:inline whitespace-nowrap">Export</span>
-          </button>
-
+          {/* Import HubSpot Contacts Button */}
           <button
             onClick={handleImportHubSpotContacts}
             disabled={hubspotImporting || loading}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Import HubSpot contacts into app database"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Import My Contacts from HubSpot"
           >
-            <FaSyncAlt className={`w-4 h-4 ${hubspotImporting ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline whitespace-nowrap">
-              {hubspotImporting ? 'Importing...' : 'Import HubSpot'}
-            </span>
+            {hubspotImporting ? (
+              <>
+                <FaSpinner className="w-4 h-4 animate-spin" />
+                <span className="whitespace-nowrap">Importing...</span>
+              </>
+            ) : (
+              <>
+                <FaCloudDownloadAlt className="w-4 h-4" />
+                <span className="whitespace-nowrap">Import My Contacts</span>
+              </>
+            )}
           </button>
 
-          <button
-            onClick={handlePushAppCustomersToHubSpot}
-            disabled={dataSource === 'hubspot' || hubspotPushing || loading}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Push all existing app customers to HubSpot (requires valid email)"
-          >
-            <FaSyncAlt className={`w-4 h-4 ${hubspotPushing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline whitespace-nowrap">
-              {hubspotPushing ? 'Pushing...' : 'Push to HubSpot'}
-            </span>
-          </button>
-
+          {/* Add Customer Button */}
           <button
             onClick={() => {
               resetForm()
               setShowAddForm(true)
             }}
-            disabled={dataSource === 'hubspot'}
+            disabled={loading}
             className="flex items-center gap-2 px-5 py-2 bg-[#e9931c] text-white rounded-xl font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            title={dataSource === 'hubspot' ? 'Switch to App Customers to add' : 'Add Customer'}
+            title="Add Customer"
           >
             <span className="text-lg leading-none">+</span>
             <span className="whitespace-nowrap">Add Customer</span>
@@ -899,44 +789,85 @@ const CustomerManagement = () => {
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {customers.map((customer) => {
+        <>
+          {/* Pagination Info and Controls */}
+          <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-gray-600">
+                Showing <span className="font-semibold text-gray-800">
+                  {customers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+                </span> to <span className="font-semibold text-gray-800">
+                  {Math.min(currentPage * itemsPerPage, customers.length)}
+                </span> of <span className="font-semibold text-gray-800">{customers.length}</span> customers
+              </p>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Items per page:</label>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c] text-sm"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Customer Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {customers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((customer) => {
             const salesman = getSalesmanInfo(customer.assignedSalesman?._id || customer.assignedSalesman)
             return (
               <div
                 key={customer._id}
-                className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow"
+                className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={(e) => {
+                  // Don't trigger if clicking on action buttons or links
+                  if (e.target.closest('button') || e.target.closest('a')) {
+                    return
+                  }
+                  handleCustomerClick(customer)
+                }}
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedCustomers.includes(customer._id)}
-                      onChange={() => handleSelectCustomer(customer._id)}
-                      className="w-5 h-5 text-[#e9931c] rounded focus:ring-[#e9931c]"
-                    />
-                    <div>
-                      <h3 className="font-semibold text-gray-900 text-lg">{customer.name}</h3>
-                      {customer.company && (
-                        <p className="text-sm text-gray-500">{customer.company}</p>
-                      )}
-                    </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 text-lg hover:text-[#e9931c] transition-colors">{customer.name || customer.firstName}</h3>
+                    {customer.company && (
+                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                        <FaBuilding className="w-3 h-3" />
+                        {customer.company}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditCustomer(customer)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Edit"
-                    >
-                      <FaEdit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCustomer(customer._id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <FaTrash className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center gap-2">
+                    {/* Show "Push" button for app-created customers, "Imported" badge for HubSpot-imported customers */}
+                    {customer?.source !== 'hubspot' ? (
+                      <button
+                        onClick={(e) => handlePushSingleCustomer(customer, e)}
+                        disabled={hubspotPushing || !customer.email}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Push to HubSpot"
+                      >
+                        {hubspotPushing ? (
+                          <FaSpinner className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <>
+                            <FaArrowUp className="w-3 h-3" />
+                            Push
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
+                        Imported
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2 text-sm">
@@ -957,6 +888,7 @@ const CustomerManagement = () => {
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => {
+                          e.stopPropagation()
                           if (!getWhatsAppHref(customer.phone)) e.preventDefault()
                         }}
                         className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
@@ -974,6 +906,7 @@ const CustomerManagement = () => {
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => {
+                          e.stopPropagation()
                           if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
                         }}
                         className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
@@ -1007,11 +940,645 @@ const CustomerManagement = () => {
               </div>
             )
           })}
-        </div>
+          </div>
+
+          {/* Pagination Controls */}
+          {customers.length > itemsPerPage && (
+            <div className="flex items-center justify-center gap-2 mt-6 bg-white p-4 rounded-lg border border-gray-200">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <FaChevronLeft className="w-4 h-4" />
+                Previous
+              </button>
+
+              <div className="flex items-center gap-2">
+                {Array.from({ length: Math.ceil(customers.length / itemsPerPage) }, (_, i) => i + 1)
+                  .filter(page => {
+                    // Show first page, last page, current page, and pages around current
+                    const totalPages = Math.ceil(customers.length / itemsPerPage)
+                    return (
+                      page === 1 ||
+                      page === totalPages ||
+                      (page >= currentPage - 1 && page <= currentPage + 1)
+                    )
+                  })
+                  .map((page, index, array) => {
+                    // Add ellipsis if there's a gap
+                    const showEllipsisBefore = index > 0 && page - array[index - 1] > 1
+                    return (
+                      <div key={page} className="flex items-center gap-1">
+                        {showEllipsisBefore && (
+                          <span className="px-2 text-gray-500">...</span>
+                        )}
+                        <button
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                            currentPage === page
+                              ? 'bg-[#e9931c] text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </div>
+                    )
+                  })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(Math.ceil(customers.length / itemsPerPage), prev + 1))}
+                disabled={currentPage >= Math.ceil(customers.length / itemsPerPage)}
+                className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                Next
+                <FaChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="bg-white border-2 border-gray-200 rounded-lg p-4 text-center">
           <FaMapMarkerAlt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-600">Map view coming soon...</p>
+        </div>
+      )}
+
+      {/* Customer Detail Modal */}
+      {showCustomerDetailModal && selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
+                    <FaUser className="w-6 h-6 text-[#e9931c]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{selectedCustomer.name || selectedCustomer.firstName || 'Customer'}</h3>
+                    {selectedCustomer.email && (
+                      <p className="text-sm text-orange-100 mt-0.5 flex items-center gap-1">
+                        <FaEnvelope className="w-3 h-3" />
+                        {selectedCustomer.email}
+                      </p>
+                    )}
+                    {selectedCustomer.phone && (
+                      <p className="text-xs text-orange-200 mt-0.5 flex items-center gap-1">
+                        <FaPhone className="w-3 h-3" />
+                        {selectedCustomer.phone}
+                      </p>
+                    )}
+                    {selectedCustomer.company && (
+                      <p className="text-xs text-orange-200 mt-0.5 flex items-center gap-1">
+                        <FaBuilding className="w-3 h-3" />
+                        {selectedCustomer.company}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCustomerDetailModal(false)
+                    setSelectedCustomer(null)
+                    setCustomerDetailData(null)
+                    setCustomerDetailTab('overview')
+                  }}
+                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+                >
+                  <FaTimes className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0 overflow-x-auto">
+              <button
+                onClick={() => setCustomerDetailTab('overview')}
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
+                  customerDetailTab === 'overview'
+                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                }`}
+              >
+                <FaInfoCircle className="w-4 h-4" />
+                Overview
+              </button>
+              <button
+                onClick={() => setCustomerDetailTab('tasks')}
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
+                  customerDetailTab === 'tasks'
+                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                }`}
+              >
+                <FaTasks className="w-4 h-4" />
+                Tasks ({customerDetailData?.counts?.tasks || 0})
+              </button>
+              <button
+                onClick={() => setCustomerDetailTab('visits')}
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
+                  customerDetailTab === 'visits'
+                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                }`}
+              >
+                <FaMapMarkerAlt className="w-4 h-4" />
+                Visits ({customerDetailData?.counts?.visits || 0})
+              </button>
+              <button
+                onClick={() => setCustomerDetailTab('samples')}
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
+                  customerDetailTab === 'samples'
+                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                }`}
+              >
+                <FaFlask className="w-4 h-4" />
+                Samples ({customerDetailData?.counts?.samples || 0})
+              </button>
+              <button
+                onClick={() => setCustomerDetailTab('quotations')}
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
+                  customerDetailTab === 'quotations'
+                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                }`}
+              >
+                <FaFileAlt className="w-4 h-4" />
+                Quotations ({customerDetailData?.counts?.quotations || 0})
+              </button>
+              <button
+                onClick={() => setCustomerDetailTab('orders')}
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
+                  customerDetailTab === 'orders'
+                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                }`}
+              >
+                <FaShoppingCart className="w-4 h-4" />
+                Orders ({customerDetailData?.counts?.orders || 0})
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {loadingCustomerDetails ? (
+                <div className="flex items-center justify-center py-12">
+                  <FaSpinner className="w-8 h-8 text-[#e9931c] animate-spin mr-3" />
+                  <p className="text-gray-600">Loading customer details...</p>
+                </div>
+              ) : customerDetailData ? (
+                <>
+                  {/* Overview Tab */}
+                  {customerDetailTab === 'overview' && (
+                    <div className="space-y-6">
+                      {/* Customer Information */}
+                      <div className="bg-gray-50 rounded-lg p-5 border border-gray-200">
+                        <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                          <FaUser className="w-4 h-4 text-[#e9931c]" />
+                          Customer Information
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 font-medium mb-1">Name</p>
+                            <p className="text-sm font-semibold text-gray-800">{customerDetailData.customer?.name || customerDetailData.customer?.firstName || 'N/A'}</p>
+                          </div>
+                          {customerDetailData.customer?.contactPerson && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1">Contact Person</p>
+                              <p className="text-sm font-semibold text-gray-800">{customerDetailData.customer.contactPerson}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.email && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1 flex items-center gap-1">
+                                <FaEnvelope className="w-3 h-3" />
+                                Email
+                              </p>
+                              <p className="text-sm font-semibold text-gray-800">{customerDetailData.customer.email}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.phone && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1 flex items-center gap-1">
+                                <FaPhone className="w-3 h-3" />
+                                Phone
+                              </p>
+                              <p className="text-sm font-semibold text-gray-800">{customerDetailData.customer.phone}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.company && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1 flex items-center gap-1">
+                                <FaBuilding className="w-3 h-3" />
+                                Company
+                              </p>
+                              <p className="text-sm font-semibold text-gray-800">{customerDetailData.customer.company}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.status && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1">Status</p>
+                              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(customerDetailData.customer.status)}`}>
+                                {customerDetailData.customer.status}
+                              </span>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.orderPotential && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1">Order Potential</p>
+                              <p className="text-sm font-semibold text-gray-800">{customerDetailData.customer.orderPotential}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.monthlySpend !== undefined && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1">Monthly Spend</p>
+                              <p className="text-sm font-semibold text-gray-800">₹{customerDetailData.customer.monthlySpend?.toLocaleString() || 0}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.address && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500 font-medium mb-1 flex items-center gap-1">
+                                <FaMapMarkerAlt className="w-3 h-3" />
+                                Address
+                              </p>
+                              <p className="text-sm text-gray-800">
+                                {customerDetailData.customer.address}
+                                {customerDetailData.customer.city && `, ${customerDetailData.customer.city}`}
+                                {customerDetailData.customer.state && `, ${customerDetailData.customer.state}`}
+                                {customerDetailData.customer.pincode && ` - ${customerDetailData.customer.pincode}`}
+                                {customerDetailData.customer.postcode && ` - ${customerDetailData.customer.postcode}`}
+                              </p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.notes && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500 font-medium mb-1">Notes</p>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap">{customerDetailData.customer.notes}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.competitorInfo && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-gray-500 font-medium mb-1">Competitor Info</p>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap">{customerDetailData.customer.competitorInfo}</p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.createdBy && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1">Created By</p>
+                              <p className="text-sm font-semibold text-gray-800">
+                                {customerDetailData.customer.createdBy?.name || 'N/A'}
+                                {customerDetailData.customer.createdBy?.role && (
+                                  <span className="ml-2 text-xs text-gray-500">({customerDetailData.customer.createdBy.role})</span>
+                                )}
+                              </p>
+                            </div>
+                          )}
+                          {customerDetailData.customer?.createdAt && (
+                            <div>
+                              <p className="text-xs text-gray-500 font-medium mb-1 flex items-center gap-1">
+                                <FaCalendarAlt className="w-3 h-3" />
+                                Created At
+                              </p>
+                              <p className="text-sm font-semibold text-gray-800">
+                                {new Date(customerDetailData.customer.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FaTasks className="w-5 h-5 text-blue-600" />
+                            <p className="text-xs font-medium text-blue-600">Tasks</p>
+                          </div>
+                          <p className="text-2xl font-bold text-blue-800">{customerDetailData.counts?.tasks || 0}</p>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FaMapMarkerAlt className="w-5 h-5 text-green-600" />
+                            <p className="text-xs font-medium text-green-600">Visits</p>
+                          </div>
+                          <p className="text-2xl font-bold text-green-800">{customerDetailData.counts?.visits || 0}</p>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FaFlask className="w-5 h-5 text-purple-600" />
+                            <p className="text-xs font-medium text-purple-600">Samples</p>
+                          </div>
+                          <p className="text-2xl font-bold text-purple-800">{customerDetailData.counts?.samples || 0}</p>
+                        </div>
+                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FaFileAlt className="w-5 h-5 text-orange-600" />
+                            <p className="text-xs font-medium text-orange-600">Quotations</p>
+                          </div>
+                          <p className="text-2xl font-bold text-orange-800">{customerDetailData.counts?.quotations || 0}</p>
+                        </div>
+                        <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                          <div className="flex items-center gap-2 mb-2">
+                            <FaShoppingCart className="w-5 h-5 text-indigo-600" />
+                            <p className="text-xs font-medium text-indigo-600">Orders</p>
+                          </div>
+                          <p className="text-2xl font-bold text-indigo-800">{customerDetailData.counts?.orders || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tasks Tab */}
+                  {customerDetailTab === 'tasks' && (
+                    <div className="space-y-3">
+                      {(!customerDetailData.relatedData?.tasks || customerDetailData.relatedData.tasks.length === 0) ? (
+                        <div className="text-center py-12">
+                          <FaTasks className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-600">No tasks found for this customer</p>
+                        </div>
+                      ) : (
+                        customerDetailData.relatedData.tasks.map((task) => (
+                          <div key={task._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#e9931c] transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-semibold text-gray-800">{task.description || task.customerName || 'Task'}</p>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                    task.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                    task.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                    task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {task.status}
+                                  </span>
+                                  {task.type && (
+                                    <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                      {task.type}
+                                    </span>
+                                  )}
+                                  {task.priority && (
+                                    <span className={`px-2 py-0.5 rounded text-xs ${
+                                      task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
+                                      task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {task.priority}
+                                    </span>
+                                  )}
+                                </div>
+                                {task.followUpNumber && (
+                                  <p className="text-xs text-gray-500 mb-1">Follow-up #: {task.followUpNumber}</p>
+                                )}
+                                {task.notes && (
+                                  <p className="text-sm text-gray-600 mb-2">{task.notes}</p>
+                                )}
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                  {task.dueDate && (
+                                    <span className="flex items-center gap-1">
+                                      <FaClock className="w-3 h-3" />
+                                      Due: {new Date(task.dueDate).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {task.salesman && (
+                                    <span className="flex items-center gap-1">
+                                      <FaUser className="w-3 h-3" />
+                                      {task.salesman.name}
+                                    </span>
+                                  )}
+                                  {task.hubspotTaskId && (
+                                    <span className="flex items-center gap-1 text-blue-600">
+                                      <FaLink className="w-3 h-3" />
+                                      HubSpot
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* Visits Tab */}
+                  {customerDetailTab === 'visits' && (
+                    <div className="space-y-3">
+                      {(!customerDetailData.relatedData?.visits || customerDetailData.relatedData.visits.length === 0) ? (
+                        <div className="text-center py-12">
+                          <FaMapMarkerAlt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-600">No visits found for this customer</p>
+                        </div>
+                      ) : (
+                        customerDetailData.relatedData.visits.map((visit) => (
+                          <div key={visit._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#e9931c] transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-semibold text-gray-800">{visit.name || 'Visit'}</p>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                    visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                    visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {visit.status}
+                                  </span>
+                                </div>
+                                {visit.address && (
+                                  <p className="text-sm text-gray-600 mb-1 flex items-center gap-1">
+                                    <FaMapMarkerAlt className="w-3 h-3" />
+                                    {visit.address}
+                                    {visit.city && `, ${visit.city}`}
+                                    {visit.state && `, ${visit.state}`}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                  {visit.visitDate && (
+                                    <span className="flex items-center gap-1">
+                                      <FaCalendarAlt className="w-3 h-3" />
+                                      {new Date(visit.visitDate).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {visit.salesman && (
+                                    <span className="flex items-center gap-1">
+                                      <FaUser className="w-3 h-3" />
+                                      {visit.salesman.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* Samples Tab */}
+                  {customerDetailTab === 'samples' && (
+                    <div className="space-y-3">
+                      {(!customerDetailData.relatedData?.samples || customerDetailData.relatedData.samples.length === 0) ? (
+                        <div className="text-center py-12">
+                          <FaFlask className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-600">No samples found for this customer</p>
+                        </div>
+                      ) : (
+                        customerDetailData.relatedData.samples.map((sample) => (
+                          <div key={sample._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#e9931c] transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <p className="font-semibold text-gray-800 mb-1">{sample.customerName || 'Sample'}</p>
+                                {sample.productName && (
+                                  <p className="text-sm text-gray-600 mb-1">Product: {sample.productName}</p>
+                                )}
+                                {sample.sampleNumber && (
+                                  <p className="text-xs text-gray-500 mb-1">Sample #: {sample.sampleNumber}</p>
+                                )}
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                  {sample.quantity && (
+                                    <span>Quantity: {sample.quantity}</span>
+                                  )}
+                                  {sample.status && (
+                                    <span className={`px-2 py-0.5 rounded ${
+                                      sample.status === 'Converted' ? 'bg-green-100 text-green-700' :
+                                      sample.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {sample.status}
+                                    </span>
+                                  )}
+                                  {sample.visitDate && (
+                                    <span className="flex items-center gap-1">
+                                      <FaCalendarAlt className="w-3 h-3" />
+                                      {new Date(sample.visitDate).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {sample.salesman && (
+                                    <span className="flex items-center gap-1">
+                                      <FaUser className="w-3 h-3" />
+                                      {sample.salesman.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* Quotations Tab */}
+                  {customerDetailTab === 'quotations' && (
+                    <div className="space-y-3">
+                      {(!customerDetailData.relatedData?.quotations || customerDetailData.relatedData.quotations.length === 0) ? (
+                        <div className="text-center py-12">
+                          <FaFileAlt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-600">No quotations found for this customer</p>
+                        </div>
+                      ) : (
+                        customerDetailData.relatedData.quotations.map((quotation) => (
+                          <div key={quotation._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#e9931c] transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-semibold text-gray-800">Quotation #{quotation.quotationNumber || 'N/A'}</p>
+                                  {quotation.status && (
+                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                      quotation.status === 'Approved' ? 'bg-green-100 text-green-700' :
+                                      quotation.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                                      'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                      {quotation.status}
+                                    </span>
+                                  )}
+                                </div>
+                                {quotation.total !== undefined && (
+                                  <p className="text-sm font-semibold text-gray-800 mb-1">Total: ₹{quotation.total?.toLocaleString() || 0}</p>
+                                )}
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                  {quotation.createdAt && (
+                                    <span className="flex items-center gap-1">
+                                      <FaCalendarAlt className="w-3 h-3" />
+                                      {new Date(quotation.createdAt).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {quotation.salesman && (
+                                    <span className="flex items-center gap-1">
+                                      <FaUser className="w-3 h-3" />
+                                      {quotation.salesman.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+
+                  {/* Orders Tab */}
+                  {customerDetailTab === 'orders' && (
+                    <div className="space-y-3">
+                      {(!customerDetailData.relatedData?.orders || customerDetailData.relatedData.orders.length === 0) ? (
+                        <div className="text-center py-12">
+                          <FaShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                          <p className="text-gray-600">No orders found for this customer</p>
+                        </div>
+                      ) : (
+                        customerDetailData.relatedData.orders.map((order) => (
+                          <div key={order._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#e9931c] transition-colors">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-semibold text-gray-800">Order #{order.soNumber || 'N/A'}</p>
+                                  {order.orderStatus && (
+                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                      order.orderStatus === 'Completed' ? 'bg-green-100 text-green-700' :
+                                      order.orderStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {order.orderStatus}
+                                    </span>
+                                  )}
+                                </div>
+                                {order.grandTotal !== undefined && (
+                                  <p className="text-sm font-semibold text-gray-800 mb-1">Total: ₹{order.grandTotal?.toLocaleString() || 0}</p>
+                                )}
+                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                  {order.orderDate && (
+                                    <span className="flex items-center gap-1">
+                                      <FaCalendarAlt className="w-3 h-3" />
+                                      {new Date(order.orderDate).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {order.customerName && (
+                                    <span className="flex items-center gap-1">
+                                      <FaUser className="w-3 h-3" />
+                                      {order.customerName}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-12">
+                  <FaInfoCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600">No customer details available</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

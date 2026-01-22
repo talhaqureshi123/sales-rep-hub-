@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../../services/adminservices/productService'
-import { FaSearch, FaFilter, FaCheckSquare, FaQrcode, FaDownload, FaTrash } from 'react-icons/fa'
+import { FaSearch, FaFilter, FaCheckSquare, FaQrcode, FaDownload, FaTrash, FaChevronDown, FaBarcode } from 'react-icons/fa'
 
 const ProductCatalog = () => {
   const [products, setProducts] = useState([])
@@ -11,6 +11,7 @@ const ProductCatalog = () => {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedProducts, setSelectedProducts] = useState([])
+  const [openDownloadDropdown, setOpenDownloadDropdown] = useState(null) // Track which product's dropdown is open
 
   const [formData, setFormData] = useState({
     name: '',
@@ -43,6 +44,19 @@ const ProductCatalog = () => {
   useEffect(() => {
     filterProducts()
   }, [products, searchTerm, selectedCategory, selectedStatus])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (openDownloadDropdown && !event.target.closest('.download-dropdown-container')) {
+        setOpenDownloadDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openDownloadDropdown])
 
   const loadProducts = async () => {
     setLoading(true)
@@ -150,31 +164,99 @@ const ProductCatalog = () => {
     }
   }
 
-  const handleDownloadQR = async (product) => {
+  const handleDownloadQR = async (product, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    setOpenDownloadDropdown(null) // Close dropdown
+    
     try {
-      // Use stored QR code if available, otherwise generate from productCode
-      const qrURL = product.qrCode 
-        ? product.qrCode 
-        : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(product.productCode)}`
+      const token = localStorage.getItem('token')
+      if (!token) {
+        alert('Authentication token not found. Please login again.')
+        return
+      }
 
-      // Fetch the QR code image
-      const response = await fetch(qrURL)
-      const blob = await response.blob()
+      // Call backend endpoint for QR code
+      const response = await fetch(`/api/admin/products/${product._id || product.id}/qr-code`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
       
-      // Create a blob URL and download
-      const blobURL = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = blobURL
-      link.download = `${product.productCode}_QR.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      // Clean up the blob URL
-      window.URL.revokeObjectURL(blobURL)
+      if (data.success && data.qrCodeURL) {
+        // Fetch the QR code image
+        const imgResponse = await fetch(data.qrCodeURL)
+        const blob = await imgResponse.blob()
+        
+        // Create a blob URL and download
+        const blobURL = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobURL
+        link.download = data.filename || `${product.productCode}_QR.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // Clean up the blob URL
+        window.URL.revokeObjectURL(blobURL)
+      } else {
+        alert(data.message || 'Failed to download QR code')
+      }
     } catch (error) {
       console.error('Error downloading QR code:', error)
       alert('Failed to download QR code. Please try again.')
+    }
+  }
+
+  const handleDownloadBarcode = async (product, e) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    setOpenDownloadDropdown(null) // Close dropdown
+    
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        alert('Authentication token not found. Please login again.')
+        return
+      }
+
+      // Call backend endpoint for barcode
+      const response = await fetch(`/api/admin/products/${product._id || product.id}/barcode`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+      
+      if (data.success && data.barcodeURL) {
+        // Fetch the barcode image
+        const imgResponse = await fetch(data.barcodeURL)
+        const blob = await imgResponse.blob()
+        
+        // Create a blob URL and download
+        const blobURL = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobURL
+        link.download = data.filename || `${product.productCode}_Barcode.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // Clean up the blob URL
+        window.URL.revokeObjectURL(blobURL)
+      } else {
+        alert(data.message || 'Failed to download barcode')
+      }
+    } catch (error) {
+      console.error('Error downloading barcode:', error)
+      alert('Failed to download barcode. Please try again.')
     }
   }
 
@@ -511,18 +593,41 @@ const ProductCatalog = () => {
                 )}
                 {/* Action Buttons */}
                 <div className="absolute top-0 right-0 flex gap-1 z-10">
-                  {/* QR Download Icon */}
+                  {/* Download Dropdown */}
                   {product.productCode && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDownloadQR(product)
-                      }}
-                      className="bg-[#e9931c] text-white p-1.5 rounded-full hover:bg-[#d8820a] transition-colors shadow-md"
-                      title="Download QR Code"
-                    >
-                      <FaDownload className="w-3 h-3" />
-                    </button>
+                    <div className="relative download-dropdown-container">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpenDownloadDropdown(openDownloadDropdown === product._id ? null : product._id)
+                        }}
+                        className="bg-[#e9931c] text-white p-1.5 rounded-full hover:bg-[#d8820a] transition-colors shadow-md flex items-center gap-1"
+                        title="Download Options"
+                      >
+                        <FaDownload className="w-3 h-3" />
+                        <FaChevronDown className={`w-2 h-2 transition-transform ${openDownloadDropdown === product._id ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {/* Dropdown Menu */}
+                      {openDownloadDropdown === product._id && (
+                        <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px] z-20">
+                          <button
+                            onClick={(e) => handleDownloadQR(product, e)}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors"
+                          >
+                            <FaQrcode className="w-4 h-4 text-[#e9931c]" />
+                            <span>Download QR Code</span>
+                          </button>
+                          <button
+                            onClick={(e) => handleDownloadBarcode(product, e)}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors"
+                          >
+                            <FaBarcode className="w-4 h-4 text-[#e9931c]" />
+                            <span>Download Barcode</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {/* Delete Icon */}
                   <button

@@ -77,24 +77,24 @@ const Achievements = () => {
 
   return (
     <div className="">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">Achievements & Conversion Tracking</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Achievements & Conversion Tracking</h2>
 
         {/* GRPA Card */}
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border-2 border-purple-200 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-purple-800 mb-1">GRPA (Group Real Performance Award)</h3>
-              <p className="text-sm text-purple-600">Your performance ranking in the group</p>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 sm:p-6 border-2 border-purple-200 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="text-base sm:text-lg font-bold text-purple-800 mb-1">GRPA (Group Real Performance Award)</h3>
+              <p className="text-xs sm:text-sm text-purple-600">Your performance ranking in the group</p>
             </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-purple-700">
+            <div className="text-left sm:text-right w-full sm:w-auto">
+              <div className="text-2xl sm:text-3xl font-bold text-purple-700">
                 #{grpa.rank || 'N/A'}
               </div>
               <p className="text-xs text-purple-600 mt-1">
                 Rank out of {grpa.totalSalesmen || 0}
               </p>
               <div className="mt-2">
-                <div className="bg-purple-200 rounded-full h-2 w-32">
+                <div className="bg-purple-200 rounded-full h-2 w-full sm:w-32">
                   <div
                     className="bg-purple-600 h-2 rounded-full"
                     style={{ width: `${Math.min(grpa.percentage || 0, 100)}%` }}
@@ -107,10 +107,10 @@ const Achievements = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-            <p className="text-sm text-gray-600 mb-1">Monthly Sales</p>
-            <p className="text-2xl font-bold text-blue-700">₹{stats.monthlySales.toLocaleString()}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
+            <p className="text-xs sm:text-sm text-gray-600 mb-1">Monthly Sales</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-700">₹{stats.monthlySales.toLocaleString()}</p>
             <div className="mt-2">
               <div className="w-full bg-blue-200 rounded-full h-2">
                 <div
@@ -124,15 +124,15 @@ const Achievements = () => {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-            <p className="text-sm text-gray-600 mb-1">Conversion Rate</p>
-            <p className="text-2xl font-bold text-green-700">{stats.conversionRate}%</p>
-            <p className="text-xs text-gray-600 mt-2">Average conversion rate</p>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-4 border border-green-200">
+            <p className="text-xs sm:text-sm text-gray-600 mb-1">Conversion Rate</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-700">{stats.conversionRate}%</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-2">Average conversion rate</p>
           </div>
 
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
-            <p className="text-sm text-gray-600 mb-1">Visit Targets Completed</p>
-            <p className="text-2xl font-bold text-orange-700">
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-4 border border-orange-200">
+            <p className="text-xs sm:text-sm text-gray-600 mb-1">Visit Targets Completed</p>
+            <p className="text-xl sm:text-2xl font-bold text-orange-700">
               {stats.completedTargets}/{stats.totalTargets}
             </p>
             <div className="mt-2">
@@ -149,7 +149,7 @@ const Achievements = () => {
 
         {/* Achievements List */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">Recent Achievements</h3>
+          <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-3 sm:mb-4">Recent Achievements</h3>
           {achievements.length === 0 ? (
             <div className="bg-white rounded-lg p-8 border border-gray-200 text-center">
               <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,8 +185,8 @@ const Achievements = () => {
         </div>
 
         {/* Performance Chart Placeholder */}
-        <div className="mt-6 bg-white rounded-lg p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">Performance Chart</h3>
+        <div className="mt-4 sm:mt-6 bg-white rounded-lg p-4 sm:p-6 border border-gray-200">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-3 sm:mb-4">Performance Chart</h3>
           <div className="h-64 bg-white rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
             <div className="text-center">
               <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -458,18 +458,18 @@ const Tasks = () => {
     search.trim() !== ''
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Record Count */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-2">
         <div>
-          <h2 className="text-2xl font-bold" style={{ color: appTheme.text.primary }}>Tasks</h2>
-          <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+          <h2 className="text-xl sm:text-2xl font-bold" style={{ color: appTheme.text.primary }}>Tasks</h2>
+          <p className="text-xs sm:text-sm" style={{ color: appTheme.text.secondary }}>
             {loading ? 'Loading...' : `${sortedTasks.length} records`}
           </p>
         </div>
         <button
           onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-white transition-all"
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-semibold text-white transition-all w-full sm:w-auto justify-center"
           style={{ backgroundColor: '#ff7a59' }}
         >
           <FaPlus className="w-4 h-4" />
@@ -478,7 +478,7 @@ const Tasks = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-3 sm:mb-4 overflow-x-auto scrollbar-hide pb-2">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -511,8 +511,8 @@ const Tasks = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-4">
-        <div className="flex flex-wrap items-center gap-3 mb-3">
+      <div className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200 shadow-sm mb-3 sm:mb-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
           {/* Active Filter Tags */}
           {activeFilters.taskType.map(type => (
             <span key={type} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
@@ -687,15 +687,15 @@ const Tasks = () => {
         </div>
 
         {/* Search Bar */}
-        <div className="mt-3 flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300">
-            <FaSearch style={{ color: appTheme.text.tertiary }} />
+        <div className="mt-2 sm:mt-3 flex items-center gap-2 sm:gap-3">
+          <div className="flex-1 flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-300">
+            <FaSearch style={{ color: appTheme.text.tertiary }} className="w-4 h-4 flex-shrink-0" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search task title and notes"
-              className="flex-1 bg-transparent outline-none text-sm"
+              className="flex-1 bg-transparent outline-none text-xs sm:text-sm"
               style={{ color: appTheme.text.primary }}
             />
           </div>
@@ -709,15 +709,15 @@ const Tasks = () => {
             <FaSpinner className="animate-spin" style={{ color: appTheme.primary.main }} size={32} />
           </div>
         ) : paginatedTasks.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-8 sm:py-12 px-4">
             <FaCalendarAlt className="mx-auto mb-4" style={{ color: appTheme.text.light }} size={48} />
-            <p className="font-medium" style={{ color: appTheme.text.secondary }}>No tasks found</p>
-            <p className="text-sm mt-2" style={{ color: appTheme.text.tertiary }}>
+            <p className="font-medium text-sm sm:text-base" style={{ color: appTheme.text.secondary }}>No tasks found</p>
+            <p className="text-xs sm:text-sm mt-2" style={{ color: appTheme.text.tertiary }}>
               {search ? 'Try a different search term' : 'Create your first task to get started'}
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto" style={{ maxWidth: '100%' }}>
+          <div className="overflow-x-auto scrollbar-hide" style={{ maxWidth: '100%' }}>
             <table className="w-full border-collapse" style={{ minWidth: '1400px' }}>
               <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
                 <tr>
@@ -937,12 +937,12 @@ const Tasks = () => {
 
       {/* Pagination */}
       {sortedTasks.length > 0 && (
-        <div className="flex items-center justify-between bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0 bg-white rounded-lg p-3 sm:p-4 border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 sm:px-3 py-1.5 border border-gray-300 rounded text-xs sm:text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Prev
             </button>
@@ -962,7 +962,7 @@ const Tasks = () => {
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium ${
+                    className={`px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium ${
                       currentPage === pageNum
                         ? 'bg-blue-600 text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
@@ -976,20 +976,20 @@ const Tasks = () => {
             <button
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2 sm:px-3 py-1.5 border border-gray-300 rounded text-xs sm:text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Items per page:</span>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
+            <span className="text-xs sm:text-sm text-gray-600">Items per page:</span>
             <select
               value={itemsPerPage}
               onChange={(e) => {
                 setItemsPerPage(Number(e.target.value))
                 setCurrentPage(1)
               }}
-              className="px-2 py-1 border border-gray-300 rounded text-sm"
+              className="px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>

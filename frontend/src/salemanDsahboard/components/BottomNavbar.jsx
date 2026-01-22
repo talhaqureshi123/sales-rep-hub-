@@ -23,7 +23,7 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 lg:hidden">
-      <div className="flex items-center justify-around h-16 overflow-x-auto">
+      <div className="flex items-center h-16 overflow-x-auto scrollbar-hide">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -31,7 +31,7 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center flex-1 min-w-[60px] h-full transition-colors ${
+              className={`flex flex-col items-center justify-center min-w-[70px] sm:min-w-[80px] h-full px-2 transition-colors flex-shrink-0 ${
                 isActive
                   ? 'text-[#e9931c]'
                   : 'text-gray-600'
@@ -39,7 +39,7 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
               title={tab.label}
             >
               <Icon className={`w-5 h-5 sm:w-6 sm:h-6 mb-0.5 ${isActive ? 'text-[#e9931c]' : 'text-gray-600'}`} />
-              <span className="text-[10px] sm:text-xs font-medium">{tab.label}</span>
+              <span className="text-[10px] sm:text-xs font-medium truncate max-w-full">{tab.label}</span>
             </button>
           )
         })}

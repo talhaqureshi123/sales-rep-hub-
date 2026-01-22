@@ -799,21 +799,21 @@ const Quotation = () => {
                       </span>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 text-xs sm:text-sm">
                       <div>
-                        <p className="text-gray-600 text-xs">Valid Until</p>
-                        <p className="font-medium text-gray-800">{quote.validUntil}</p>
+                        <p className="text-gray-600 text-[10px] sm:text-xs">Valid Until</p>
+                        <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.validUntil}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600 text-xs">Created</p>
-                        <p className="font-medium text-gray-800">{quote.createdAt}</p>
+                        <p className="text-gray-600 text-[10px] sm:text-xs">Created</p>
+                        <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.createdAt}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                       <div>
-                        <p className="text-xs text-gray-600">Total Amount</p>
-                        <p className="text-xl font-bold text-[#e9931c]">£{quote.total.toLocaleString()}</p>
+                        <p className="text-[10px] sm:text-xs text-gray-600">Total Amount</p>
+                        <p className="text-lg sm:text-xl font-bold text-[#e9931c]">£{quote.total.toLocaleString()}</p>
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -919,15 +919,15 @@ const Quotation = () => {
 
       {/* Create Quotation Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-gray-800">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">
                   {editingQuotation ? 'Edit Quotation' : 'Create New Quote'}
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-xs sm:text-sm text-gray-600 mt-1">
                   {editingQuotation ? 'Update quotation details' : 'Fill in the quote details and send to customer'}
                 </p>
               </div>
@@ -942,9 +942,9 @@ const Quotation = () => {
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* Customer Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Customer *
@@ -1012,7 +1012,7 @@ const Quotation = () => {
                 <div className="space-y-4">
                   {formData.lineItems.map((item, index) => (
                     <div key={item.id} className="border-2 border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">
                             Product *
@@ -1142,14 +1142,14 @@ const Quotation = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={handleSaveDraft}
-                  className="px-4 py-3 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-500 text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
                   title="Save as Draft"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
                   <span>Save Draft</span>
@@ -1161,20 +1161,20 @@ const Quotation = () => {
                     setEditingQuotation(null)
                     resetForm()
                   }}
-                  className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-200 text-gray-700 rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
                   title="Cancel"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                   <span>Cancel</span>
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-6 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-[#e9931c] text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
                   title={editingQuotation ? "Update Quote" : "Create Quote"}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                   <span>{editingQuotation ? 'Update Quote' : 'Create Quote'}</span>

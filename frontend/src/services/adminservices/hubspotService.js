@@ -36,14 +36,23 @@ export const createCustomerAndOrder = async (customerData, orderData) => {
 }
 
 // Fetch customers from HubSpot
-export const getHubSpotCustomers = async () => {
+export const getHubSpotCustomers = async (myContactsOnly = false) => {
   try {
     const token = getAuthToken()
     if (!token) {
       return { success: false, message: 'Authentication token not found.' }
     }
 
-    const response = await fetch(`${API_BASE_URL}/customers`, {
+    const queryParams = new URLSearchParams()
+    if (myContactsOnly) {
+      queryParams.append('myContactsOnly', 'true')
+    }
+
+    const url = queryParams.toString() 
+      ? `${API_BASE_URL}/customers?${queryParams.toString()}`
+      : `${API_BASE_URL}/customers`
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -108,7 +117,7 @@ export const syncHubSpotData = async () => {
 }
 
 // Import HubSpot contacts into local Customers DB
-export const importHubSpotCustomersToDb = async () => {
+export const importHubSpotCustomersToDb = async (myContactsOnly = false) => {
   try {
     const token = getAuthToken()
     if (!token) {
@@ -121,6 +130,7 @@ export const importHubSpotCustomersToDb = async () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
+      body: JSON.stringify({ myContactsOnly }),
     })
 
     const data = await response.json()
@@ -181,11 +191,16 @@ export const pushSalesOrdersToHubSpot = async (force = false, limit = 0) => {
 }
 
 // Push existing Customers from website DB to HubSpot Contacts
-export const pushCustomersToHubSpot = async (force = false, limit = 0) => {
+export const pushCustomersToHubSpot = async (force = false, limit = 0, myContactsOnly = false, customerIds = null) => {
   try {
     const token = getAuthToken()
     if (!token) {
       return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const body = { force, limit, myContactsOnly }
+    if (customerIds && Array.isArray(customerIds) && customerIds.length > 0) {
+      body.customerIds = customerIds
     }
 
     const response = await fetch(`${API_BASE_URL}/push-customers`, {
@@ -194,7 +209,7 @@ export const pushCustomersToHubSpot = async (force = false, limit = 0) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ force, limit }),
+      body: JSON.stringify(body),
     })
 
     const data = await response.json()

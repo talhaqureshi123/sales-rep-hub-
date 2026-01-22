@@ -145,28 +145,28 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Customer Management</h2>
-        <p className="text-gray-600">Manage your customers</p>
+    <div className="p-2 sm:p-4 md:p-6">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1 sm:mb-2">Customer Management</h2>
+        <p className="text-sm sm:text-base text-gray-600">Manage your customers</p>
       </div>
 
       {/* Search and Filter */}
-      <div className="mb-6 flex flex-col md:flex-row gap-4">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="flex-1">
           <input
             type="text"
             placeholder="Search customers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c]"
+            className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c]"
           />
         </div>
-        <div className="md:w-48">
+        <div className="sm:w-48">
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c]"
+            className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c]"
           >
             <option value="">All Status</option>
             <option value="Active">Active</option>
@@ -175,22 +175,22 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
         </div>
         <button
           onClick={() => setShowAddForm(true)}
-          className="px-6 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors font-semibold flex items-center gap-2"
+          className="px-4 sm:px-6 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors text-sm sm:text-base font-semibold flex items-center justify-center gap-2"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Add Customer
+          <span className="whitespace-nowrap">Add Customer</span>
         </button>
       </div>
 
       {/* Add Customer Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Add New Customer</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
                 <button
                   onClick={handleCloseForm}
                   className="text-gray-500 hover:text-gray-700"
@@ -395,90 +395,174 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
           <p className="text-gray-500">Create your first customer to get started</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {customers.map((customer) => (
-                  <tr key={customer._id || customer.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-gray-900">{customer.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{customer.email || 'N/A'}</div>
-                      <div className="text-sm text-gray-500">{customer.phone || 'N/A'}</div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <a
-                          href={getWhatsAppHref(customer.phone) || '#'}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => {
-                            if (!getWhatsAppHref(customer.phone)) e.preventDefault()
-                          }}
-                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                            getWhatsAppHref(customer.phone)
-                              ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                          }`}
-                          title="Send WhatsApp"
-                        >
-                          <FaWhatsapp />
-                          WhatsApp
-                        </a>
-                        <a
-                          href={getEmailHref(customer.email, customer.name) || '#'}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => {
-                            if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
-                          }}
-                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                            getEmailHref(customer.email, customer.name)
-                              ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                          }`}
-                          title="Send Email"
-                        >
-                          <FaEnvelope />
-                          Email
-                        </a>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {customer.city && customer.state ? `${customer.city}, ${customer.state}` : customer.address || 'N/A'}
-                      </div>
-                      {customer.pincode && (
-                        <div className="text-sm text-gray-500">{customer.pincode}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{customer.company || 'N/A'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        customer.status === 'Active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {customer.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {customers.map((customer) => (
+              <div key={customer._id || customer.id} className="bg-white rounded-lg shadow p-4 border border-gray-200">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">{customer.name}</h3>
+                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      customer.status === 'Active'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {customer.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Email</p>
+                    <p className="text-gray-900">{customer.email || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Phone</p>
+                    <p className="text-gray-900">{customer.phone || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Location</p>
+                    <p className="text-gray-900">
+                      {customer.city && customer.state ? `${customer.city}, ${customer.state}` : customer.address || 'N/A'}
+                    </p>
+                    {customer.pincode && (
+                      <p className="text-xs text-gray-500">{customer.pincode}</p>
+                    )}
+                  </div>
+                  {customer.company && (
+                    <div>
+                      <p className="text-xs text-gray-500">Company</p>
+                      <p className="text-gray-900">{customer.company}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 flex items-center gap-2 pt-3 border-t border-gray-200">
+                  <a
+                    href={getWhatsAppHref(customer.phone) || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      if (!getWhatsAppHref(customer.phone)) e.preventDefault()
+                    }}
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                      getWhatsAppHref(customer.phone)
+                        ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                    }`}
+                    title="Send WhatsApp"
+                  >
+                    <FaWhatsapp />
+                    WhatsApp
+                  </a>
+                  <a
+                    href={getEmailHref(customer.email, customer.name) || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
+                    }}
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                      getEmailHref(customer.email, customer.name)
+                        ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                    }`}
+                    title="Send Email"
+                  >
+                    <FaEnvelope />
+                    Email
+                  </a>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {customers.map((customer) => (
+                    <tr key={customer._id || customer.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-gray-900">{customer.name}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{customer.email || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{customer.phone || 'N/A'}</div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <a
+                            href={getWhatsAppHref(customer.phone) || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => {
+                              if (!getWhatsAppHref(customer.phone)) e.preventDefault()
+                            }}
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                              getWhatsAppHref(customer.phone)
+                                ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                                : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            }`}
+                            title="Send WhatsApp"
+                          >
+                            <FaWhatsapp />
+                            WhatsApp
+                          </a>
+                          <a
+                            href={getEmailHref(customer.email, customer.name) || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => {
+                              if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
+                            }}
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                              getEmailHref(customer.email, customer.name)
+                                ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            }`}
+                            title="Send Email"
+                          >
+                            <FaEnvelope />
+                            Email
+                          </a>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {customer.city && customer.state ? `${customer.city}, ${customer.state}` : customer.address || 'N/A'}
+                        </div>
+                        {customer.pincode && (
+                          <div className="text-sm text-gray-500">{customer.pincode}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{customer.company || 'N/A'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          customer.status === 'Active'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {customer.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

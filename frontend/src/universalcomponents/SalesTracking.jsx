@@ -4,7 +4,7 @@ import GoogleMapView from './GoogleMapView'
 import NotificationToast from './NotificationToast'
 // import { getMilestones, checkProximity, markMilestoneComplete } from '../services/salemanservices/milestoneService' // COMMENTED OUT - Using Visit Targets only
 import { getVisitTargets, updateVisitTargetStatus, createVisitRequest, getVisitRequests } from '../services/salemanservices/visitTargetService'
-import { getCurrentLocation, watchPosition, clearWatch, formatDistance, calculateDistance, PROXIMITY_DISTANCE_KM } from '../services/salemanservices/locationService'
+import { getCurrentLocation, watchPosition, clearWatch, formatDistance, calculateDistance, PROXIMITY_DISTANCE_KM, saveLocation } from '../services/salemanservices/locationService'
 import { startTracking, stopTracking, getActiveTracking } from '../services/salemanservices/trackingService'
 import { getMyFollowUps } from '../services/salemanservices/followUpService'
 import { getMyCustomers } from '../services/salemanservices/customerService'
@@ -76,6 +76,8 @@ const SalesTracking = () => {
   const [selectedSamplesForAssignment, setSelectedSamplesForAssignment] = useState([])
   const watchIdRef = useRef(null)
   const countdownIntervalRef = useRef(null)
+  const lastLocationSentRef = useRef(null)
+  const locationUpdateIntervalRef = useRef(null)
 
   // Get current user email (salesman)
   const getCurrentUserEmail = () => {
@@ -560,31 +562,82 @@ const SalesTracking = () => {
     }
   }, [userLocation, visitTargets, isTracking])
 
-  // Watch position for real-time tracking
+  // Watch position for real-time tracking and send location updates
   useEffect(() => {
     if (isTracking) {
       watchIdRef.current = watchPosition(
         (position) => {
           setUserLocation(position)
           checkVisitTargetProximity(position)
+          
+          // Send location to backend (only if logged in)
+          const token = localStorage.getItem('token')
+          if (token && position.latitude && position.longitude) {
+            // Check if we should send location update (every 30 seconds or if location changed significantly)
+            const now = Date.now()
+            const lastSent = lastLocationSentRef.current
+            const shouldSend = !lastSent || (now - lastSent) >= 30000 // 30 seconds
+            
+            if (shouldSend) {
+              saveLocation(position.latitude, position.longitude, position.accuracy || null)
+                .then((result) => {
+                  if (result.success) {
+                    lastLocationSentRef.current = now
+                    console.log('Location sent to backend successfully')
+                  } else {
+                    console.warn('Failed to send location:', result.message)
+                  }
+                })
+                .catch((error) => {
+                  console.error('Error sending location:', error)
+                })
+            }
+          }
         },
         (error) => {
           console.error('Error watching position:', error)
         }
       )
+      
+      // Also set up periodic location updates (every 30 seconds) as backup
+      locationUpdateIntervalRef.current = setInterval(() => {
+        if (userLocation && userLocation.latitude && userLocation.longitude) {
+          const token = localStorage.getItem('token')
+          if (token) {
+            saveLocation(userLocation.latitude, userLocation.longitude, userLocation.accuracy || null)
+              .then((result) => {
+                if (result.success) {
+                  lastLocationSentRef.current = Date.now()
+                  console.log('Periodic location update sent')
+                }
+              })
+              .catch((error) => {
+                console.error('Error sending periodic location:', error)
+              })
+          }
+        }
+      }, 30000) // Every 30 seconds
     } else {
       if (watchIdRef.current) {
         clearWatch(watchIdRef.current)
         watchIdRef.current = null
       }
+      if (locationUpdateIntervalRef.current) {
+        clearInterval(locationUpdateIntervalRef.current)
+        locationUpdateIntervalRef.current = null
+      }
+      lastLocationSentRef.current = null
     }
 
     return () => {
       if (watchIdRef.current) {
         clearWatch(watchIdRef.current)
       }
+      if (locationUpdateIntervalRef.current) {
+        clearInterval(locationUpdateIntervalRef.current)
+      }
     }
-  }, [isTracking, visitTargets])
+  }, [isTracking, visitTargets, userLocation])
 
   // Check for missed/remaining visits and show notifications
   const checkMissedVisits = () => {
