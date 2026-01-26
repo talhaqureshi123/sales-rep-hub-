@@ -7,18 +7,25 @@ import {
   FaSignOutAlt,
   FaTasks,
   FaBullseye,
-  FaUpload
+  FaUpload,
+  FaVideo,
+  FaBell
 } from 'react-icons/fa'
+import { useNotificationCount } from '../hooks/useNotificationCount'
 
 const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
+  const { count: notificationCount } = useNotificationCount()
+  
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: FaHome },
+    { id: 'notifications', label: 'Notifications', icon: FaBell, badge: notificationCount },
     { id: 'sales-tracking', label: 'Sales Tracking', icon: FaMapMarkerAlt },
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },
     { id: 'customers', label: 'Customers', icon: FaUsers },
     { id: 'tasks', label: 'Tasks', icon: FaTasks },
     { id: 'sales-targets', label: 'Sales Targets', icon: FaBullseye },
     { id: 'sales-submissions', label: 'Sales Upload', icon: FaUpload },
+    { id: 'product-videos', label: 'Product Videos', icon: FaVideo },
     { id: 'achievements', label: 'Achievements', icon: FaTrophy },
   ]
 
@@ -48,14 +55,25 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 transition-all duration-200 rounded-md mb-2 group ${
+              className={`w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 transition-all duration-200 rounded-md mb-2 group relative ${
                 isActive
                   ? 'bg-[#e9931c] text-white'
                   : 'text-gray-700 hover:bg-orange-50 hover:text-[#e9931c]'
               }`}
               title={tab.label}
             >
-              <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-700 group-hover:text-[#e9931c]'}`} />
+              <div className="relative">
+                <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-700 group-hover:text-[#e9931c]'}`} />
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className={`absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${
+                    isActive 
+                      ? 'bg-white text-[#e9931c]' 
+                      : 'bg-red-500 text-white'
+                  }`}>
+                    {tab.badge > 99 ? '99+' : tab.badge}
+                  </span>
+                )}
+              </div>
               <span className="hidden md:inline font-medium text-sm">{tab.label}</span>
             </button>
           )

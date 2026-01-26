@@ -266,9 +266,13 @@ const updateVisitTargetStatus = async (req, res) => {
     if (visitDate !== undefined) visitTarget.visitDate = visitDate;
 
     // KM VALIDATION
+    // Only validate if both starting and ending kilometers are provided AND not null
+    // For individual visit completion, endingKilometers should not be sent (will be set at shift end)
     if (
       startingKilometers !== undefined &&
       endingKilometers !== undefined &&
+      endingKilometers !== null &&
+      startingKilometers !== null &&
       endingKilometers < startingKilometers
     ) {
       return res.status(400).json({

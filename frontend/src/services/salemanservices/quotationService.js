@@ -47,8 +47,13 @@ export const getQuotations = async () => {
           validUntil: quote.validUntil ? new Date(quote.validUntil).toISOString().split('T')[0] : '',
           status: quote.status,
           total: quote.total,
+          subtotal: quote.subtotal,
+          tax: quote.tax,
+          discount: quote.discount,
+          notes: quote.notes,
           createdAt: quote.createdAt ? new Date(quote.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           items: quote.items || [],
+          salesman: quote.salesman, // Include salesman info for permission checks
         })),
       }
     }
@@ -172,6 +177,63 @@ export const updateQuotation = async (quotationId, quotationData) => {
   }
 }
 
+// Get single quotation
+export const getQuotation = async (quotationId) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${quotationId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('isAuthenticated')
+      localStorage.removeItem('userRole')
+      localStorage.removeItem('userId')
+      window.location.href = '/'
+      return { success: false, message: 'Session expired. Please login again.' }
+    }
+
+    const data = await response.json()
+    if (data.success && data.data) {
+      return {
+        success: true,
+        data: {
+          id: data.data._id,
+          quoteNumber: data.data.quotationNumber,
+          customerName: data.data.customerName,
+          customerEmail: data.data.customerEmail,
+          customerPhone: data.data.customerPhone,
+          customerAddress: data.data.customerAddress,
+          validUntil: data.data.validUntil ? new Date(data.data.validUntil).toISOString().split('T')[0] : '',
+          status: data.data.status,
+          total: data.data.total,
+          subtotal: data.data.subtotal,
+          tax: data.data.tax,
+          discount: data.data.discount,
+          notes: data.data.notes,
+          createdAt: data.data.createdAt ? new Date(data.data.createdAt).toISOString().split('T')[0] : '',
+          items: data.data.items || [],
+          salesman: data.data.salesman,
+        },
+      }
+    }
+    return { success: false, message: data.message || 'Failed to fetch quotation' }
+  } catch (error) {
+    console.error('Error fetching quotation:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Delete quotation
 export const deleteQuotation = async (quotationId) => {
   try {
@@ -188,6 +250,16 @@ export const deleteQuotation = async (quotationId) => {
       },
     })
 
+    // Handle 401 Unauthorized
+    if (response.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('isAuthenticated')
+      localStorage.removeItem('userRole')
+      localStorage.removeItem('userId')
+      window.location.href = '/'
+      return { success: false, message: 'Session expired. Please login again.' }
+    }
+
     const data = await response.json()
     return data
   } catch (error) {
@@ -198,6 +270,7 @@ export const deleteQuotation = async (quotationId) => {
 
 export default {
   getQuotations,
+  getQuotation,
   createQuotation,
   updateQuotation,
   deleteQuotation,

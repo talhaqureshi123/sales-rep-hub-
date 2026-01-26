@@ -105,6 +105,10 @@ const login = async (req, res) => {
       });
     }
 
+    // Update lastActivity for online status tracking
+    user.lastActivity = new Date();
+    await user.save();
+
     // Generate token
     const token = generateToken(user._id);
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import GoogleMapView from './GoogleMapView'
 // import MilestoneModal from './MilestoneModal' // COMMENTED OUT - Using Visit Targets only
 import NotificationToast from './NotificationToast'
@@ -21,6 +21,7 @@ const SalesTracking = () => {
   const [notifications, setNotifications] = useState([])
   const [selectedVisitTarget, setSelectedVisitTarget] = useState(null)
   const [showRightPanel, setShowRightPanel] = useState(true) // Control right panel visibility
+  const [rightPanelTab, setRightPanelTab] = useState('visits') // 'visits', 'tasks', 'samples'
   const [showAchievementModal, setShowAchievementModal] = useState(false)
   const [showVisitTargetModal, setShowVisitTargetModal] = useState(false)
   const [meterReading, setMeterReading] = useState('')
@@ -36,6 +37,11 @@ const SalesTracking = () => {
   const [showCompletionModal, setShowCompletionModal] = useState(false)
   const [isExtractingEnding, setIsExtractingEnding] = useState(false)
   const [estimatedKilometers, setEstimatedKilometers] = useState('')
+  const [showShiftEndModal, setShowShiftEndModal] = useState(false) // Modal for ending meter when all visits done
+  const [shiftEndingKilometers, setShiftEndingKilometers] = useState('') // Ending kilometers for shift end
+  const [shiftEndingMeterImage, setShiftEndingMeterImage] = useState(null) // Ending meter image for shift end
+  const [isExtractingShiftEnd, setIsExtractingShiftEnd] = useState(false)
+  const [showShiftPhotoCollage, setShowShiftPhotoCollage] = useState(false) // Show shift photo collage
   const [routeDistanceKm, setRouteDistanceKm] = useState(null) // Route distance from Google Maps
   const [countdown, setCountdown] = useState(null)
   const [showCountdown, setShowCountdown] = useState(false)
@@ -67,7 +73,7 @@ const SalesTracking = () => {
   const [selectedVisitsForAssignment, setSelectedVisitsForAssignment] = useState([])
   const [assignmentDate, setAssignmentDate] = useState('')
   const [assigningVisits, setAssigningVisits] = useState(false)
-  const [dateFilter, setDateFilter] = useState('All') // All, Today, Tomorrow, This Week, Upcoming, Past
+  const [dateFilter, setDateFilter] = useState('Today') // All, Today, Tomorrow, This Week, Upcoming, Past
   const [selectedDateForView, setSelectedDateForView] = useState('') // Date selected for viewing filtered visits
   const [assignModalActiveTab, setAssignModalActiveTab] = useState('visits') // visits, followup, sample
   const [followUps, setFollowUps] = useState([])
@@ -78,6 +84,8 @@ const SalesTracking = () => {
   const countdownIntervalRef = useRef(null)
   const lastLocationSentRef = useRef(null)
   const locationUpdateIntervalRef = useRef(null)
+  const lastMapLocationRef = useRef(null) // Store last location sent to map
+  const locationUpdateThrottleRef = useRef(null) // Throttle location updates to map
 
   // Get current user email (salesman)
   const getCurrentUserEmail = () => {
@@ -141,24 +149,73 @@ const SalesTracking = () => {
 
   // Filter visits based on date filter
   const getFilteredVisits = () => {
+    let filtered = []
+    
     if (dateFilter === 'All') {
-      return visitTargets
+      filtered = visitTargets
+    } else {
+      const grouped = groupVisitsByDate(visitTargets)
+      switch (dateFilter) {
+        case 'Today':
+          filtered = grouped.today
+          break
+        case 'Tomorrow':
+          filtered = grouped.tomorrow
+          break
+        case 'This Week':
+          filtered = [...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek]
+          break
+        case 'Upcoming':
+          filtered = grouped.upcoming
+          break
+        case 'Past':
+          filtered = grouped.past
+          break
+        default:
+          filtered = visitTargets
+      }
     }
+    
+    // Sort by visitDate (includes time) - earliest first
+    return filtered.sort((a, b) => {
+      if (!a.visitDate && !b.visitDate) return 0
+      if (!a.visitDate) return 1
+      if (!b.visitDate) return -1
+      return new Date(a.visitDate) - new Date(b.visitDate)
+    })
+  }
 
-    const grouped = groupVisitsByDate(visitTargets)
-    switch (dateFilter) {
-      case 'Today':
-        return grouped.today
-      case 'Tomorrow':
-        return grouped.tomorrow
-      case 'This Week':
-        return [...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek]
-      case 'Upcoming':
-        return grouped.upcoming
-      case 'Past':
-        return grouped.past
-      default:
-        return visitTargets
+  // Get today's visits center for map
+  const getTodayVisitsCenter = () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayVisits = visitTargets.filter(v => {
+      if (!v.visitDate) return false
+      const visitDate = new Date(v.visitDate)
+      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+      return visitDateOnly.getTime() === today.getTime()
+    })
+    
+    if (todayVisits.length === 0) return null
+    
+    // Calculate center of all today's visits
+    let totalLat = 0
+    let totalLng = 0
+    let count = 0
+    
+    todayVisits.forEach(visit => {
+      if (visit.latitude && visit.longitude) {
+        totalLat += parseFloat(visit.latitude)
+        totalLng += parseFloat(visit.longitude)
+        count++
+      }
+    })
+    
+    if (count === 0) return null
+    
+    return {
+      lat: totalLat / count,
+      lng: totalLng / count
     }
   }
 
@@ -493,30 +550,113 @@ const SalesTracking = () => {
     }
   }
 
-  // Get user location on mount
+  // Get user location on mount and refresh periodically
   useEffect(() => {
-    getCurrentLocation()
-      .then((location) => {
-        setUserLocation(location)
-      })
-      .catch((error) => {
-        console.error('Error getting location:', error)
-        // Don't show alert, just log - page should still work
-        // Set a default location if geolocation fails (Delhi)
-        setUserLocation({
-          latitude: 28.6139,
-          longitude: 77.2090,
+    let retryCount = 0
+    const MAX_RETRIES = 5
+    
+    const fetchLocation = () => {
+      // Check if geolocation is supported
+      if (!navigator.geolocation) {
+        console.error('Geolocation is not supported by this browser')
+        addNotification({
+          message: '⚠️ Location services are not supported by your browser',
+          type: 'warning',
         })
-      })
+        return
+      }
+      
+      getCurrentLocation()
+        .then((location) => {
+          if (location && location.latitude && location.longitude) {
+            setUserLocation(location)
+            console.log('Location updated:', location)
+            retryCount = 0 // Reset retry count on success
+          } else {
+            console.warn('Invalid location received:', location)
+            retryLocation()
+          }
+        })
+        .catch((error) => {
+          console.error('Error getting location:', error)
+          retryLocation()
+        })
+    }
+    
+    const retryLocation = () => {
+      if (retryCount < MAX_RETRIES && !userLocation) {
+        retryCount++
+        const delay = Math.min(5000 * retryCount, 30000) // Exponential backoff, max 30s
+        console.log(`Retrying location fetch (attempt ${retryCount}/${MAX_RETRIES}) in ${delay/1000}s...`)
+        setTimeout(() => {
+          if (!userLocation) {
+            fetchLocation()
+          }
+        }, delay)
+      } else if (retryCount >= MAX_RETRIES && !userLocation) {
+        console.error('Failed to get location after multiple retries')
+        addNotification({
+          message: '⚠️ Unable to get your location. Please check browser permissions and try refreshing the page.',
+          type: 'warning',
+        })
+      }
+    }
+    
+    // Get location immediately
+    fetchLocation()
+    
+    // Refresh location every 30 seconds when not tracking
+    const locationRefreshInterval = setInterval(() => {
+      if (!isTracking && !userLocation) {
+        fetchLocation()
+      }
+    }, 30000)
+    
+    return () => clearInterval(locationRefreshInterval)
   }, [])
 
-  // Load active tracking session on mount
+  // Load active tracking session on mount - Only restore if pending visits exist
   useEffect(() => {
     const loadActiveTracking = async () => {
       try {
+        // First load visit targets to check if any pending visits exist
+        const visitTargetsResult = await getVisitTargets()
+        let hasPendingVisits = false
+        
+        if (visitTargetsResult.success && visitTargetsResult.data) {
+          hasPendingVisits = visitTargetsResult.data.some(t => 
+            t.status === 'Pending' || t.status === 'In Progress'
+          )
+        }
+        
+        // Only restore tracking if there are pending visits
+        if (!hasPendingVisits) {
+          console.log('No pending visits found, skipping tracking restoration')
+          // Stop any active tracking in backend if no visits
+          try {
+            const active = await getActiveTracking()
+            if (active && (active._id || active.id)) {
+              console.log('Stopping active tracking - no pending visits')
+              await stopTracking(active._id || active.id, active.startingKilometers || '0', null, null, null, null)
+            }
+          } catch (error) {
+            console.error('Error stopping tracking:', error)
+          }
+          return
+        }
+        
+        // If pending visits exist, restore tracking
         const active = await getActiveTracking()
         if (active && (active._id || active.id)) {
           setActiveTrackingId(active._id || active.id)
+          // Restore tracking state when active tracking is found AND pending visits exist
+          setIsTracking(true)
+          // Restore starting kilometers and meter reading
+          if (active.startingKilometers) {
+            setStartingKilometers(active.startingKilometers.toString())
+            setMeterReading(active.startingKilometers.toString())
+          }
+          console.log('Active tracking restored:', active._id || active.id)
         }
       } catch (error) {
         console.error('Error loading active tracking:', error)
@@ -524,6 +664,50 @@ const SalesTracking = () => {
     }
     loadActiveTracking()
   }, [])
+
+  // Restore route when tracking is restored and location/targets are available
+  useEffect(() => {
+    if (isTracking && visitTargets.length > 0 && !routeToVisitTarget) {
+      // Wait for user location if not available
+      if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
+        console.log('Waiting for user location to restore route...')
+        // Try to get location again
+        getCurrentLocation()
+          .then((location) => {
+            if (location && location.latitude && location.longitude) {
+              setUserLocation(location)
+            }
+          })
+          .catch((error) => {
+            console.error('Error getting location for route restoration:', error)
+          })
+        return
+      }
+      
+      // Find first pending visit target for route (prioritize today's visits)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayPendingTarget = visitTargets.find(t => {
+        if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+        if (!t.visitDate) return false
+        const visitDate = new Date(t.visitDate)
+        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+        return visitDateOnly.getTime() === today.getTime()
+      })
+      
+      // If no today's visit, find any pending target
+      const firstPendingTarget = todayPendingTarget || visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
+      
+      if (firstPendingTarget && firstPendingTarget.latitude && firstPendingTarget.longitude) {
+        setRouteToVisitTarget({
+          from: { lat: userLocation.latitude, lng: userLocation.longitude },
+          to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
+          target: firstPendingTarget
+        })
+        console.log('Route restored for tracking:', firstPendingTarget.name)
+      }
+    }
+  }, [isTracking, userLocation, visitTargets, routeToVisitTarget])
 
   // Auto-select nearest pending target when both location and targets are available
   // BUT only show route when tracking is started
@@ -567,14 +751,40 @@ const SalesTracking = () => {
     if (isTracking) {
       watchIdRef.current = watchPosition(
         (position) => {
-          setUserLocation(position)
+          // Only update location if it changed significantly (more than 10 meters) or first update
+          const shouldUpdateLocation = () => {
+            if (!lastMapLocationRef.current) return true
+            
+            const lastLoc = lastMapLocationRef.current
+            const distance = calculateDistance(
+              lastLoc.latitude,
+              lastLoc.longitude,
+              position.latitude,
+              position.longitude
+            )
+            
+            // Update if moved more than 10 meters (to reduce map flickering)
+            return distance > 10
+          }
+          
+          // Throttle location updates to map (max once per 2 seconds)
+          const now = Date.now()
+          const lastUpdate = locationUpdateThrottleRef.current || 0
+          const timeSinceLastUpdate = now - lastUpdate
+          
+          if (shouldUpdateLocation() && timeSinceLastUpdate >= 2000) {
+            setUserLocation(position)
+            lastMapLocationRef.current = position
+            locationUpdateThrottleRef.current = now
+          }
+          
+          // Always check proximity (uses position directly, not state)
           checkVisitTargetProximity(position)
           
           // Send location to backend (only if logged in)
           const token = localStorage.getItem('token')
           if (token && position.latitude && position.longitude) {
             // Check if we should send location update (every 30 seconds or if location changed significantly)
-            const now = Date.now()
             const lastSent = lastLocationSentRef.current
             const shouldSend = !lastSent || (now - lastSent) >= 30000 // 30 seconds
             
@@ -627,6 +837,8 @@ const SalesTracking = () => {
         locationUpdateIntervalRef.current = null
       }
       lastLocationSentRef.current = null
+      lastMapLocationRef.current = null
+      locationUpdateThrottleRef.current = null
     }
 
     return () => {
@@ -637,48 +849,12 @@ const SalesTracking = () => {
         clearInterval(locationUpdateIntervalRef.current)
       }
     }
-  }, [isTracking, visitTargets, userLocation])
+  }, [isTracking]) // Removed visitTargets and userLocation from dependencies to prevent unnecessary re-renders
 
   // Check for missed/remaining visits and show notifications
   const checkMissedVisits = () => {
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const notifiedTargets = new Set(notifications.map(n => `${n.targetId}-${n.type}`))
-    
-    visitTargets.forEach((target) => {
-      if (target.status === 'Completed') return
-      
-      if (target.visitDate) {
-        const visitDate = new Date(target.visitDate)
-        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-        const targetId = target._id || target.id
-        const notificationKey = `${targetId}-warning`
-        const todayNotificationKey = `${targetId}-info`
-        
-        // Check if visit date has passed and visit is not completed
-        if (visitDateOnly < today) {
-          const daysPassed = Math.floor((today - visitDateOnly) / (1000 * 60 * 60 * 24))
-          
-          if (!notifiedTargets.has(notificationKey)) {
-            addNotification({
-              message: `⚠️ Missed Visit: ${target.name} (${daysPassed} day${daysPassed > 1 ? 's' : ''} ago)`,
-              type: 'warning',
-              targetId: targetId,
-            })
-          }
-        }
-        // Check if visit is today and not completed
-        else if (visitDateOnly.getTime() === today.getTime()) {
-          if (!notifiedTargets.has(todayNotificationKey)) {
-            addNotification({
-              message: `📅 Today's Visit: ${target.name} - Please complete it`,
-              type: 'info',
-              targetId: targetId,
-            })
-          }
-        }
-      }
-    })
+    // Removed all visit completion alerts as per requirement
+    // No notifications will be shown for today's visits or missed visits
   }
 
   // Check proximity to visit targets and show notifications (Real-time detection)
@@ -744,8 +920,25 @@ const SalesTracking = () => {
 
   // Handle visit target click
   const handleVisitTargetClick = (target) => {
+    if (!target || !target.latitude || !target.longitude) return
+    
     setSelectedVisitTarget(target)
     setShowVisitTargetModal(true) // Open modal when target is clicked
+    
+    // Update map to center on clicked visit ONLY if tracking is NOT active
+    // If tracking is active, don't update map center (user requirement)
+    if (!isTracking) {
+      // Map center will update via useMemo when selectedVisitTarget changes
+    } else {
+      // When tracking is active, only update route if needed, but don't change map center
+      if (userLocation) {
+        setRouteToVisitTarget({
+          from: { lat: userLocation.latitude, lng: userLocation.longitude },
+          to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
+          target: target
+        })
+      }
+    }
   }
 
   // Handle mark as completed - with meter reading
@@ -753,6 +946,9 @@ const SalesTracking = () => {
     if (!selectedVisitTarget) return
 
     // Show completion modal to get meter reading
+    // Clear ending kilometers for individual visit completion (not required)
+    setEndingKilometers('')
+    setEndingMeterImage(null)
     setShowCompletionModal(true)
   }
 
@@ -761,66 +957,62 @@ const SalesTracking = () => {
     if (!selectedVisitTarget) return
 
     try {
-      // Validate ending kilometers
-      if (!endingKilometers || endingKilometers.trim() === '') {
-        alert('Please enter ending kilometers or upload meter image')
-        return
-      }
-
-      // Validate visited area image is required
+      // Validate visited area image is required for each visit
       if (!visitedAreaImage) {
-        alert('Please upload visited area picture. It is required to complete tracking.')
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Visited Area Picture Required',
+          text: 'Please upload visited area picture. It is required to complete this visit.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
-      // Validate ending meter image
-      if (!endingMeterImage) {
-        alert('Please capture ending meter image.')
-        return
-      }
+      // For individual visit completion, ending kilometers are NOT required
+      // They are only required at shift end (after all visits are completed)
+      // Use route distance or estimated kilometers for calculation
 
       const start = parseFloat(startingKilometers || selectedVisitTarget.startingKilometers || 0)
-      const end = parseFloat(endingKilometers)
       
-      if (isNaN(end) || end <= 0) {
-        alert('Invalid ending kilometers. Please enter a valid number.')
-        return
-      }
-
-      if (start > 0 && end < start) {
-        alert('Ending kilometers cannot be less than starting kilometers')
-        return
-      }
-
-      // Calculate actual kilometers - ensure correct calculation
+      // Calculate actual kilometers using route distance or estimated
       let actualKm = '0'
-      if (start > 0 && end > 0 && end >= start) {
-        actualKm = (end - start).toFixed(2)
-      } else if (routeDistanceKm) {
-        actualKm = parseFloat(routeDistanceKm).toFixed(2)
-      } else if (estimatedKilometers) {
-        actualKm = parseFloat(estimatedKilometers).toFixed(2)
+      let estimatedKmValue = 0
+      
+      // Use route distance if available
+      if (routeDistanceKm) {
+        const routeKm = typeof routeDistanceKm === 'number' ? routeDistanceKm : parseFloat(routeDistanceKm)
+        if (!isNaN(routeKm) && routeKm > 0) {
+          actualKm = routeKm.toFixed(2)
+          estimatedKmValue = routeKm
+        }
       }
-
-      const actualKmValue = parseFloat(actualKm)
-      const estimatedKmValue = estimatedKilometers
-        ? parseFloat(estimatedKilometers)
-        : routeDistanceKm
-        ? parseFloat(routeDistanceKm)
-        : actualKmValue
-
-      if (!estimatedKmValue || Number.isNaN(estimatedKmValue) || estimatedKmValue <= 0) {
-        alert('Unable to determine estimated kilometers. Please enter ending kilometers again.')
-        return
+      
+      // If no route distance, use estimated kilometers
+      if (estimatedKmValue === 0 && estimatedKilometers) {
+        const estKm = parseFloat(estimatedKilometers)
+        if (!isNaN(estKm) && estKm > 0) {
+          actualKm = estKm.toFixed(2)
+          estimatedKmValue = estKm
+        }
+      }
+      
+      // If still no value, use 0 (will be calculated later at shift end)
+      if (estimatedKmValue === 0) {
+        estimatedKmValue = 0
+        actualKm = '0'
       }
 
       // Update visit target with completion data
+      // Note: meterImage (ending meter) will be saved only at shift end, not per visit
+      // endingKilometers will be set at shift end, not per visit
+      // IMPORTANT: Do NOT send endingKilometers field at all for individual visits
+      // Backend validation checks if endingKilometers < startingKilometers, and null would trigger it
       const updateData = {
         status: 'Completed',
-        endingKilometers: end,
+        // endingKilometers: NOT INCLUDED - will be set at shift end only
         estimatedKilometers: estimatedKmValue,
-        meterImage: endingMeterImage || null,
-        visitedAreaImage: visitedAreaImage || null,
+        // meterImage: NOT INCLUDED - will be saved only at shift end
+        visitedAreaImage: visitedAreaImage || null, // Required for each visit - this is the proof image
         comments: targetComments || selectedVisitTarget.comments || '',
       }
 
@@ -832,35 +1024,138 @@ const SalesTracking = () => {
 
       if (result.success) {
         // Update local state
-        setVisitTargets(prev => prev.map(target => 
+        const updatedTargets = visitTargets.map(target => 
           target._id === selectedVisitTarget._id || target.id === selectedVisitTarget.id
             ? { ...target, status: 'Completed', completedAt: new Date(), ...updateData }
             : target
-        ))
-        setSelectedVisitTarget({ ...selectedVisitTarget, status: 'Completed', completedAt: new Date(), ...updateData })
+        )
+        setVisitTargets(updatedTargets)
         
-        // Close modals
-        setShowCompletionModal(false)
+        // Store completed visit data for display
+        const completedVisitData = {
+          ...selectedVisitTarget,
+          status: 'Completed',
+          completedAt: new Date(),
+          ...updateData,
+          actualKilometers: actualKm
+        }
+        setSelectedVisitTarget(completedVisitData)
+        
+        // Find next pending visit for automatic route setting
+        const todayForNext = new Date()
+        todayForNext.setHours(0, 0, 0, 0)
+        const todayPendingTarget = updatedTargets.find(t => {
+          if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+          if (t._id === selectedVisitTarget._id || t.id === selectedVisitTarget.id) return false // Exclude just completed
+          if (!t.visitDate) return false
+          const visitDate = new Date(t.visitDate)
+          const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+          return visitDateOnly.getTime() === todayForNext.getTime()
+        })
+        
+        const nextPendingTarget = todayPendingTarget || updatedTargets.find(t => 
+          (t.status === 'Pending' || t.status === 'In Progress') && 
+          (t._id !== selectedVisitTarget._id && t.id !== selectedVisitTarget.id)
+        )
+        
+        // Set ending kilometers as starting kilometers for next visit
+        // Use route distance + starting kilometers if available, otherwise keep current starting
+        if (startingKilometers) {
+          const startKm = parseFloat(startingKilometers)
+          if (!isNaN(startKm) && estimatedKmValue > 0) {
+            const nextStartKm = startKm + estimatedKmValue
+            setStartingKilometers(nextStartKm.toFixed(2))
+            setMeterReading(nextStartKm.toFixed(2))
+          }
+        }
+        
+        // Auto-set route to next visit if available
+        if (nextPendingTarget && userLocation && isTracking) {
+          setRouteToVisitTarget({
+            from: { lat: userLocation.latitude, lng: userLocation.longitude },
+            to: { lat: parseFloat(nextPendingTarget.latitude), lng: parseFloat(nextPendingTarget.longitude) },
+            target: nextPendingTarget
+          })
+        }
+        
+        // Close modals but keep completion modal open to show continue option
         setShowVisitTargetModal(false)
         
-        // Show achievement modal with congratulations
-        setShowAchievementModal(true)
+        // Show success SweetAlert for visit completion
+        await Swal.fire({
+          icon: 'success',
+          title: '🎉 Visit Completed!',
+          html: `
+            <div class="text-center">
+              <p class="text-lg mb-2"><strong>${selectedVisitTarget.name}</strong></p>
+              <p class="text-sm text-gray-600 mb-2">Distance: <strong>${actualKm} km</strong></p>
+              <p class="text-xs text-gray-500">Visit marked as completed successfully!</p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c',
+          timer: 3000,
+          timerProgressBar: true
+        })
+        
+        // Also add notification
         addNotification({
-          message: `🎉 Visit Target Completed: ${selectedVisitTarget.name} | Distance: ${actualKm} km`,
+          message: `🎉 Visit Completed: ${selectedVisitTarget.name} | Distance: ${actualKm} km`,
           type: 'success',
         })
 
-        // Clear form data
-        setEndingKilometers('')
-        setEndingMeterImage(null)
-        setEstimatedKilometers('')
-        setTargetComments('')
+        // Check if all visits are completed
+        const todayForCheck = new Date()
+        todayForCheck.setHours(0, 0, 0, 0)
+        const allTodayVisits = updatedTargets.filter(t => {
+          if (!t.visitDate) return false
+          const visitDate = new Date(t.visitDate)
+          const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+          return visitDateOnly.getTime() === todayForCheck.getTime()
+        })
+        const completedTodayVisits = allTodayVisits.filter(t => t.status === 'Completed')
+        const pendingTodayVisits = allTodayVisits.filter(t => t.status === 'Pending' || t.status === 'In Progress')
+        
+        // If all today's visits are completed, show shift end modal
+        if (pendingTodayVisits.length === 0 && completedTodayVisits.length > 0) {
+          // Close completion modal
+          setShowCompletionModal(false)
+          // Calculate ending kilometers from starting + estimated for shift end
+          // This will be updated when user uploads ending meter image at shift end
+          if (startingKilometers && estimatedKmValue > 0) {
+            const startKm = parseFloat(startingKilometers)
+            if (!isNaN(startKm)) {
+              const calculatedEnd = startKm + estimatedKmValue
+              setShiftEndingKilometers(calculatedEnd.toFixed(2))
+            }
+          }
+          // Show shift end modal for ending meter image
+          setShowShiftEndModal(true)
+        } else {
+          // Clear ending form data but keep completion modal open for continue
+          // Make sure ending kilometers are cleared for next visit
+          setEndingKilometers('')
+          setEndingMeterImage(null)
+          setVisitedAreaImage(null)
+          setEstimatedKilometers('')
+          setTargetComments('')
+          // Keep completion modal open to show continue option
+        }
       } else {
-        alert(result.message || 'Error marking target as completed')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: result.message || 'Error marking target as completed',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error marking target as completed:', error)
-      alert('Error marking target as completed')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error marking target as completed. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     }
   }
 
@@ -961,22 +1256,42 @@ const SalesTracking = () => {
         // Extract numbers from the text (kilometers)
         const numbers = text.match(/\d+/g)
         if (numbers && numbers.length > 0) {
-          // Get the largest number (likely the odometer reading)
-          const largestNumber = numbers.reduce((a, b) => {
-            const numA = parseInt(a)
-            const numB = parseInt(b)
-            return numA > numB ? a : b
-          })
-          setStartingKilometers(largestNumber)
+          // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
+          const validNumbers = numbers
+            .map(n => parseInt(n))
+            .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
+          
+          if (validNumbers.length > 0) {
+            // Get the largest valid number (likely the odometer reading)
+            const largestNumber = validNumbers.reduce((a, b) => a > b ? a : b).toString()
+            setStartingKilometers(largestNumber)
+          } else {
+            // If no valid numbers in range, try all numbers but prefer longer ones
+            const allNumbers = numbers.map(n => parseInt(n))
+            const largestNumber = allNumbers.reduce((a, b) => a > b ? a : b).toString()
+            setStartingKilometers(largestNumber)
+          }
         } else {
           setStartingKilometers('')
-          alert('Could not extract kilometers from image. Please enter manually.')
+          Swal.fire({
+            icon: 'warning',
+            title: 'OCR Failed',
+            text: 'Could not extract kilometers from image. Please try again or upload a clearer image.',
+            confirmButtonColor: '#e9931c',
+            timer: 3000,
+            timerProgressBar: true
+          })
         }
         
         await worker.terminate()
       } catch (error) {
         console.error('OCR Error:', error)
-        alert('Error extracting kilometers. Please enter manually.')
+        Swal.fire({
+          icon: 'error',
+          title: 'OCR Error',
+          text: 'Error extracting kilometers from image. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
         setStartingKilometers('')
       } finally {
         setIsExtracting(false)
@@ -1011,22 +1326,42 @@ const SalesTracking = () => {
           // Extract numbers from the text (kilometers)
           const numbers = text.match(/\d+/g)
           if (numbers && numbers.length > 0) {
-            // Get the largest number (likely the odometer reading)
-            const largestNumber = numbers.reduce((a, b) => {
-              const numA = parseInt(a)
-              const numB = parseInt(b)
-              return numA > numB ? a : b
-            })
-            setStartingKilometers(largestNumber)
+            // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
+            const validNumbers = numbers
+              .map(n => parseInt(n))
+              .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
+            
+            if (validNumbers.length > 0) {
+              // Get the largest valid number (likely the odometer reading)
+              const largestNumber = validNumbers.reduce((a, b) => a > b ? a : b).toString()
+              setStartingKilometers(largestNumber)
+            } else {
+              // If no valid numbers in range, try all numbers but prefer longer ones
+              const allNumbers = numbers.map(n => parseInt(n))
+              const largestNumber = allNumbers.reduce((a, b) => a > b ? a : b).toString()
+              setStartingKilometers(largestNumber)
+            }
           } else {
             setStartingKilometers('')
-            alert('Could not extract kilometers from image. Please enter manually.')
+            Swal.fire({
+              icon: 'warning',
+              title: 'OCR Failed',
+              text: 'Could not extract kilometers from image. Please try again or upload a clearer image.',
+              confirmButtonColor: '#e9931c',
+              timer: 3000,
+              timerProgressBar: true
+            })
           }
           
           await worker.terminate()
         } catch (error) {
           console.error('OCR Error:', error)
-          alert('Error extracting kilometers. Please enter manually.')
+          Swal.fire({
+            icon: 'error',
+            title: 'OCR Error',
+            text: 'Error extracting kilometers from image. Please try again.',
+            confirmButtonColor: '#e9931c'
+          })
           setStartingKilometers('')
         } finally {
           setIsExtracting(false)
@@ -1071,7 +1406,25 @@ const SalesTracking = () => {
   }
 
   // Handle camera capture for ending meter
+  // NOTE: This should NOT be used for individual visits - only for shift end
   const handleEndingMeterCameraCapture = async () => {
+    // Only allow if we're in shift end modal, not individual visit completion
+    // If we have a selectedVisitTarget and we're in completion modal (not shift end), don't process
+    if (selectedVisitTarget && showCompletionModal && !showShiftEndModal) {
+      // Don't process ending meter image for individual visits
+      setEndingMeterImage(null)
+      setEndingKilometers('')
+      Swal.fire({
+        icon: 'info',
+        title: 'Ending Meter Not Required',
+        text: 'Ending meter image is only required at shift end (after all visits are completed). For individual visits, only visited area picture is needed.',
+        confirmButtonColor: '#e9931c',
+        timer: 3000,
+        timerProgressBar: true
+      })
+      return
+    }
+
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
@@ -1096,41 +1449,69 @@ const SalesTracking = () => {
           // Extract numbers from the text (kilometers)
           const numbers = text.match(/\d+/g)
           if (numbers && numbers.length > 0) {
-            // Get the largest number (likely the odometer reading)
-            const largestNumber = numbers.reduce((a, b) => {
-              const numA = parseInt(a)
-              const numB = parseInt(b)
-              return numA > numB ? a : b
-            })
-            setEndingKilometers(largestNumber)
+            // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
+            const validNumbers = numbers
+              .map(n => parseInt(n))
+              .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
             
-            // Calculate distance traveled only if both values are valid
-            if (startingKilometers && largestNumber) {
-              const start = parseFloat(startingKilometers)
-              const end = parseFloat(largestNumber)
-              // Validate both are valid numbers and positive
-              if (!isNaN(start) && !isNaN(end) && start > 0 && end > 0) {
-                if (end >= start) {
-                  const distance = end - start
-                  setEstimatedKilometers(distance.toFixed(2))
-                } else {
-                  setEstimatedKilometers('')
-                  alert('Ending kilometers cannot be less than starting kilometers')
-                }
-              } else {
-                setEstimatedKilometers('')
-              }
+            let largestNumber
+            if (validNumbers.length > 0) {
+              // Get the largest valid number (likely the odometer reading)
+              largestNumber = validNumbers.reduce((a, b) => a > b ? a : b).toString()
+            } else {
+              // If no valid numbers in range, try all numbers but prefer longer ones
+              const allNumbers = numbers.map(n => parseInt(n))
+              largestNumber = allNumbers.reduce((a, b) => a > b ? a : b).toString()
+            }
+            
+            // Only set ending kilometers if we're in shift end mode
+            // For individual visits, don't set ending kilometers at all - clear everything
+            if (showShiftEndModal) {
+              setShiftEndingKilometers(largestNumber)
+            } else {
+              // For individual visits, clear ending kilometers and image
+              setEndingKilometers('')
+              setEndingMeterImage(null)
+              // Show info message
+              Swal.fire({
+                icon: 'info',
+                title: 'Ending Meter Not Required',
+                text: 'Ending meter image is only required at shift end. For individual visits, only visited area picture is needed.',
+                confirmButtonColor: '#e9931c',
+                timer: 3000,
+                timerProgressBar: true
+              })
             }
           } else {
-            setEndingKilometers('')
-            alert('Could not extract kilometers from image. Please enter manually.')
+            if (showShiftEndModal) {
+              setShiftEndingKilometers('')
+            } else {
+              setEndingKilometers('')
+            }
+            Swal.fire({
+              icon: 'warning',
+              title: 'OCR Failed',
+              text: 'Could not extract kilometers from image. Please try again or upload a clearer image.',
+              confirmButtonColor: '#e9931c',
+              timer: 3000,
+              timerProgressBar: true
+            })
           }
           
           await worker.terminate()
         } catch (error) {
           console.error('OCR Error:', error)
-          alert('Error extracting kilometers. Please enter manually.')
-          setEndingKilometers('')
+          Swal.fire({
+            icon: 'error',
+            title: 'OCR Error',
+            text: 'Error extracting kilometers from image. Please try again.',
+            confirmButtonColor: '#e9931c'
+          })
+          if (showShiftEndModal) {
+            setShiftEndingKilometers('')
+          } else {
+            setEndingKilometers('')
+          }
         } finally {
           setIsExtractingEnding(false)
         }
@@ -1141,7 +1522,26 @@ const SalesTracking = () => {
   }
 
   // Handle ending meter image upload
+  // NOTE: This should NOT be used for individual visits - only for shift end
+  // For individual visits, ending meter image is not required
   const handleEndingMeterImageUpload = async (e) => {
+    // Only allow if we're in shift end modal, not individual visit completion
+    // If we have a selectedVisitTarget and we're in completion modal (not shift end), don't process
+    if (selectedVisitTarget && showCompletionModal && !showShiftEndModal) {
+      // Don't process ending meter image for individual visits
+      setEndingMeterImage(null)
+      setEndingKilometers('')
+      Swal.fire({
+        icon: 'info',
+        title: 'Ending Meter Not Required',
+        text: 'Ending meter image is only required at shift end (after all visits are completed). For individual visits, only visited area picture is needed.',
+        confirmButtonColor: '#e9931c',
+        timer: 3000,
+        timerProgressBar: true
+      })
+      return
+    }
+
     const file = e.target.files[0]
     if (!file) return
 
@@ -1161,41 +1561,80 @@ const SalesTracking = () => {
         // Extract numbers from the text (kilometers)
         const numbers = text.match(/\d+/g)
         if (numbers && numbers.length > 0) {
-          // Get the largest number (likely the odometer reading)
-          const largestNumber = numbers.reduce((a, b) => {
-            const numA = parseInt(a)
-            const numB = parseInt(b)
-            return numA > numB ? a : b
-          })
-          setEndingKilometers(largestNumber)
+          // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
+          const validNumbers = numbers
+            .map(n => parseInt(n))
+            .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
           
-          // Calculate distance traveled only if both values are valid
-          if (startingKilometers && largestNumber) {
+          let largestNumber
+          if (validNumbers.length > 0) {
+            // Get the largest valid number (likely the odometer reading)
+            largestNumber = validNumbers.reduce((a, b) => a > b ? a : b).toString()
+          } else {
+            // If no valid numbers in range, try all numbers but prefer longer ones
+            const allNumbers = numbers.map(n => parseInt(n))
+            largestNumber = allNumbers.reduce((a, b) => a > b ? a : b).toString()
+          }
+            // Only set ending kilometers if we're in shift end mode
+            // For individual visits, don't set ending kilometers at all - clear everything
+            if (showShiftEndModal) {
+              setShiftEndingKilometers(largestNumber)
+            } else {
+              // For individual visits, clear ending kilometers and image
+              setEndingKilometers('')
+              setEndingMeterImage(null)
+              // Show info message
+              Swal.fire({
+                icon: 'info',
+                title: 'Ending Meter Not Required',
+                text: 'Ending meter image is only required at shift end. For individual visits, only visited area picture is needed.',
+                confirmButtonColor: '#e9931c',
+                timer: 3000,
+                timerProgressBar: true
+              })
+            }
+          
+          // Calculate distance only for shift end
+          if (showShiftEndModal && startingKilometers && largestNumber) {
             const start = parseFloat(startingKilometers)
             const end = parseFloat(largestNumber)
-            // Validate both are valid numbers and positive
             if (!isNaN(start) && !isNaN(end) && start > 0 && end > 0) {
               if (end >= start) {
                 const distance = end - start
-                setEstimatedKilometers(distance.toFixed(2))
-              } else {
-                setEstimatedKilometers('')
-                alert('Ending kilometers cannot be less than starting kilometers')
+                // This is for shift end, not individual visit
               }
-            } else {
-              setEstimatedKilometers('')
             }
           }
         } else {
-          setEndingKilometers('')
-          alert('Could not extract kilometers from image. Please enter manually.')
+          if (showShiftEndModal) {
+            setShiftEndingKilometers('')
+          } else {
+            setEndingKilometers('')
+          }
+          Swal.fire({
+            icon: 'warning',
+            title: 'OCR Failed',
+            text: 'Could not extract kilometers from image. Please try again or upload a clearer image.',
+            confirmButtonColor: '#e9931c',
+            timer: 3000,
+            timerProgressBar: true
+          })
         }
         
         await worker.terminate()
       } catch (error) {
         console.error('OCR Error:', error)
-        alert('Error extracting kilometers. Please enter manually.')
-        setEndingKilometers('')
+        Swal.fire({
+          icon: 'error',
+          title: 'OCR Error',
+          text: 'Error extracting kilometers from image. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
+        if (showShiftEndModal) {
+          setShiftEndingKilometers('')
+        } else {
+          setEndingKilometers('')
+        }
       } finally {
         setIsExtractingEnding(false)
       }
@@ -1204,12 +1643,40 @@ const SalesTracking = () => {
   }
 
   // Handle ending kilometers manual input
+  // NOTE: This should NOT be used for individual visits - only for shift end
+  // For individual visits, ending kilometers are not required
   const handleEndingKilometersChange = (e) => {
+    // Only allow if we're in shift end modal, not individual visit completion
+    if (selectedVisitTarget && showCompletionModal && !showShiftEndModal) {
+      // Don't allow manual entry for individual visits - clear the value
+      e.target.value = ''
+      setEndingKilometers('')
+      Swal.fire({
+        icon: 'info',
+        title: 'Ending Kilometers Not Required',
+        text: 'Ending kilometers are only required at shift end (after all visits are completed). For individual visits, only visited area picture is needed.',
+        confirmButtonColor: '#e9931c',
+        timer: 3000,
+        timerProgressBar: true
+      })
+      return
+    }
+
     const value = e.target.value
-    setEndingKilometers(value)
+    if (showShiftEndModal) {
+      setShiftEndingKilometers(value)
+    } else {
+      // Only set if not in individual visit completion mode
+      if (!selectedVisitTarget || !showCompletionModal) {
+        setEndingKilometers(value)
+      } else {
+        // Clear for individual visits
+        setEndingKilometers('')
+      }
+    }
     
-    // Calculate distance traveled only if both values are valid
-    if (startingKilometers && value && value.trim() !== '') {
+    // Calculate distance traveled only if both values are valid (for shift end)
+    if (showShiftEndModal && startingKilometers && value && value.trim() !== '') {
       const start = parseFloat(startingKilometers)
       const end = parseFloat(value)
       
@@ -1217,37 +1684,301 @@ const SalesTracking = () => {
       if (!isNaN(start) && !isNaN(end) && start > 0 && end > 0) {
         if (end >= start) {
           const distance = end - start
-          setEstimatedKilometers(distance.toFixed(2))
+          // This is for shift end calculation
         } else {
-          // Ending is less than starting - show warning but don't clear
-          setEstimatedKilometers('')
+          // Ending is less than starting - validation will happen at shift end
         }
-      } else {
-        setEstimatedKilometers('')
       }
-    } else {
-      setEstimatedKilometers('')
     }
+  }
+
+  // Handle shift end - when all visits are completed
+  const handleShiftEnd = async () => {
+    try {
+      // Validate ending kilometers - must be extracted from image
+      if (!shiftEndingKilometers || shiftEndingKilometers.trim() === '') {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Ending Kilometers Required',
+          text: 'Please upload ending meter image to extract kilometers. Manual entry is not allowed.',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      // Validate ending meter image is required at shift end
+      if (!shiftEndingMeterImage) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Ending Meter Image Required',
+          text: 'Please upload ending meter image. It is required to complete the shift.',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      const start = parseFloat(startingKilometers || meterReading || '0')
+      const end = parseFloat(shiftEndingKilometers)
+      
+      if (isNaN(end) || end <= 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid Ending Kilometers',
+          text: 'Invalid ending kilometers. Please enter a valid number.',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      if (start > 0 && end < start) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid Kilometers',
+          text: 'Ending kilometers cannot be less than starting kilometers.',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      // Calculate total distance for the shift
+      const totalDistance = start > 0 ? (end - start).toFixed(2) : '0'
+
+      // Get all completed visits for today to collect images
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const completedVisits = visitTargets.filter(t => {
+        if (t.status !== 'Completed') return false
+        if (!t.visitDate) return false
+        const visitDate = new Date(t.visitDate)
+        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+        return visitDateOnly.getTime() === today.getTime()
+      })
+
+      // Stop tracking in backend
+      let trackingId = activeTrackingId
+      if (!trackingId) {
+        try {
+          const active = await getActiveTracking()
+          trackingId = active?._id || active?.id || null
+          if (trackingId) {
+            setActiveTrackingId(trackingId)
+          }
+        } catch (error) {
+          console.error('Error fetching active tracking:', error)
+        }
+      }
+
+      if (trackingId) {
+        try {
+          const response = await stopTracking(
+            trackingId,
+            shiftEndingKilometers,
+            shiftEndingMeterImage,
+            null, // Visited area image not needed at shift end
+            userLocation?.latitude || null,
+            userLocation?.longitude || null
+          )
+          if (!response || !response.success) {
+            console.warn('Stop tracking API call failed, continuing locally')
+          }
+          setActiveTrackingId(null)
+        } catch (apiError) {
+          console.error('Error stopping tracking:', apiError)
+        }
+      }
+
+      // Stop tracking locally
+      setIsTracking(false)
+      setShowShiftEndModal(false)
+      
+      // Clear form data
+      setShiftEndingKilometers('')
+      setShiftEndingMeterImage(null)
+      setRouteToVisitTarget(null)
+      
+      // Show success SweetAlert for shift completion
+      const result = await Swal.fire({
+        icon: 'success',
+        title: '✅ Shift Completed!',
+        html: `
+          <div class="text-center">
+            <p class="text-lg mb-2">Great work today!</p>
+            <p class="text-sm text-gray-600 mb-2">Total Distance: <strong>${totalDistance} km</strong></p>
+            <p class="text-sm text-gray-600 mb-2">Visits Completed: <strong>${completedVisits.length}</strong></p>
+            <p class="text-xs text-gray-500 mt-3">All shift photos are saved in the collage.</p>
+          </div>
+        `,
+        confirmButtonColor: '#e9931c',
+        confirmButtonText: 'View Photos',
+        showCancelButton: true,
+        cancelButtonText: 'Close',
+        cancelButtonColor: '#6b7280'
+      })
+      
+      // Show shift photo collage if user clicked "View Photos"
+      if (result.isConfirmed) {
+        setShowShiftPhotoCollage(true)
+      }
+
+      // Also add notification
+      addNotification({
+        message: `✅ Shift completed! Total distance: ${totalDistance} km | ${completedVisits.length} visits completed`,
+        type: 'success',
+      })
+    } catch (error) {
+      console.error('Error completing shift:', error)
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error completing shift. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
+    }
+  }
+
+  // Handle shift ending meter image upload
+  const handleShiftEndingMeterImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const imageDataUrl = event.target.result
+      setShiftEndingMeterImage(imageDataUrl)
+      setIsExtractingShiftEnd(true)
+
+      try {
+        const worker = await createWorker('eng')
+        const { data: { text } } = await worker.recognize(imageDataUrl)
+        const numbers = text.match(/\d+/g)
+        if (numbers && numbers.length > 0) {
+          const validNumbers = numbers
+            .map(n => parseInt(n))
+            .filter(n => n >= 1000 && n <= 999999)
+          
+          let largestNumber
+          if (validNumbers.length > 0) {
+            largestNumber = validNumbers.reduce((a, b) => a > b ? a : b).toString()
+          } else {
+            const allNumbers = numbers.map(n => parseInt(n))
+            largestNumber = allNumbers.reduce((a, b) => a > b ? a : b).toString()
+          }
+            setShiftEndingKilometers(largestNumber)
+          } else {
+            setShiftEndingKilometers('')
+            Swal.fire({
+              icon: 'warning',
+              title: 'OCR Failed',
+              text: 'Could not extract kilometers from image. Please try again or upload a clearer image.',
+              confirmButtonColor: '#e9931c',
+              timer: 3000,
+              timerProgressBar: true
+            })
+          }
+          await worker.terminate()
+        } catch (error) {
+          console.error('OCR Error:', error)
+          Swal.fire({
+            icon: 'error',
+            title: 'OCR Error',
+            text: 'Error extracting kilometers from image. Please try again.',
+            confirmButtonColor: '#e9931c'
+          })
+          setShiftEndingKilometers('')
+      } finally {
+        setIsExtractingShiftEnd(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Handle shift ending meter camera capture
+  const handleShiftEndingMeterCameraCapture = async () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.capture = 'environment'
+    input.onchange = async (e) => {
+      const file = e.target.files[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        const imageDataUrl = event.target.result
+        setShiftEndingMeterImage(imageDataUrl)
+        setIsExtractingShiftEnd(true)
+
+        try {
+          const worker = await createWorker('eng')
+          const { data: { text } } = await worker.recognize(imageDataUrl)
+          const numbers = text.match(/\d+/g)
+          if (numbers && numbers.length > 0) {
+            const validNumbers = numbers
+              .map(n => parseInt(n))
+              .filter(n => n >= 1000 && n <= 999999)
+            
+            let largestNumber
+            if (validNumbers.length > 0) {
+              largestNumber = validNumbers.reduce((a, b) => a > b ? a : b).toString()
+            } else {
+              const allNumbers = numbers.map(n => parseInt(n))
+              largestNumber = allNumbers.reduce((a, b) => a > b ? a : b).toString()
+            }
+            setShiftEndingKilometers(largestNumber)
+          } else {
+            setShiftEndingKilometers('')
+            Swal.fire({
+              icon: 'warning',
+              title: 'OCR Failed',
+              text: 'Could not extract kilometers from image. Please try again or upload a clearer image.',
+              confirmButtonColor: '#e9931c',
+              timer: 3000,
+              timerProgressBar: true
+            })
+          }
+          await worker.terminate()
+        } catch (error) {
+          console.error('OCR Error:', error)
+          Swal.fire({
+            icon: 'error',
+            title: 'OCR Error',
+            text: 'Error extracting kilometers from image. Please try again.',
+            confirmButtonColor: '#e9931c'
+          })
+          setShiftEndingKilometers('')
+        } finally {
+          setIsExtractingShiftEnd(false)
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+    input.click()
   }
 
   // Handle complete tracking
   const handleCompleteTracking = async () => {
     try {
-      // Validate ending kilometers
+      // Validate ending kilometers - must be extracted from image
       if (!endingKilometers || endingKilometers.trim() === '') {
-        alert('Please enter ending kilometers or upload meter image')
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Ending Kilometers Required',
+          text: 'Please upload ending meter image to extract kilometers. Manual entry is not allowed.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
-      // Validate ending meter image
-      if (!endingMeterImage) {
-        alert('Please capture ending meter image.')
-        return
-      }
+      // Ending meter image NOT required for individual visits - only at shift end
 
       // Validate visited area image is required
       if (!visitedAreaImage) {
-        alert('Please upload visited area picture. It is required to complete tracking.')
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Visited Area Picture Required',
+          text: 'Please upload visited area picture. It is required to complete tracking.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
@@ -1256,18 +1987,33 @@ const SalesTracking = () => {
       
       // Validate starting kilometers
       if (!startingKilometers || startingKilometers.trim() === '' || isNaN(start) || start <= 0) {
-        alert('Invalid starting kilometers. Please check your starting reading.')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid Starting Kilometers',
+          text: 'Invalid starting kilometers. Please check your starting reading.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
       
       // Validate ending kilometers
       if (isNaN(end) || end <= 0) {
-        alert('Invalid ending kilometers. Please enter a valid number.')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid Ending Kilometers',
+          text: 'Invalid ending kilometers. Please enter a valid number.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
       if (end < start) {
-        alert('Ending kilometers cannot be less than starting kilometers')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid Kilometers',
+          text: 'Ending kilometers cannot be less than starting kilometers.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
@@ -1320,7 +2066,22 @@ const SalesTracking = () => {
       setEstimatedKilometers('')
       setRouteToVisitTarget(null)
 
-      // Show success message
+      // Show success SweetAlert
+      await Swal.fire({
+        icon: 'success',
+        title: '✅ Tracking Completed!',
+        html: `
+          <div class="text-center">
+            <p class="text-lg mb-2">Tracking session ended</p>
+            <p class="text-sm text-gray-600">Distance Traveled: <strong>${distanceTraveled.toFixed(2)} km</strong></p>
+          </div>
+        `,
+        confirmButtonColor: '#e9931c',
+        timer: 3000,
+        timerProgressBar: true
+      })
+
+      // Also add notification
       addNotification({
         message: `✅ Tracking completed! Distance traveled: ${distanceTraveled.toFixed(2)} km`,
         type: 'success',
@@ -1329,7 +2090,12 @@ const SalesTracking = () => {
       // TODO: Save completion data to backend if needed
     } catch (error) {
       console.error('Error completing tracking:', error)
-      alert('Error completing tracking. Please try again.')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error completing tracking. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     }
   }
 
@@ -1338,7 +2104,12 @@ const SalesTracking = () => {
     try {
       // Validate inputs
       if (!startingKilometers || startingKilometers.trim() === '') {
-        alert('Please enter starting kilometers')
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Starting Kilometers Required',
+          text: 'Please enter starting kilometers to begin tracking.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
@@ -1357,7 +2128,7 @@ const SalesTracking = () => {
           uploadedImage || '', // Base64 encoded image (optional)
           userLocation?.latitude || null,
           userLocation?.longitude || null,
-          visitedAreaImage || null // Visited area image (optional)
+          null // Visited area image removed from starting - only for ending
         )
 
         if (!response || !response.success) {
@@ -1372,56 +2143,225 @@ const SalesTracking = () => {
       
       // Clear form data
       setUploadedImage(null)
-      setVisitedAreaImage(null)
       setStartingKilometers('')
       
-      // Find first pending visit target for route
-      if (visitTargets && visitTargets.length > 0 && userLocation) {
-        const firstPendingTarget = visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
-        if (firstPendingTarget) {
+      // Try to get location if not available
+      if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
+        console.log('Location not available, attempting to fetch...')
+        try {
+          const location = await getCurrentLocation()
+          if (location && location.latitude && location.longitude) {
+            setUserLocation(location)
+            console.log('Location fetched successfully:', location)
+          }
+        } catch (error) {
+          console.error('Failed to fetch location:', error)
+        }
+      }
+      
+      // Find first pending visit target for route (prioritize today's visits)
+      // Wait for location if not available yet
+      const waitForLocationAndSetRoute = async () => {
+        let attempts = 0
+        const maxAttempts = 15 // Increased attempts
+        
+        // Get current location state
+        let currentLocation = userLocation
+        
+        // If no location, try to fetch it
+        while ((!currentLocation || !currentLocation.latitude || !currentLocation.longitude) && attempts < maxAttempts) {
+          try {
+            currentLocation = await getCurrentLocation()
+            if (currentLocation && currentLocation.latitude && currentLocation.longitude) {
+              setUserLocation(currentLocation)
+              break
+            }
+          } catch (error) {
+            console.error(`Location fetch attempt ${attempts + 1} failed:`, error)
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          attempts++
+        }
+        
+        // Use the fetched location or wait for state update
+        const finalLocation = currentLocation || userLocation
+        
+        if (visitTargets && visitTargets.length > 0) {
+          // First try to find today's pending visits
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const todayPendingTarget = visitTargets.find(t => {
+            if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+            if (!t.visitDate) return false
+            const visitDate = new Date(t.visitDate)
+            const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+            return visitDateOnly.getTime() === today.getTime()
+          })
+          
+          // If no today's visit, find any pending target
+          const firstPendingTarget = todayPendingTarget || visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
+          
+          if (firstPendingTarget && firstPendingTarget.latitude && firstPendingTarget.longitude) {
+            // Wait a bit more for location state to update if we just fetched it
+            if (!finalLocation || !finalLocation.latitude || !finalLocation.longitude) {
+              // Try one more time after a short delay
+              setTimeout(() => {
+                const stateLocation = userLocation
+                if (stateLocation && stateLocation.latitude && stateLocation.longitude) {
+                  setRouteToVisitTarget({
+                    from: { lat: stateLocation.latitude, lng: stateLocation.longitude },
+                    to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
+                    target: firstPendingTarget
+                  })
+                  console.log('Route set to:', firstPendingTarget.name)
+                }
+              }, 2000)
+            } else {
+              setRouteToVisitTarget({
+                from: { lat: finalLocation.latitude, lng: finalLocation.longitude },
+                to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
+                target: firstPendingTarget
+              })
+              console.log('Route set to:', firstPendingTarget.name)
+            }
+          } else {
+            console.warn('No pending visit target found for route')
+          }
+        }
+      }
+      
+      waitForLocationAndSetRoute()
+    } catch (error) {
+      console.error('Error in handleStartTracking:', error)
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error starting tracking. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
+      setShowStartModal(false)
+      setShowCountdown(false)
+    }
+  }
+
+  // Auto-pause tracking if no pending visits available
+  useEffect(() => {
+    if (!isTracking) return
+    
+    // Check if there are any pending or in-progress visits
+    const pendingVisits = visitTargets.filter(t => t.status === 'Pending' || t.status === 'In Progress')
+    
+    // If no pending visits and tracking is active, automatically pause tracking
+    if (pendingVisits.length === 0) {
+      console.log('No pending visits found, auto-pausing tracking...')
+      
+      // Stop tracking
+      setIsTracking(false)
+      setRouteToVisitTarget(null)
+      
+      // Stop location watching
+      if (watchIdRef.current) {
+        clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      if (locationUpdateIntervalRef.current) {
+        clearInterval(locationUpdateIntervalRef.current)
+        locationUpdateIntervalRef.current = null
+      }
+      
+      // Show notification
+      addNotification({
+        message: '⏸️ Tracking paused automatically - No pending visits available',
+        type: 'warning',
+      })
+      
+      // Stop tracking in backend
+      if (activeTrackingId) {
+        stopTracking(activeTrackingId, meterReading || startingKilometers || '0', null, null, userLocation?.latitude || null, userLocation?.longitude || null)
+          .then(() => {
+            setActiveTrackingId(null)
+            console.log('Tracking stopped in backend - no pending visits')
+          })
+          .catch((error) => {
+            console.error('Error stopping tracking in backend:', error)
+          })
+      } else {
+        // Try to get active tracking and stop it
+        getActiveTracking()
+          .then((active) => {
+            if (active && (active._id || active.id)) {
+              return stopTracking(active._id || active.id, active.startingKilometers || '0', null, null, null, null)
+            }
+          })
+          .then(() => {
+            console.log('Active tracking stopped from backend')
+          })
+          .catch((error) => {
+            console.error('Error stopping active tracking:', error)
+          })
+      }
+    }
+  }, [visitTargets, isTracking])
+
+  // Update route when visit targets change or user location updates
+  useEffect(() => {
+    if (!isTracking) return
+    
+    // Wait for user location if not available
+    if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
+      console.log('Waiting for user location to generate route...')
+      return
+    }
+    
+    // Find first pending visit target (prioritize today's visits)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayPendingTarget = visitTargets.find(t => {
+      if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+      if (!t.visitDate) return false
+      const visitDate = new Date(t.visitDate)
+      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+      return visitDateOnly.getTime() === today.getTime()
+    })
+    
+    const firstPendingTarget = todayPendingTarget || visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
+    
+    if (firstPendingTarget && firstPendingTarget.latitude && firstPendingTarget.longitude) {
+      const targetId = firstPendingTarget._id || firstPendingTarget.id
+      
+      // Check if route is already set to this target and location hasn't changed significantly
+      if (routeToVisitTarget && routeToVisitTarget.target?._id === targetId) {
+        // Only update if location changed significantly (more than 50 meters)
+        const currentFrom = routeToVisitTarget.from
+        const distance = calculateDistance(
+          currentFrom.lat,
+          currentFrom.lng,
+          userLocation.latitude,
+          userLocation.longitude
+        )
+        
+        // Update route origin only if moved more than 50 meters (to reduce map flickering)
+        if (distance > 50) {
           setRouteToVisitTarget({
             from: { lat: userLocation.latitude, lng: userLocation.longitude },
             to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
             target: firstPendingTarget
           })
         }
-      }
-    } catch (error) {
-      console.error('Error in handleStartTracking:', error)
-      alert('Error starting tracking. Please try again.')
-      setShowStartModal(false)
-      setShowCountdown(false)
-    }
-  }
-
-  // Update route when visit targets change or user location updates
-  useEffect(() => {
-    if (!isTracking) return
-    
-    // Find first pending visit target
-    const firstPendingTarget = visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
-    
-    if (firstPendingTarget && userLocation) {
-      // Check if route is already set to this target
-      if (!routeToVisitTarget || routeToVisitTarget.target?._id !== firstPendingTarget._id) {
-        setRouteToVisitTarget({
-          from: { lat: userLocation.latitude, lng: userLocation.longitude },
-          to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
-          target: firstPendingTarget
-        })
       } else {
-        // Update route origin to current location (real-time tracking)
+        // Set new route
         setRouteToVisitTarget({
           from: { lat: userLocation.latitude, lng: userLocation.longitude },
           to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
           target: firstPendingTarget
         })
+        console.log('Route generated to:', firstPendingTarget.name)
       }
     } else if (!firstPendingTarget) {
       // No pending targets, clear route
       setRouteToVisitTarget(null)
     }
-  }, [visitTargets, userLocation, isTracking])
+  }, [visitTargets, userLocation, isTracking]) // Removed routeToVisitTarget from dependencies to prevent loops
 
   // Countdown effect
   useEffect(() => {
@@ -1440,6 +2380,22 @@ const SalesTracking = () => {
       setShowCountdown(false)
       setIsTracking(true)
       if (meterReading) {
+        // Show success SweetAlert
+        Swal.fire({
+          icon: 'success',
+          title: '🚀 Tracking Started!',
+          html: `
+            <div class="text-center">
+              <p class="text-lg mb-2">Location tracking is now active</p>
+              <p class="text-sm text-gray-600">Starting Kilometers: <strong>${meterReading} km</strong></p>
+            </div>
+          `,
+          confirmButtonColor: '#e9931c',
+          timer: 3000,
+          timerProgressBar: true
+        })
+        
+        // Also add notification
         addNotification({
           message: `Tracking started with ${meterReading} km - Location tracking active`,
           type: 'success',
@@ -1454,6 +2410,59 @@ const SalesTracking = () => {
       }
     }
   }, [showCountdown, countdown, meterReading])
+
+  // Memoize map center calculation (must be at top level, not in JSX)
+  const mapCenter = useMemo(() => {
+    // If tracking is active, don't update center on visit click - keep user location
+    if (isTracking && userLocation && userLocation.latitude && userLocation.longitude) {
+      return { lat: userLocation.latitude, lng: userLocation.longitude }
+    }
+    
+    // Priority: selectedVisitTarget (when clicked) > userLocation > today's visits center > default
+    if (selectedVisitTarget && selectedVisitTarget.latitude && selectedVisitTarget.longitude) {
+      return { lat: parseFloat(selectedVisitTarget.latitude), lng: parseFloat(selectedVisitTarget.longitude) }
+    }
+    if (userLocation && userLocation.latitude && userLocation.longitude) {
+      return { lat: userLocation.latitude, lng: userLocation.longitude }
+    }
+    const todayCenter = getTodayVisitsCenter()
+    if (todayCenter && todayCenter.lat && todayCenter.lng) {
+      return todayCenter
+    }
+    return { lat: 28.6139, lng: 77.2090 }
+  }, [
+    isTracking, // Add isTracking to dependencies
+    selectedVisitTarget?._id || selectedVisitTarget?.id,
+    selectedVisitTarget?.latitude,
+    selectedVisitTarget?.longitude,
+    userLocation?.latitude,
+    userLocation?.longitude,
+    visitTargets.length
+  ])
+
+  // Memoize route info change handler (must be at top level, not in JSX)
+  const handleRouteInfoChange = useCallback((routeInfo) => {
+    if (routeInfo && routeInfo.distanceKm) {
+      // Ensure distanceKm is a number
+      const distance = typeof routeInfo.distanceKm === 'number' 
+        ? routeInfo.distanceKm 
+        : !isNaN(parseFloat(routeInfo.distanceKm)) 
+          ? parseFloat(routeInfo.distanceKm) 
+          : null
+      
+      if (distance !== null) {
+        setRouteDistanceKm(distance)
+        // Update estimated kilometers if route is available
+        if (!estimatedKilometers || estimatedKilometers === '') {
+          setEstimatedKilometers(distance.toString())
+        }
+      } else {
+        setRouteDistanceKm(null)
+      }
+    } else {
+      setRouteDistanceKm(null)
+    }
+  }, [estimatedKilometers])
 
   // Calculate map center (average of visit targets or user location)
   const getMapCenter = () => {
@@ -1490,15 +2499,16 @@ const SalesTracking = () => {
           <div>
             <h2 className="text-2xl font-bold text-gray-800">Sales Tracking - Map View</h2>
             <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
-              Proximity Alert: {PROXIMITY_DISTANCE_KM}km | GPS: {userLocation ? (
-                <span className="inline-flex items-center gap-1">
-                  <FaMapMarkerAlt className="w-4 h-4 text-green-600" />
-                  <span>Active</span>
-                </span>
+              Proximity Alert: {PROXIMITY_DISTANCE_KM}km |               GPS: {userLocation && userLocation.latitude && userLocation.longitude ? (
+                <span>Active ({userLocation.latitude.toFixed(4)}, {userLocation.longitude.toFixed(4)})</span>
               ) : (
-                <span className="inline-flex items-center gap-1">
-                  <FaClock className="w-4 h-4 text-yellow-600" />
-                  <span>Getting location...</span>
+                <span>Getting location...</span>
+              )}
+              {isTracking && (routeDistanceKm || estimatedKilometers) && (
+                <span className="ml-3 inline-flex items-center gap-1">
+                  <span className="text-[#e9931c] font-semibold">
+                    Est. Distance: {routeDistanceKm && typeof routeDistanceKm === 'number' ? `${routeDistanceKm.toFixed(2)} km` : routeDistanceKm && !isNaN(parseFloat(routeDistanceKm)) ? `${parseFloat(routeDistanceKm).toFixed(2)} km` : estimatedKilometers ? `${estimatedKilometers} km` : 'Calculating...'}
+                  </span>
                 </span>
               )}
             </p>
@@ -1509,7 +2519,7 @@ const SalesTracking = () => {
                 setShowVisitAssignmentModal(true)
                 setSelectedVisitsForAssignment(visitTargets.filter(v => v.status !== 'Completed').map(v => v._id || v.id))
               }}
-              className="px-3 md:px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
+              className="px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 bg-gray-600 text-white hover:bg-gray-700"
               title="Assign visits to dates"
             >
               <FaCalendarAlt className="w-5 h-5" />
@@ -1523,37 +2533,40 @@ const SalesTracking = () => {
                   loadCustomers()
                 }
               }}
-              className="px-3 md:px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 bg-[#e9931c] text-white hover:bg-[#d8820a]"
+              className="px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 bg-gray-600 text-white hover:bg-gray-700"
               title="Request a new visit (admin approval required)"
             >
-              <FaMapMarkerAlt className="w-5 h-5" />
-              <span className="hidden md:inline" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Request Visit</span>
+              <FaMapMarkerAlt className="w-4 h-4" />
+              <span className="hidden md:inline text-sm" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Request Visit</span>
             </button>
             <button
               onClick={() => {
                 if (isTracking) {
                   // Show completion modal instead of directly stopping
-                  setShowCompletionModal(true)
+                  // Clear ending kilometers for individual visit completion (not required)
+    setEndingKilometers('')
+    setEndingMeterImage(null)
+    setShowCompletionModal(true)
                 } else {
                   setShowStartModal(true)
                 }
               }}
-              className={`px-3 md:px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
+              className={`px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
                 isTracking
-                  ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'bg-green-600 text-white hover:bg-green-700'
+                  ? 'bg-gray-600 text-white hover:bg-gray-700'
+                  : 'bg-gray-600 text-white hover:bg-gray-700'
               }`}
               title={isTracking ? 'Pause Tracking' : 'Start Tracking'}
             >
               {isTracking ? (
                 <>
-                  <FaPause className="w-5 h-5 md:w-5 md:h-5" />
-                  <span className="hidden md:inline" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Pause Tracking</span>
+                  <FaPause className="w-4 h-4" />
+                  <span className="hidden md:inline text-sm" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Pause Tracking</span>
                 </>
               ) : (
                 <>
-                  <FaPlay className="w-5 h-5 md:w-5 md:h-5" />
-                  <span className="hidden md:inline" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Start Tracking</span>
+                  <FaPlay className="w-4 h-4" />
+                  <span className="hidden md:inline text-sm" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Start Tracking</span>
                 </>
               )}
             </button>
@@ -1561,14 +2574,22 @@ const SalesTracking = () => {
         </div>
 
         {/* Notifications */}
-        <div className="fixed top-4 right-4 z-50 space-y-2">
-          {notifications.map((notification) => (
-            <NotificationToast
+        <div className="fixed top-4 right-4 z-[9998] space-y-2" style={{ pointerEvents: 'none' }}>
+          {notifications.map((notification, index) => (
+            <div
               key={notification.id}
-              message={notification.message}
-              type={notification.type}
-              onClose={() => removeNotification(notification.id)}
-            />
+              style={{
+                marginTop: index > 0 ? '8px' : '0',
+                pointerEvents: 'auto',
+              }}
+            >
+              <NotificationToast
+                message={notification.message}
+                type={notification.type}
+                onClose={() => removeNotification(notification.id)}
+                duration={5000}
+              />
+            </div>
           ))}
         </div>
 
@@ -1582,10 +2603,12 @@ const SalesTracking = () => {
               {userLocation || visitTargets.length > 0 ? (
                 <GoogleMapView
                   milestones={[]}
-                  visitTargets={visitTargets}
+                  visitTargets={visitTargets.filter(target => 
+                    target.status !== 'Completed' && target.status !== 'completed'
+                  )}
                   userLocation={userLocation}
                   onMarkerClick={handleVisitTargetClick}
-                  center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : selectedVisitTarget ? { lat: parseFloat(selectedVisitTarget.latitude), lng: parseFloat(selectedVisitTarget.longitude) } : { lat: 28.6139, lng: 77.2090 }}
+                  center={mapCenter}
                   zoom={13}
                   height="100%"
                   showUserLocation={true}
@@ -1597,17 +2620,7 @@ const SalesTracking = () => {
                   } : null}
                   isTracking={isTracking}
                   selectedTarget={selectedVisitTarget}
-                  onRouteInfoChange={(routeInfo) => {
-                    if (routeInfo && routeInfo.distanceKm) {
-                      setRouteDistanceKm(routeInfo.distanceKm)
-                      // Update estimated kilometers if route is available
-                      if (!estimatedKilometers || estimatedKilometers === '') {
-                        setEstimatedKilometers(routeInfo.distanceKm)
-                      }
-                    } else {
-                      setRouteDistanceKm(null)
-                    }
-                  }}
+                  onRouteInfoChange={handleRouteInfoChange}
                 />
               ) : (
                 <div className="bg-white rounded-lg h-full flex items-center justify-center border-2 border-dashed border-gray-300">
@@ -1670,135 +2683,7 @@ const SalesTracking = () => {
             }}
           >
             <div>
-            {selectedVisitTarget ? (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-700">
-                    Visit Target: {selectedVisitTarget.name}
-                  </h3>
-                  <button
-                    onClick={() => setSelectedVisitTarget(null)}
-                    className="text-gray-500 hover:text-gray-700"
-                    title="Close Details"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-2">
-                    <span className="font-semibold">Address:</span> {selectedVisitTarget.address || 'N/A'}
-                  </p>
-                  {selectedVisitTarget.city && (
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">City:</span> {selectedVisitTarget.city}
-                    </p>
-                  )}
-                  {selectedVisitTarget.state && (
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">State:</span> {selectedVisitTarget.state}
-                    </p>
-                  )}
-                  {selectedVisitTarget.pincode && (
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">Pincode:</span> {selectedVisitTarget.pincode}
-                    </p>
-                  )}
-                  <p className="text-sm text-gray-600 mb-2">
-                    <span className="font-semibold">Priority:</span> {selectedVisitTarget.priority || 'Medium'}
-                  </p>
-                  {selectedVisitTarget.visitDate && (
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">Visit Date:</span> {new Date(selectedVisitTarget.visitDate).toLocaleDateString()}
-                    </p>
-                  )}
-                  <p className="text-sm text-gray-600">
-                    <span className="font-semibold">Status:</span>{' '}
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      selectedVisitTarget.status === 'Completed'
-                        ? 'bg-green-100 text-green-800'
-                        : selectedVisitTarget.status === 'In Progress'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {selectedVisitTarget.status}
-                    </span>
-                  </p>
-                  {userLocation && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      <span className="font-semibold">Distance:</span> {getDistanceToVisitTarget(selectedVisitTarget)}
-                    </p>
-                  )}
-                </div>
-
-                {selectedVisitTarget.description && (
-                  <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-gray-700">
-                      <span className="font-semibold">Description:</span> {selectedVisitTarget.description}
-                    </p>
-                  </div>
-                )}
-
-                {selectedVisitTarget.notes && (
-                  <div className="mb-4 p-4 bg-yellow-50 rounded-lg">
-                    <p className="text-sm text-gray-700">
-                      <span className="font-semibold">Notes:</span> {selectedVisitTarget.notes}
-                    </p>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="mt-6 space-y-3">
-                  {selectedVisitTarget.status !== 'Completed' && (
-                    <>
-                      <button
-                        onClick={handleCreateQuotation}
-                        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Create Quotation
-                      </button>
-                      <button
-                        onClick={handleMarkAsCompleted}
-                        className="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Mark as Completed
-                      </button>
-                    </>
-                  )}
-                  {selectedVisitTarget.status === 'Completed' && (
-                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-sm font-semibold text-green-800">Visit Target Completed!</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          // Navigate to achievements
-                          const event = new CustomEvent('navigateToTab', { detail: 'achievements' })
-                          window.dispatchEvent(event)
-                        }}
-                        className="w-full mt-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                        </svg>
-                        View Achievements
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
+              {/* Tabs */}
               <div
                 className={`transition-all duration-500 ease-in-out transform ${
                   showRightPanel
@@ -1809,21 +2694,71 @@ const SalesTracking = () => {
                   transitionDelay: showRightPanel ? '0.1s' : '0s'
                 }}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-700">Visit Targets</h3>
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 mb-4 bg-gray-50 rounded-t-lg">
+                  <button
+                    onClick={() => setRightPanelTab('visits')}
+                    className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                      rightPanelTab === 'visits'
+                        ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                    }`}
                   >
-                    <option value="All">All Dates</option>
-                    <option value="Today">Today</option>
-                    <option value="Tomorrow">Tomorrow</option>
-                    <option value="This Week">This Week</option>
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="Past">Past</option>
-                  </select>
+                    <FaMapMarkerAlt className="w-4 h-4" />
+                    Visits
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRightPanelTab('tasks')
+                      if (followUps.length === 0) {
+                        loadFollowUps()
+                      }
+                    }}
+                    className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                      rightPanelTab === 'tasks'
+                        ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FaTasks className="w-4 h-4" />
+                    Tasks
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRightPanelTab('samples')
+                      if (samples.length === 0) {
+                        loadSamples()
+                      }
+                    }}
+                    className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                      rightPanelTab === 'samples'
+                        ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FaFlask className="w-4 h-4" />
+                    Samples
+                  </button>
                 </div>
+
+                {/* Tab Content */}
+                {rightPanelTab === 'visits' && (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-700">Visit Targets</h3>
+                      <select
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                        className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      >
+                        <option value="All">All Dates</option>
+                        <option value="Today">Today</option>
+                        <option value="Tomorrow">Tomorrow</option>
+                        <option value="This Week">This Week</option>
+                        <option value="Upcoming">Upcoming</option>
+                        <option value="Past">Past</option>
+                      </select>
+                    </div>
                 
                 {/* Date-wise Grouped Visit Targets */}
                 {visitTargets.length === 0 ? (
@@ -1842,7 +2777,14 @@ const SalesTracking = () => {
                       return (
                         <div
                           key={targetId}
-                          onClick={() => handleVisitTargetClick(target)}
+                          onClick={() => {
+                            handleVisitTargetClick(target)
+                            // Update map center on visit click
+                            if (target.latitude && target.longitude) {
+                              setSelectedVisitTarget(target)
+                              // Map will automatically center on selectedVisitTarget
+                            }
+                          }}
                           className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                             isSelected
                               ? 'border-blue-500 bg-blue-50 shadow-md'
@@ -1967,13 +2909,18 @@ const SalesTracking = () => {
                               <div className="space-y-2">
                                 {section.visits
                                   .sort((a, b) => {
-                                    // Sort by visit date
+                                    // Sort by visit date (includes time) - earliest first
                                     if (a.visitDate && b.visitDate) {
                                       return new Date(a.visitDate) - new Date(b.visitDate)
                                     }
-                                    // Then by status
-                                    const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
-                                    return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
+                                    if (!a.visitDate && !b.visitDate) {
+                                      // Then by status if no date
+                                      const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
+                                      return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
+                                    }
+                                    if (!a.visitDate) return 1
+                                    if (!b.visitDate) return -1
+                                    return 0
                                   })
                                   .map((target) => {
                         const targetId = target._id || target.id
@@ -1982,17 +2929,8 @@ const SalesTracking = () => {
                           <div
                             key={targetId}
                             onClick={() => {
+                              // handleVisitTargetClick already handles map update and route
                               handleVisitTargetClick(target)
-                              // Only show route if tracking is started
-                              if (userLocation && isTracking) {
-                                setRouteToVisitTarget({
-                                  from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                  to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-                                  target: target
-                                })
-                              } else {
-                                setRouteToVisitTarget(null)
-                              }
                             }}
                             className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                               isSelected
@@ -2099,7 +3037,7 @@ const SalesTracking = () => {
                                 }}
                                 className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
                                   isTracking 
-                                    ? 'bg-[#e9931c] text-white hover:bg-[#d8820a]' 
+                                    ? 'bg-gray-600 text-white hover:bg-gray-700' 
                                     : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                                 }`}
                                 title={isTracking ? "Show Route" : "Start tracking to see route"}
@@ -2119,13 +3057,18 @@ const SalesTracking = () => {
                         // Show filtered list
                         return filteredVisits
                           .sort((a, b) => {
-                            // Sort by visit date
+                            // Sort by visit date (includes time) - earliest first
                             if (a.visitDate && b.visitDate) {
                               return new Date(a.visitDate) - new Date(b.visitDate)
                             }
-                            // Then by status
-                            const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
-                            return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
+                            if (!a.visitDate && !b.visitDate) {
+                              // Then by status if no date
+                              const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
+                              return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
+                            }
+                            if (!a.visitDate) return 1
+                            if (!b.visitDate) return -1
+                            return 0
                           })
                           .map((target) => {
                             const targetId = target._id || target.id
@@ -2250,7 +3193,7 @@ const SalesTracking = () => {
                                     }}
                                     className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
                                       isTracking 
-                                        ? 'bg-[#e9931c] text-white hover:bg-[#d8820a]' 
+                                        ? 'bg-gray-600 text-white hover:bg-gray-700' 
                                         : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                                     }`}
                                     title={isTracking ? "Show Route" : "Start tracking to see route"}
@@ -2266,8 +3209,129 @@ const SalesTracking = () => {
                     })()}
                   </div>
                 )}
+                  </>
+                )}
+
+                {rightPanelTab === 'tasks' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-700">Tasks (Follow-ups)</h3>
+                    </div>
+                    {followUps.length === 0 ? (
+                      <div className="text-center py-8">
+                        <FaTasks className="w-16 h-16 text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-600 font-medium">No tasks assigned</p>
+                        <p className="text-sm text-gray-500 mt-1">Tasks will appear here once assigned</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto">
+                        {followUps
+                          .filter(f => f.status !== 'Completed')
+                          .sort((a, b) => {
+                            if (a.dueDate && b.dueDate) {
+                              return new Date(a.dueDate) - new Date(b.dueDate)
+                            }
+                            return 0
+                          })
+                          .map((task) => (
+                            <div
+                              key={task._id || task.id}
+                              className="p-4 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1">
+                                  <p className="font-semibold text-gray-800">{task.customerName || 'No Customer'}</p>
+                                  <p className="text-sm text-gray-600 mt-1">{task.type || 'Follow-up'}</p>
+                                  {task.dueDate && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Due: {new Date(task.dueDate).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-semibold ${
+                                    task.status === 'Completed'
+                                      ? 'bg-green-100 text-green-800'
+                                      : task.status === 'Today'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : task.status === 'Overdue'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {task.status}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {rightPanelTab === 'samples' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-700">Sample Tracker</h3>
+                    </div>
+                    {samples.length === 0 ? (
+                      <div className="text-center py-8">
+                        <FaFlask className="w-16 h-16 text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-600 font-medium">No samples assigned</p>
+                        <p className="text-sm text-gray-500 mt-1">Samples will appear here once assigned</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto">
+                        {samples
+                          .filter(s => s.status !== 'Completed')
+                          .sort((a, b) => {
+                            if (a.visitDate && b.visitDate) {
+                              return new Date(a.visitDate) - new Date(b.visitDate)
+                            }
+                            return 0
+                          })
+                          .map((sample) => (
+                            <div
+                              key={sample._id || sample.id}
+                              onClick={() => {
+                                // Update map if sample has location
+                                if (sample.latitude && sample.longitude) {
+                                  setSelectedVisitTarget({
+                                    latitude: sample.latitude,
+                                    longitude: sample.longitude,
+                                    name: sample.customerName || 'Sample Location',
+                                    _id: sample._id || sample.id
+                                  })
+                                  // Map will automatically center on selectedVisitTarget
+                                }
+                              }}
+                              className="p-4 rounded-lg border-2 border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm cursor-pointer"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1">
+                                  <p className="font-semibold text-gray-800">{sample.customerName || 'No Customer'}</p>
+                                  {sample.product && (
+                                    <p className="text-sm text-gray-600 mt-1">Product: {sample.product.name || sample.product}</p>
+                                  )}
+                                  {sample.visitDate && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Visit Date: {new Date(sample.visitDate).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                  <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-semibold ${
+                                    sample.status === 'Completed'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {sample.status}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
             </div>
           </div>
         </div>
@@ -2277,32 +3341,21 @@ const SalesTracking = () => {
       {showStartModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp mx-auto">
-            {/* Modal Header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
-                    <span className="text-xl sm:text-2xl">🏍️</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white leading-tight">Start Tracking</h3>
-                    <p className="text-xs sm:text-sm text-orange-100 mt-0.5">Upload speedometer image</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowStartModal(false)
-                    setUploadedImage(null)
-                    setVisitedAreaImage(null)
-                    setStartingKilometers('')
-                  }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-colors active:scale-95"
-                >
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+            {/* Modal Header - Removed colored header */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">Start Tracking</h3>
+              <button
+                onClick={() => {
+                  setShowStartModal(false)
+                  setUploadedImage(null)
+                  setStartingKilometers('')
+                }}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -2321,9 +3374,9 @@ const SalesTracking = () => {
                   <button
                     type="button"
                     onClick={handleStartingSpeedometerCameraCapture}
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -2331,9 +3384,9 @@ const SalesTracking = () => {
                   </button>
                   <label
                     htmlFor="speedometer-upload"
-                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
+                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                     Upload
@@ -2380,75 +3433,6 @@ const SalesTracking = () => {
                 </div>
               )}
 
-              {/* Current Visited Area Image Upload */}
-              <div className="mb-5 sm:mb-6">
-                <label className="block text-sm sm:text-base font-bold text-gray-800 mb-3">
-                  📍 Upload Current Visited Area Picture
-                </label>
-                {/* Camera and Upload Buttons */}
-                <div className="flex gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={handleVisitedAreaCameraCapture}
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Camera
-                  </button>
-                  <label
-                    htmlFor="visited-area-upload"
-                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload
-                  </label>
-                </div>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleVisitedAreaImageUpload}
-                    className="hidden"
-                    id="visited-area-upload"
-                  />
-                  <div
-                    className="flex flex-col items-center justify-center w-full h-32 sm:h-40 border-2 border-dashed border-gray-300 rounded-xl"
-                  >
-                    {visitedAreaImage ? (
-                      <div className="w-full h-full flex items-center justify-center p-2">
-                        <img
-                          src={visitedAreaImage}
-                          alt="Visited Area"
-                          className="max-w-full max-h-full object-cover rounded-lg shadow-sm"
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <svg className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <p className="text-xs sm:text-sm text-gray-700 font-semibold">No image selected</p>
-                        <p className="text-xs text-gray-500 mt-1">Use camera or upload button above (Optional)</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {visitedAreaImage && (
-                  <button
-                    onClick={() => setVisitedAreaImage(null)}
-                    className="mt-2 text-xs sm:text-sm text-red-600 hover:text-red-700 font-semibold"
-                  >
-                    Remove Image
-                  </button>
-                )}
-              </div>
-
               {/* Starting Kilometers Input */}
               <div className="mb-5 sm:mb-6">
                 <label className="block text-sm sm:text-base font-bold text-gray-800 mb-2.5">
@@ -2460,7 +3444,7 @@ const SalesTracking = () => {
                     value={startingKilometers}
                     onChange={(e) => setStartingKilometers(e.target.value)}
                     placeholder="Will be auto-filled from image"
-                    className="w-full px-4 py-3 sm:py-3.5 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c] transition-all text-base sm:text-lg font-bold placeholder:text-gray-400"
+                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all text-sm font-medium placeholder:text-gray-400"
                   />
                   {startingKilometers && (
                     <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -2495,7 +3479,7 @@ const SalesTracking = () => {
                     handleStartTracking()
                   }}
                   disabled={!startingKilometers || startingKilometers.trim() === '' || isExtracting}
-                  className="flex-1 px-4 py-3 sm:py-3.5 bg-gradient-to-r from-[#e9931c] to-[#d8820a] text-white rounded-xl hover:from-[#d8820a] hover:to-[#c77109] active:scale-95 transition-all font-bold text-sm sm:text-base shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
                 >
                   {isExtracting ? (
                     <>
@@ -2519,34 +3503,24 @@ const SalesTracking = () => {
       {showCompletionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp mx-auto">
-            {/* Modal Header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
-                    <span className="text-xl sm:text-2xl">🏁</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white leading-tight">
-                      {selectedVisitTarget ? `Complete: ${selectedVisitTarget.name}` : 'Complete Tracking'}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-orange-100 mt-0.5">Upload ending meter reading</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowCompletionModal(false)
-                    setEndingKilometers('')
-                    setEndingMeterImage(null)
-                    setEstimatedKilometers('')
-                  }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 sm:p-2 transition-colors active:scale-95"
-                >
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+            {/* Modal Header - Removed colored header */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
+                {selectedVisitTarget ? `Complete: ${selectedVisitTarget.name}` : 'Complete Tracking'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowCompletionModal(false)
+                  setEndingKilometers('')
+                  setEndingMeterImage(null)
+                  setEstimatedKilometers('')
+                }}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -2568,92 +3542,68 @@ const SalesTracking = () => {
                 )}
               </div>
 
-              {/* Ending Meter Image Upload */}
-              <div className="mb-5 sm:mb-6">
-                <label className="block text-sm sm:text-base font-bold text-gray-800 mb-3">
-                  Ending Meter Reading (Upload Image) *
-                </label>
-                {/* Camera and Upload Buttons */}
-                <div className="flex gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={handleEndingMeterCameraCapture}
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Camera
-                  </button>
-                  <label
-                    htmlFor="ending-meter-upload"
-                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload
-                  </label>
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleEndingMeterImageUpload}
-                  className="hidden"
-                  id="ending-meter-upload"
-                />
-                <div
-                  className="flex flex-col items-center justify-center w-full h-40 sm:h-48 md:h-56 border-2 border-dashed border-gray-300 rounded-xl"
-                >
-                  {endingMeterImage ? (
-                    <div className="w-full h-full flex items-center justify-center p-2">
-                      <img
-                        src={endingMeterImage}
-                        alt="Ending meter"
-                        className="max-w-full max-h-full rounded-lg object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-center p-4">
-                      <svg className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <p className="text-sm sm:text-base text-gray-700 font-semibold">No image selected</p>
-                      <p className="text-xs sm:text-sm text-gray-500 mt-1">Use camera or upload button above</p>
-                    </div>
-                  )}
-                </div>
-                {isExtractingEnding && (
-                  <div className="mt-2 p-4 bg-orange-50 border-2 border-orange-200 rounded-xl text-center">
-                    <div className="inline-block animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-4 border-[#e9931c] border-t-transparent mb-3"></div>
-                    <p className="text-sm sm:text-base font-bold text-[#e9931c] mb-1">🔍 Extracting kilometers from image...</p>
-                    <p className="text-xs sm:text-sm text-gray-600">Please wait, this may take a few seconds</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Ending Kilometers Manual Input */}
-              <div className="mb-5 sm:mb-6">
-                <label className="block text-sm sm:text-base font-bold text-gray-800 mb-2.5">
-                  Ending Kilometers (Manual Entry) *
-                </label>
-                <input
-                  type="number"
-                  value={endingKilometers}
-                  onChange={handleEndingKilometersChange}
-                  placeholder="Enter ending kilometers"
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c] text-lg font-semibold"
-                />
-              </div>
-
-              {/* Distance Traveled Display */}
-              {estimatedKilometers && (
+              {/* Estimated Kilometers Display */}
+              {(routeDistanceKm || estimatedKilometers) && (
                 <div className="mb-5 sm:mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
-                  <p className="text-sm font-semibold text-green-800 mb-1">Distance Traveled</p>
-                  <p className="text-2xl font-bold text-green-700">{estimatedKilometers} km</p>
-                  <p className="text-xs text-green-600 mt-1">Calculated: {endingKilometers} - {startingKilometers} = {estimatedKilometers} km</p>
+                  <p className="text-sm font-semibold text-green-800 mb-1">Estimated Distance</p>
+                  <p className="text-2xl font-bold text-green-700">
+                    {routeDistanceKm && typeof routeDistanceKm === 'number' ? `${routeDistanceKm.toFixed(2)} km` : routeDistanceKm && !isNaN(parseFloat(routeDistanceKm)) ? `${parseFloat(routeDistanceKm).toFixed(2)} km` : estimatedKilometers ? `${estimatedKilometers} km` : 'Calculating...'}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1">Based on route calculation</p>
                 </div>
+              )}
+
+              {/* Ending Meter Image Upload - REMOVED for individual visits */}
+              {/* Ending meter image will be required only when all visits are completed (shift end modal) */}
+
+              {/* Ending Kilometers - NOT SHOWN for individual visits (only at shift end) */}
+              {/* Individual visits don't need ending kilometers - only visited area image */}
+
+              {/* Distance Traveled Display - Only Current Visit */}
+              {selectedVisitTarget && selectedVisitTarget.status === 'Completed' && selectedVisitTarget.actualKilometers ? (
+                <div className="mb-5 sm:mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                  <p className="text-sm font-semibold text-green-800 mb-1">This Visit Distance</p>
+                  <p className="text-2xl font-bold text-green-700">{selectedVisitTarget.actualKilometers} km</p>
+                  <p className="text-xs text-green-600 mt-1">Distance traveled for this visit only</p>
+                </div>
+              ) : estimatedKilometers && routeDistanceKm ? (
+                <div className="mb-5 sm:mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                  <p className="text-sm font-semibold text-green-800 mb-1">Estimated Distance</p>
+                  <p className="text-2xl font-bold text-green-700">{estimatedKilometers} km</p>
+                  <p className="text-xs text-green-600 mt-1">Based on route calculation</p>
+                </div>
+              ) : null}
+
+              {/* Remaining Visits Count */}
+              {selectedVisitTarget && selectedVisitTarget.status === 'Completed' && (
+                (() => {
+                  const today = new Date()
+                  today.setHours(0, 0, 0, 0)
+                  const remainingVisits = visitTargets.filter(t => {
+                    if (t.status === 'Completed') return false
+                    if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+                    if (!t.visitDate) return false
+                    const visitDate = new Date(t.visitDate)
+                    const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                    return visitDateOnly.getTime() === today.getTime()
+                  })
+                  const nextVisit = remainingVisits.find(t => {
+                    if (!t.visitDate) return false
+                    const visitDate = new Date(t.visitDate)
+                    const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                    return visitDateOnly.getTime() === today.getTime()
+                  }) || remainingVisits[0]
+                  
+                  return remainingVisits.length > 0 ? (
+                    <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                      <p className="text-sm font-semibold text-blue-800 mb-1">Remaining Visits</p>
+                      <p className="text-2xl font-bold text-blue-700">{remainingVisits.length}</p>
+                      {nextVisit && (
+                        <p className="text-xs text-blue-600 mt-1">Next: {nextVisit.name}</p>
+                      )}
+                    </div>
+                  ) : null
+                })()
               )}
 
               {/* Visited Area Image Upload - Required */}
@@ -2665,9 +3615,9 @@ const SalesTracking = () => {
                   <button
                     type="button"
                     onClick={handleVisitedAreaCameraCapture}
-                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -2675,9 +3625,9 @@ const SalesTracking = () => {
                   </button>
                   <label
                     htmlFor="visited-area-upload-completion"
-                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
+                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                     Upload
@@ -2728,31 +3678,118 @@ const SalesTracking = () => {
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4 border-t-2 border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowCompletionModal(false)
-                    setEndingKilometers('')
-                    setEndingMeterImage(null)
-                    setEstimatedKilometers('')
-                  }}
-                  className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedVisitTarget) {
-                      handleCompleteTarget()
-                    } else {
-                      handleCompleteTracking()
-                    }
-                  }}
-                  disabled={!endingKilometers || endingKilometers.trim() === '' || !endingMeterImage || !visitedAreaImage || isExtractingEnding}
-                  className="flex-1 px-4 py-3 sm:py-3.5 bg-gradient-to-r from-[#e9931c] to-[#d8820a] text-white rounded-xl hover:from-[#d8820a] hover:to-[#c77109] active:scale-95 transition-all font-bold text-sm sm:text-base shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
-                >
-                  <FaCheckCircle className="w-5 h-5" />
-                  <span>{selectedVisitTarget ? 'Complete Target' : 'Complete Tracking'}</span>
-                </button>
+                {selectedVisitTarget && selectedVisitTarget.status === 'Completed' ? (
+                  // Show Continue button after completion
+                  (() => {
+                    const today = new Date()
+                    today.setHours(0, 0, 0, 0)
+                    const remainingVisits = visitTargets.filter(t => {
+                      if (t.status === 'Completed') return false
+                      if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+                      if (!t.visitDate) return false
+                      const visitDate = new Date(t.visitDate)
+                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                      return visitDateOnly.getTime() === today.getTime()
+                    })
+                    const nextVisit = remainingVisits.find(t => {
+                      if (!t.visitDate) return false
+                      const visitDate = new Date(t.visitDate)
+                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                      return visitDateOnly.getTime() === today.getTime()
+                    }) || remainingVisits[0]
+                    
+                    return (
+                      <>
+                        <button
+                          onClick={() => {
+                            setShowCompletionModal(false)
+                            setShowAchievementModal(true)
+                          }}
+                          className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
+                        >
+                          Close
+                        </button>
+                        {nextVisit && isTracking ? (
+                          <button
+                            onClick={() => {
+                              // Set next visit as selected
+                              setSelectedVisitTarget(nextVisit)
+                              // Set ending kilometers as starting for next visit
+                              if (selectedVisitTarget.endingKilometers) {
+                                setStartingKilometers(selectedVisitTarget.endingKilometers.toString())
+                                setMeterReading(selectedVisitTarget.endingKilometers.toString())
+                              }
+                              // Set route to next visit
+                              if (userLocation) {
+                                setRouteToVisitTarget({
+                                  from: { lat: userLocation.latitude, lng: userLocation.longitude },
+                                  to: { lat: parseFloat(nextVisit.latitude), lng: parseFloat(nextVisit.longitude) },
+                                  target: nextVisit
+                                })
+                              }
+                              // Close completion modal
+                              setShowCompletionModal(false)
+                              // Open next visit modal
+                              setShowVisitTargetModal(true)
+                              addNotification({
+                                message: `📍 Next Visit: ${nextVisit.name} | Starting from ${selectedVisitTarget.endingKilometers || 'current'} km`,
+                                type: 'info',
+                              })
+                            }}
+                            className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
+                          >
+                            <FaArrowRight className="w-4 h-4" />
+                            <span>Continue to Next Visit</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setShowCompletionModal(false)
+                              setShowAchievementModal(true)
+                            }}
+                            className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
+                          >
+                            <FaCheckCircle className="w-5 h-5" />
+                            <span>Done</span>
+                          </button>
+                        )}
+                      </>
+                    )
+                  })()
+                ) : (
+                  // Show normal complete button before completion
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowCompletionModal(false)
+                        setEndingKilometers('')
+                        setEndingMeterImage(null)
+                        setEstimatedKilometers('')
+                      }}
+                      className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedVisitTarget) {
+                          handleCompleteTarget()
+                        } else {
+                          handleCompleteTracking()
+                        }
+                      }}
+                      disabled={
+                        selectedVisitTarget 
+                          ? (!visitedAreaImage || isExtractingEnding) // For individual visit: only visited area image required
+                          : (!endingKilometers || endingKilometers.trim() === '' || !visitedAreaImage || isExtractingEnding) // For complete tracking: both required
+                      }
+                      className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
+                    >
+                      <FaCheckCircle className="w-5 h-5" />
+                      <span>{selectedVisitTarget ? 'Complete Target' : 'Complete Tracking'}</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2761,31 +3798,22 @@ const SalesTracking = () => {
 
       {/* Visit Target Action Modal - Opens when target is clicked */}
       {showVisitTargetModal && selectedVisitTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
-                    <span className="text-2xl">🎯</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Visit Target</h3>
-                    <p className="text-sm text-orange-100 mt-0.5">{selectedVisitTarget.name}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowVisitTargetModal(false)
-                    setSelectedVisitTarget(null)
-                  }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto animate-slideUp my-auto">
+            {/* Header removed - simple border */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-gray-800">{selectedVisitTarget.name}</h3>
+              <button
+                onClick={() => {
+                  setShowVisitTargetModal(false)
+                  setSelectedVisitTarget(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             <div className="p-6">
@@ -2833,7 +3861,7 @@ const SalesTracking = () => {
                   value={targetComments || selectedVisitTarget.comments || ''}
                   onChange={(e) => setTargetComments(e.target.value)}
                   placeholder="Add comments about this visit target..."
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c] transition-all resize-none"
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all resize-none text-sm"
                   rows="3"
                 />
               </div>
@@ -2842,7 +3870,9 @@ const SalesTracking = () => {
               {routeDistanceKm && isTracking && (
                 <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
                   <p className="text-sm font-semibold text-blue-800 mb-1">Estimated Route Distance</p>
-                  <p className="text-2xl font-bold text-blue-700">{routeDistanceKm} km</p>
+                  <p className="text-2xl font-bold text-blue-700">
+                    {typeof routeDistanceKm === 'number' ? `${routeDistanceKm.toFixed(2)} km` : !isNaN(parseFloat(routeDistanceKm)) ? `${parseFloat(routeDistanceKm).toFixed(2)} km` : `${routeDistanceKm} km`}
+                  </p>
                   <p className="text-xs text-blue-600 mt-1">Based on best route calculation</p>
                 </div>
               )}
@@ -2854,9 +3884,9 @@ const SalesTracking = () => {
                     handleCreateQuotation()
                     setShowVisitTargetModal(false)
                   }}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   Create Quotation
@@ -2864,30 +3894,36 @@ const SalesTracking = () => {
 
                 <button
                   onClick={() => {
+                    // Store visit target customer info for sales upload form auto-fill
+                    if (selectedVisitTarget) {
+                      const visitTargetData = {
+                        id: selectedVisitTarget._id || selectedVisitTarget.id,
+                        _id: selectedVisitTarget._id || selectedVisitTarget.id,
+                        name: selectedVisitTarget.name,
+                        address: selectedVisitTarget.address,
+                        city: selectedVisitTarget.city,
+                        state: selectedVisitTarget.state,
+                        pincode: selectedVisitTarget.pincode,
+                        // Customer details from visit target
+                        customerName: selectedVisitTarget.name || '',
+                        customerAddress: `${selectedVisitTarget.address || ''}, ${selectedVisitTarget.city || ''}, ${selectedVisitTarget.state || ''} ${selectedVisitTarget.pincode || ''}`.trim(),
+                      }
+                      
+                      localStorage.setItem('salesUploadVisitTarget', JSON.stringify(visitTargetData))
+                      localStorage.setItem('openSalesUploadForm', 'true')
+                    }
+                    
                     setShowVisitTargetModal(false)
-                    const event = new CustomEvent('navigateToTab', { detail: 'achievements' })
+                    // Navigate to sales-submissions tab
+                    const event = new CustomEvent('navigateToTab', { detail: 'sales-submissions' })
                     window.dispatchEvent(event)
                   }}
-                  className="w-full px-4 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                   </svg>
                   Achievement
-                </button>
-
-                <button
-                  onClick={() => {
-                    setShowVisitTargetModal(false)
-                    const event = new CustomEvent('navigateToTab', { detail: 'achievements' })
-                    window.dispatchEvent(event)
-                  }}
-                  className="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  Conversion
                 </button>
 
                 {selectedVisitTarget.status !== 'Completed' && (
@@ -2896,9 +3932,9 @@ const SalesTracking = () => {
                       setShowVisitTargetModal(false)
                       handleMarkAsCompleted()
                     }}
-                    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                    className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                     Complete Target
@@ -2911,7 +3947,7 @@ const SalesTracking = () => {
                   setShowVisitTargetModal(false)
                   setSelectedVisitTarget(null)
                 }}
-                className="w-full mt-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                className="w-full mt-4 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
               >
                 Close
               </button>
@@ -2925,21 +3961,17 @@ const SalesTracking = () => {
       {showRequestVisitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-white">Request a Visit</h3>
-                  <p className="text-sm text-orange-100 mt-1">Admin approval required</p>
-                </div>
-                <button
-                  onClick={() => setShowRequestVisitModal(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+            {/* Header removed - simple border */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-xl font-semibold text-gray-800">Request a Visit</h3>
+              <button
+                onClick={() => setShowRequestVisitModal(false)}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
@@ -3071,7 +4103,7 @@ const SalesTracking = () => {
                       <button
                         type="button"
                         onClick={() => setRequestForm(prev => ({ ...prev, latitude: String(userLocation.latitude) }))}
-                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                        className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
                         title="Use current location"
                       >
                         📍 Use GPS
@@ -3092,7 +4124,7 @@ const SalesTracking = () => {
                       <button
                         type="button"
                         onClick={() => setRequestForm(prev => ({ ...prev, longitude: String(userLocation.longitude) }))}
-                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                        className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium"
                         title="Use current location"
                       >
                         📍 Use GPS
@@ -3122,7 +4154,7 @@ const SalesTracking = () => {
                 <button
                   onClick={handleSubmitVisitRequest}
                   disabled={requestSubmitting}
-                  className="flex-1 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50"
                 >
                   {requestSubmitting ? 'Submitting...' : 'Submit Request'}
                 </button>
@@ -3136,32 +4168,23 @@ const SalesTracking = () => {
       {showVisitAssignmentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-2xl flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
-                    <FaCalendarAlt className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Assign</h3>
-                    <p className="text-sm text-blue-100 mt-0.5">Assign Visits, Tasks, or Sample Track to dates</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowVisitAssignmentModal(false)
-                    setSelectedVisitsForAssignment([])
-                    setSelectedFollowUpsForAssignment([])
-                    setSelectedSamplesForAssignment([])
-                    setAssignmentDate('')
-                    setSelectedDateForView('')
-                    setAssignModalActiveTab('visits')
-                  }}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
-                >
-                  <FaTimes className="w-6 h-6" />
-                </button>
-              </div>
+            {/* Header removed - simple border */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-xl font-semibold text-gray-800">Assign</h3>
+              <button
+                onClick={() => {
+                  setShowVisitAssignmentModal(false)
+                  setSelectedVisitsForAssignment([])
+                  setSelectedFollowUpsForAssignment([])
+                  setSelectedSamplesForAssignment([])
+                  setAssignmentDate('')
+                  setSelectedDateForView('')
+                  setAssignModalActiveTab('visits')
+                }}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
+              >
+                <FaTimes className="w-6 h-6" />
+              </button>
             </div>
 
             {/* Tabs */}
@@ -3187,10 +4210,10 @@ const SalesTracking = () => {
                   // Load tasks (follow-ups) when tab is clicked
                   loadFollowUps()
                 }}
-                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                className={`flex-1 px-4 py-3 font-semibold transition-colors items-center justify-center gap-2 ${
                   assignModalActiveTab === 'tasks'
-                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600 flex'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100 flex'
                 }`}
               >
                 <FaTasks className="w-4 h-4" />
@@ -3216,7 +4239,7 @@ const SalesTracking = () => {
             <div className="p-6 overflow-y-auto flex-1">
               {/* Calendar Date Selection - Common for all tabs */}
               <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                   <FaCalendarAlt className="text-blue-600" />
                   Select Date to View & Assign
                 </label>
@@ -3345,7 +4368,15 @@ const SalesTracking = () => {
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {dueVisits.map((visit) => (
-                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-red-200">
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-red-200 cursor-pointer hover:bg-red-50 transition-colors"
+                                >
                                   <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                       <p className="font-medium text-gray-800">{visit.name}</p>
@@ -3370,7 +4401,17 @@ const SalesTracking = () => {
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {todayVisits.map((visit) => (
-                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-blue-200">
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={(e) => {
+                                    // Don't trigger if clicking the button
+                                    if (e.target.closest('button')) return
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-blue-200 cursor-pointer hover:bg-blue-50 transition-colors"
+                                >
                                   <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                       <p className="font-medium text-gray-800">{visit.name}</p>
@@ -3380,7 +4421,8 @@ const SalesTracking = () => {
                                       </p>
                                     </div>
                                     <button
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation()
                                         if (!isTracking) {
                                           setShowStartModal(true)
                                         }
@@ -3407,7 +4449,15 @@ const SalesTracking = () => {
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {tomorrowVisits.map((visit) => (
-                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-green-200">
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-green-200 cursor-pointer hover:bg-green-50 transition-colors"
+                                >
                                   <div className="flex-1">
                                     <p className="font-medium text-gray-800">{visit.name}</p>
                                     <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
@@ -3430,7 +4480,15 @@ const SalesTracking = () => {
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {remainingVisits.map((visit) => (
-                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-yellow-200">
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-yellow-200 cursor-pointer hover:bg-yellow-50 transition-colors"
+                                >
                                   <div className="flex-1">
                                     <p className="font-medium text-gray-800">{visit.name}</p>
                                     <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
@@ -3453,7 +4511,15 @@ const SalesTracking = () => {
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {upcomingVisits.map((visit) => (
-                                <div key={visit._id || visit.id} className="p-3 bg-white rounded-lg border border-purple-200">
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-purple-200 cursor-pointer hover:bg-purple-50 transition-colors"
+                                >
                                   <div className="flex-1">
                                     <p className="font-medium text-gray-800">{visit.name}</p>
                                     <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
@@ -4025,9 +5091,9 @@ const SalesTracking = () => {
                     const event = new CustomEvent('navigateToTab', { detail: 'achievements' })
                     window.dispatchEvent(event)
                   }}
-                  className="w-full px-4 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                   </svg>
                   View Achievements
@@ -4035,6 +5101,268 @@ const SalesTracking = () => {
                 <button
                   onClick={() => setShowAchievementModal(false)}
                   className="w-full px-4 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shift End Modal - When all visits are completed */}
+      {showShiftEndModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp mx-auto">
+            {/* Modal Header */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
+                Shift End - Upload Ending Meter Reading
+              </h3>
+              <button
+                onClick={() => {
+                  setShowShiftEndModal(false)
+                  setShiftEndingKilometers('')
+                  setShiftEndingMeterImage(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto">
+              <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
+                All visits completed! Please upload ending meter reading to complete the shift.
+              </p>
+
+              {/* Starting Kilometers Display */}
+              <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                <p className="text-sm font-semibold text-blue-800 mb-1">Starting Reading</p>
+                <p className="text-2xl font-bold text-blue-700">
+                  {startingKilometers && !isNaN(parseFloat(startingKilometers)) && parseFloat(startingKilometers) > 0 
+                    ? `${startingKilometers} km` 
+                    : meterReading || 'Not set'}
+                </p>
+              </div>
+
+              {/* Ending Meter Image Upload */}
+              <div className="mb-5 sm:mb-6">
+                <label className="block text-sm sm:text-base font-bold text-gray-800 mb-3">
+                  Ending Meter Reading (Upload Image) *
+                </label>
+                <div className="flex gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={handleShiftEndingMeterCameraCapture}
+                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Camera
+                  </button>
+                  <label
+                    htmlFor="shift-ending-meter-upload"
+                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload
+                  </label>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleShiftEndingMeterImageUpload}
+                  className="hidden"
+                  id="shift-ending-meter-upload"
+                />
+                <div className="flex flex-col items-center justify-center w-full h-40 sm:h-48 md:h-56 border-2 border-dashed border-gray-300 rounded-xl">
+                  {shiftEndingMeterImage ? (
+                    <div className="w-full h-full flex items-center justify-center p-2">
+                      <img
+                        src={shiftEndingMeterImage}
+                        alt="Ending meter"
+                        className="max-w-full max-h-full rounded-lg object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center p-4">
+                      <svg className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-sm sm:text-base text-gray-700 font-semibold">No image selected</p>
+                      <p className="text-xs sm:text-sm text-gray-500 mt-1">Use camera or upload button above</p>
+                    </div>
+                  )}
+                </div>
+                {isExtractingShiftEnd && (
+                  <div className="mt-2 p-4 bg-orange-50 border-2 border-orange-200 rounded-xl text-center">
+                    <div className="inline-block animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-4 border-[#e9931c] border-t-transparent mb-3"></div>
+                    <p className="text-sm sm:text-base font-bold text-[#e9931c] mb-1">🔍 Extracting kilometers from image...</p>
+                    <p className="text-xs sm:text-sm text-gray-600">Please wait, this may take a few seconds</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Ending Kilometers - Auto-extracted from image only */}
+              {shiftEndingKilometers && (
+                <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <p className="text-sm font-semibold text-blue-800 mb-1">Extracted Ending Kilometers</p>
+                  <p className="text-2xl font-bold text-blue-700">{shiftEndingKilometers} km</p>
+                  <p className="text-xs text-blue-600 mt-1">Extracted from meter image</p>
+                </div>
+              )}
+
+              {/* Total Distance Display */}
+              {shiftEndingKilometers && startingKilometers && (
+                <div className="mb-5 sm:mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                  <p className="text-sm font-semibold text-green-800 mb-1">Total Shift Distance</p>
+                  <p className="text-2xl font-bold text-green-700">
+                    {(() => {
+                      const start = parseFloat(startingKilometers || meterReading || '0')
+                      const end = parseFloat(shiftEndingKilometers)
+                      if (!isNaN(start) && !isNaN(end) && end >= start) {
+                        return `${(end - start).toFixed(2)} km`
+                      }
+                      return 'Calculating...'
+                    })()}
+                  </p>
+                  <p className="text-xs text-green-600 mt-1">Total distance for all visits today</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t-2 border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowShiftEndModal(false)
+                    setShiftEndingKilometers('')
+                    setShiftEndingMeterImage(null)
+                  }}
+                  className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleShiftEnd}
+                  disabled={!shiftEndingKilometers || shiftEndingKilometers.trim() === '' || !shiftEndingMeterImage || isExtractingShiftEnd}
+                  className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
+                >
+                  <FaCheckCircle className="w-5 h-5" />
+                  <span>Complete Shift</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shift Photo Collage Modal */}
+      {showShiftPhotoCollage && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl animate-slideUp mx-auto">
+            {/* Modal Header */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
+                Shift Photo Collage - All Proof Images
+              </h3>
+              <button
+                onClick={() => {
+                  setShowShiftPhotoCollage(false)
+                }}
+                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body - Collage */}
+            <div className="p-4 sm:p-6 max-h-[80vh] overflow-y-auto">
+              {(() => {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const completedVisits = visitTargets.filter(t => {
+                  if (t.status !== 'Completed') return false
+                  if (!t.visitDate) return false
+                  const visitDate = new Date(t.visitDate)
+                  const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                  return visitDateOnly.getTime() === today.getTime()
+                })
+
+                const allImages = []
+                
+                // Add starting meter image if available
+                if (uploadedImage) {
+                  allImages.push({ type: 'Starting Meter', image: uploadedImage, visitName: 'Shift Start' })
+                }
+                
+                // Add visited area images from all completed visits
+                completedVisits.forEach((visit, index) => {
+                  if (visit.visitedAreaImage) {
+                    allImages.push({ 
+                      type: 'Visited Area', 
+                      image: visit.visitedAreaImage, 
+                      visitName: visit.name || `Visit ${index + 1}` 
+                    })
+                  }
+                })
+                
+                // Add ending meter image
+                if (shiftEndingMeterImage) {
+                  allImages.push({ type: 'Ending Meter', image: shiftEndingMeterImage, visitName: 'Shift End' })
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div className="mb-4 p-3 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                      <p className="text-sm font-semibold text-blue-800">
+                        Total Images: {allImages.length} | Completed Visits: {completedVisits.length}
+                      </p>
+                    </div>
+                    
+                    {allImages.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {allImages.map((item, index) => (
+                          <div key={index} className="border-2 border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                            <div className="p-2 bg-gray-100 border-b border-gray-200">
+                              <p className="text-xs font-semibold text-gray-700">{item.type}</p>
+                              <p className="text-xs text-gray-600 truncate">{item.visitName}</p>
+                            </div>
+                            <div className="aspect-square bg-white flex items-center justify-center p-2">
+                              <img
+                                src={item.image}
+                                alt={`${item.type} - ${item.visitName}`}
+                                className="max-w-full max-h-full object-contain rounded"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <p className="text-gray-600">No images available</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 mt-4 border-t-2 border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowShiftPhotoCollage(false)
+                  }}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium"
                 >
                   Close
                 </button>

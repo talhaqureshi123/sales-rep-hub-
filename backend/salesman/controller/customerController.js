@@ -190,6 +190,7 @@ const createCustomer = async (req, res) => {
       status,
       notes,
       competitorInfo,
+      view,
     } = req.body;
 
     // Validate required fields - use firstName if provided, otherwise use name
@@ -236,6 +237,7 @@ const createCustomer = async (req, res) => {
       status: status || 'Active',
       notes,
       competitorInfo,
+      view: view || 'admin_salesman', // Default: visible to both admin and salesman
       createdBy: req.user._id, // Set createdBy to logged-in salesman
     });
 

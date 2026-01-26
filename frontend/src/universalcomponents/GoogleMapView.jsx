@@ -302,16 +302,36 @@ const GoogleMapView = ({
     } 
     // Priority 5: Only targets available
     else if (milestones.length > 0 || visitTargets.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds()
-      milestones.forEach((milestone) => {
-        bounds.extend({ lat: milestone.latitude, lng: milestone.longitude })
-      })
-      visitTargets.forEach((target) => {
+      // Filter out completed targets for map bounds calculation
+      const activeTargets = visitTargets.filter(target => 
+        target.status !== 'Completed' && target.status !== 'completed'
+      )
+      
+      // If only one active target, zoom in close instead of fitting bounds
+      if (activeTargets.length === 1 && milestones.length === 0) {
+        const target = activeTargets[0]
         if (target.latitude && target.longitude) {
-          bounds.extend({ lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) })
+          map.setCenter({ lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) })
+          map.setZoom(16) // Close zoom for single location
         }
-      })
-      map.fitBounds(bounds, { padding: 100 })
+      } else if (activeTargets.length > 0 || milestones.length > 0) {
+        const bounds = new window.google.maps.LatLngBounds()
+        milestones.forEach((milestone) => {
+          bounds.extend({ lat: milestone.latitude, lng: milestone.longitude })
+        })
+        activeTargets.forEach((target) => {
+          if (target.latitude && target.longitude) {
+            bounds.extend({ lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) })
+          }
+        })
+        map.fitBounds(bounds, { padding: 100 })
+        // Ensure minimum zoom level after fitBounds completes
+        setTimeout(() => {
+          if (map.getZoom() < 15) {
+            map.setZoom(15) // Minimum zoom of 15 for better visibility of live locations
+          }
+        }, 100)
+      }
     } 
     // Priority 6: Default center
     else {
@@ -527,8 +547,13 @@ const GoogleMapView = ({
     markersRef.current = markersRef.current.filter((m) => m.type !== 'visitTargetCircle')
 
     // Add visit target markers with orange/yellow pin icon
-    console.log('GoogleMapView - Processing visit targets:', visitTargets.length)
-    visitTargets.forEach((target) => {
+    // Filter out completed targets - only show pending/in-progress targets on map
+    const activeTargets = visitTargets.filter(target => 
+      target.status !== 'Completed' && target.status !== 'completed'
+    )
+    
+    console.log('GoogleMapView - Processing visit targets:', activeTargets.length, '(filtered from', visitTargets.length, 'total)')
+    activeTargets.forEach((target) => {
       console.log('GoogleMapView - Target:', target.name, 'Coords:', target.latitude, target.longitude)
       // Validate coordinates
       if (!target.latitude || !target.longitude || 
@@ -539,7 +564,7 @@ const GoogleMapView = ({
       }
 
       const isPending = target.status === 'Pending' || target.status === 'In Progress'
-      const isCompleted = target.status === 'Completed'
+      // Completed targets are already filtered out, so no need to check isCompleted
       
       // Use custom styled pin for visit targets (clean, professional look)
       const visitTargetMarker = new window.google.maps.Marker({
@@ -548,7 +573,7 @@ const GoogleMapView = ({
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: isPending ? 10 : 8,
-          fillColor: isCompleted ? '#10b981' : '#e9931c', // Green for completed, orange for pending
+          fillColor: '#e9931c', // Orange for active targets (completed are filtered out)
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 3,
@@ -824,8 +849,11 @@ const GoogleMapView = ({
     }
   }, [])
 
+  // Convert height prop to proper CSS value
+  const mapHeight = height === '100%' ? '100%' : (typeof height === 'string' ? height : `${height}px`)
+  
   return (
-    <div style={{ height, width: '100%', position: 'relative' }} className="rounded-lg overflow-hidden border-2 border-gray-200">
+    <div style={{ height: mapHeight, width: '100%', position: 'relative', minHeight: '400px' }} className="rounded-lg overflow-hidden border-2 border-gray-200">
       {/* Loading State */}
       {isLoading && !mapError && (
         <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
@@ -859,7 +887,7 @@ const GoogleMapView = ({
         </div>
       )}
       
-      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: '400px' }}></div>
+      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: '400px', position: 'relative' }}></div>
       
       {/* Route Info Display */}
       {routeInfo && routeToMilestone && (

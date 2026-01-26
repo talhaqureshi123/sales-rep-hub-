@@ -8,6 +8,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [showAddForm, setShowAddForm] = useState(openAddForm)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [userRole, setUserRole] = useState(null) // Current user role
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -21,10 +22,14 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     status: 'Not Visited',
     notes: '',
     competitorInfo: '',
+    view: 'admin_salesman', // View access: 'admin', 'salesman', 'admin_salesman'
   })
 
   // Load data on mount
   useEffect(() => {
+    // Get current user role
+    const role = localStorage.getItem('userRole')
+    setUserRole(role)
     loadCustomers()
   }, [])
 
@@ -96,6 +101,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
         status: formData.status,
         notes: formData.notes,
         competitorInfo: formData.competitorInfo,
+        view: formData.view || 'admin_salesman',
       }
 
       const result = await createCustomer(customerData)
@@ -114,6 +120,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
           status: 'Not Visited',
           notes: '',
           competitorInfo: '',
+          view: 'admin_salesman',
         })
         handleCloseForm()
         loadCustomers()
@@ -358,6 +365,27 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     placeholder="Competitor prices, delivery schedules, weak points....."
                   />
                 </div>
+
+                {/* View Access Dropdown - Only for Admin or Salesman */}
+                {(userRole === 'admin' || userRole === 'salesman') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">View Access *</label>
+                    <select
+                      name="view"
+                      value={formData.view}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    >
+                      <option value="admin_salesman">Admin and Salesman</option>
+                      <option value="admin">Admin Only</option>
+                      <option value="salesman">Salesman Only</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">Select who can view this customer</p>
+                  </div>
+                )}
+
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"

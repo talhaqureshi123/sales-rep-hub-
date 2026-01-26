@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { getVisitTargets, createVisitTarget, updateVisitTarget, deleteVisitTarget } from '../../services/adminservices/visitTargetService'
 import { getUsers } from '../../services/adminservices/userService'
 import { FaEdit, FaTrash } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const VisitTargetManagement = () => {
   const [visitTargets, setVisitTargets] = useState([])
@@ -208,12 +209,22 @@ const VisitTargetManagement = () => {
   // Handle location search using Google Places API
   const handleLocationSearch = (searchQuery) => {
     if (!searchQuery || !searchQuery.trim()) {
-      alert('Please enter a location to search')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Location Required',
+        text: 'Please enter a location to search',
+        confirmButtonColor: '#e9931c',
+      })
       return
     }
 
     if (!window.google || !window.google.maps) {
-      alert('Google Maps is not loaded yet. Please wait a moment and try again.')
+      Swal.fire({
+        icon: 'info',
+        title: 'Loading...',
+        text: 'Google Maps is not loaded yet. Please wait a moment and try again.',
+        confirmButtonColor: '#e9931c',
+      })
       return
     }
 
@@ -267,7 +278,12 @@ const VisitTargetManagement = () => {
           })
         }
       } else {
-        alert('Location not found. Please try a different search term.')
+        Swal.fire({
+          icon: 'error',
+          title: 'Location Not Found',
+          text: 'Location not found. Please try a different search term.',
+          confirmButtonColor: '#e9931c',
+        })
       }
     })
   }
@@ -312,7 +328,12 @@ const VisitTargetManagement = () => {
       console.log('VisitTargetManagement - Create result:', result)
       
       if (result.success) {
-        alert('Visit target created successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Visit target created successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         resetForm()
         setShowAddForm(false)
         // Reload visit targets after a short delay to ensure data is saved
@@ -320,11 +341,21 @@ const VisitTargetManagement = () => {
           loadVisitTargets()
         }, 500)
       } else {
-        alert(result.message || 'Failed to create visit target')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to create visit target',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error creating visit target:', error)
-      alert('Error creating visit target')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating visit target',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -366,24 +397,50 @@ const VisitTargetManagement = () => {
       const result = await updateVisitTarget(editingTarget._id, targetData)
       
       if (result.success) {
-        alert('Visit target updated successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Visit target updated successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         setEditingTarget(null)
         resetForm()
         setShowAddForm(false)
         loadVisitTargets()
       } else {
-        alert(result.message || 'Failed to update visit target')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to update visit target',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error updating visit target:', error)
-      alert('Error updating visit target')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating visit target',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleDeleteTarget = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this visit target?')) {
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Visit Target?',
+      text: 'Are you sure you want to delete this visit target? This action cannot be undone.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!confirmResult.isConfirmed) {
       return
     }
 
@@ -392,14 +449,29 @@ const VisitTargetManagement = () => {
       const result = await deleteVisitTarget(id)
       
       if (result.success) {
-        alert('Visit target deleted successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Deleted!',
+          text: 'Visit target deleted successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         loadVisitTargets()
       } else {
-        alert(result.message || 'Failed to delete visit target')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to delete visit target',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error deleting visit target:', error)
-      alert('Error deleting visit target')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting visit target',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -413,11 +485,21 @@ const VisitTargetManagement = () => {
       if (result.success) {
         loadVisitTargets()
       } else {
-        alert(result.message || 'Failed to approve visit request')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to approve visit request',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (e) {
       console.error('Approve error:', e)
-      alert('Error approving visit request')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error approving visit request',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -425,18 +507,42 @@ const VisitTargetManagement = () => {
 
   const handleReject = async (target) => {
     if (!target?._id) return
-    const reason = window.prompt('Reject reason (optional):', '') || ''
+    
+    const { value: reason, isConfirmed } = await Swal.fire({
+      title: 'Reject Visit Request',
+      text: 'Enter rejection reason (optional):',
+      input: 'text',
+      inputPlaceholder: 'Enter reason...',
+      showCancelButton: true,
+      confirmButtonText: 'Reject',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!isConfirmed) return
+
     setLoading(true)
     try {
       const result = await updateVisitTarget(target._id, { approvalStatus: 'Rejected', rejectionReason: reason })
       if (result.success) {
         loadVisitTargets()
       } else {
-        alert(result.message || 'Failed to reject visit request')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to reject visit request',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (e) {
       console.error('Reject error:', e)
-      alert('Error rejecting visit request')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error rejecting visit request',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }

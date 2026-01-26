@@ -30,6 +30,11 @@ const salesSubmissionSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    location: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     salesDate: {
       type: Date,
       required: true,

@@ -82,6 +82,11 @@ const customerSchema = new mongoose.Schema({
     enum: ['app', 'hubspot'],
     default: 'app',
   },
+  view: {
+    type: String,
+    enum: ['admin', 'salesman', 'admin_salesman'],
+    default: 'admin_salesman', // Default: visible to both admin and salesman
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
-import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp } from 'react-icons/fa'
+import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = () => {
@@ -17,6 +17,7 @@ const CustomerManagement = () => {
   const [filterStatus, setFilterStatus] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
+  const [userRole, setUserRole] = useState(null) // Current user role
   // Customer Detail Modal State
   const [showCustomerDetailModal, setShowCustomerDetailModal] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -32,6 +33,7 @@ const CustomerManagement = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     contactPerson: '',
+    company: '',
     email: '',
     phone: '',
     address: '',
@@ -41,6 +43,7 @@ const CustomerManagement = () => {
     status: 'Not Visited',
     notes: '',
     competitorInfo: '',
+    view: 'admin_salesman', // View access: 'admin', 'salesman', 'admin_salesman'
   })
 
   const statusOptions = [
@@ -54,6 +57,9 @@ const CustomerManagement = () => {
 
   // Load data on mount
   useEffect(() => {
+    // Get current user role
+    const role = localStorage.getItem('userRole')
+    setUserRole(role)
     loadCustomers()
     loadSalesmen()
   }, [])
@@ -116,6 +122,7 @@ const CustomerManagement = () => {
         firstName: formData.firstName,
         name: formData.firstName, // Keep name for backward compatibility
         contactPerson: formData.contactPerson,
+        company: formData.company,
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
@@ -126,6 +133,7 @@ const CustomerManagement = () => {
         notes: formData.notes,
         competitorInfo: formData.competitorInfo,
         assignedSalesman: formData.assignedSalesman || null,
+        view: formData.view || 'admin_salesman',
       }
 
       const result = await createCustomer(customerData)
@@ -167,6 +175,7 @@ const CustomerManagement = () => {
     setFormData({
       firstName: customer.firstName || customer.name || '',
       contactPerson: customer.contactPerson || '',
+      company: customer.company || '',
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
@@ -176,6 +185,7 @@ const CustomerManagement = () => {
       status: customer.status || 'Not Visited',
       notes: customer.notes || '',
       competitorInfo: customer.competitorInfo || '',
+      view: customer.view || 'admin_salesman',
     })
     setShowAddForm(true)
   }
@@ -199,6 +209,7 @@ const CustomerManagement = () => {
         notes: formData.notes,
         competitorInfo: formData.competitorInfo,
         assignedSalesman: formData.assignedSalesman || null,
+        view: formData.view || 'admin_salesman',
       }
 
       const result = await updateCustomer(editingCustomer._id, customerData)
@@ -207,9 +218,19 @@ const CustomerManagement = () => {
         setShowAddForm(false)
         resetForm()
         await loadCustomers()
-        alert('Customer updated successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Customer updated successfully!',
+          confirmButtonColor: '#e9931c',
+        })
       } else {
-        alert(result.message || 'Failed to update customer')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to update customer',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error updating customer:', error)
@@ -229,7 +250,19 @@ const CustomerManagement = () => {
       })
       return
     }
-    if (!window.confirm('Are you sure you want to delete this customer?')) {
+
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Customer?',
+      text: 'Are you sure you want to delete this customer? This action cannot be undone.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!confirmResult.isConfirmed) {
       return
     }
 
@@ -405,6 +438,7 @@ const CustomerManagement = () => {
     setFormData({
       firstName: '',
       contactPerson: '',
+      company: '',
       email: '',
       phone: '',
       address: '',
@@ -414,6 +448,7 @@ const CustomerManagement = () => {
       status: 'Not Visited',
       notes: '',
       competitorInfo: '',
+      view: 'admin_salesman',
     })
     setShowAddForm(false)
     setLoading(false)
@@ -615,6 +650,19 @@ const CustomerManagement = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+                <input
+                  type="text"
+                  name="company"
+                  value={formData.company}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="Enter company name"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                 <input
                   type="email"
@@ -744,6 +792,26 @@ const CustomerManagement = () => {
                 />
               </div>
 
+              {/* View Access Dropdown - Only for Admin or Salesman */}
+              {(userRole === 'admin' || userRole === 'salesman') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">View Access *</label>
+                  <select
+                    name="view"
+                    value={formData.view}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="admin_salesman">Admin and Salesman</option>
+                    <option value="admin">Admin Only</option>
+                    <option value="salesman">Salesman Only</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">Select who can view this customer</p>
+                </div>
+              )}
+
               <div className="flex gap-3 justify-end pt-4">
                 <button
                   type="button"
@@ -822,7 +890,11 @@ const CustomerManagement = () => {
           {/* Customer Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {customers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((customer) => {
-            const salesman = getSalesmanInfo(customer.assignedSalesman?._id || customer.assignedSalesman)
+            // Note: assignedSalesman field was removed from Customer model
+            // Salesmen are now linked through Tasks/FollowUps, not directly to customers
+            // Check if customer has assignedSalesman in raw data (legacy data)
+            const salesmanId = customer.assignedSalesman?._id || customer.assignedSalesman
+            const salesman = salesmanId ? getSalesmanInfo(salesmanId) : null
             return (
               <div
                 key={customer._id}
@@ -926,15 +998,42 @@ const CustomerManagement = () => {
                       <span className="font-medium">Address:</span> {customer.address}
                     </p>
                   )}
-                  {salesman && (
+                  {salesman ? (
                     <p className="text-gray-600">
-                      <span className="font-medium">Salesman:</span> {salesman.name}
+                      <span className="font-medium">Salesman:</span> {salesman.name || salesman.email || 'Unknown'}
+                    </p>
+                  ) : (
+                    // Note: assignedSalesman field was removed - salesmen are linked through tasks/visits
+                    <p className="text-gray-500 text-xs italic">
+                      Salesman assigned through tasks/visits
                     </p>
                   )}
-                  <div className="pt-2">
+                  <div className="pt-2 flex items-center justify-between">
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(customer.status)}`}>
                       {customer.status}
                     </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditCustomer(customer)
+                        }}
+                        className="p-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors"
+                        title="Edit Customer"
+                      >
+                        <FaEdit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteCustomer(customer._id)
+                        }}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete Customer"
+                      >
+                        <FaTrash className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

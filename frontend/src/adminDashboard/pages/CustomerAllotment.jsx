@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
-import { getCustomers, updateCustomer } from '../../services/adminservices/customerService'
+import { getCustomers, updateCustomer, getCustomer } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
+import { createFollowUp } from '../../services/adminservices/followUpService'
+import { FaUser, FaFilter } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const CustomerAllotment = () => {
   const [customers, setCustomers] = useState([])
   const [allCustomers, setAllCustomers] = useState([]) // raw list for counts/limits
   const [salesmen, setSalesmen] = useState([])
+  const [admins, setAdmins] = useState([]) // List of admins who created customers
   const [loading, setLoading] = useState(false)
   const [filterSalesman, setFilterSalesman] = useState('')
   const [filterStatus, setFilterStatus] = useState('unassigned') // Show unassigned by default
+  const [filterCreatedBy, setFilterCreatedBy] = useState('') // Filter by admin who created customer
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomers, setSelectedCustomers] = useState([])
   const [bulkSalesman, setBulkSalesman] = useState('')
@@ -19,12 +24,13 @@ const CustomerAllotment = () => {
   useEffect(() => {
     loadCustomers()
     loadSalesmen()
+    loadAdmins()
   }, [])
 
   // Reload when filters change
   useEffect(() => {
     loadCustomers()
-  }, [filterSalesman, filterStatus, searchTerm])
+  }, [filterSalesman, filterStatus, filterCreatedBy, searchTerm])
 
   const loadCustomers = async () => {
     setLoading(true)
@@ -48,6 +54,15 @@ const CustomerAllotment = () => {
         let filteredCustomers = raw
         if (filterStatus === 'unassigned') filteredCustomers = raw.filter(c => !c.assignedSalesman)
         if (filterStatus === 'assigned') filteredCustomers = raw.filter(c => !!c.assignedSalesman)
+        
+        // Filter by admin who created the customer
+        if (filterCreatedBy) {
+          filteredCustomers = filteredCustomers.filter(c => {
+            const createdById = c.createdBy?._id || c.createdBy
+            return createdById && createdById.toString() === filterCreatedBy
+          })
+        }
+        
         setCustomers(filteredCustomers)
       } else {
         console.error('Failed to load customers:', result.message)
@@ -74,28 +89,98 @@ const CustomerAllotment = () => {
     }
   }
 
+  const loadAdmins = async () => {
+    try {
+      const result = await getUsers({ role: 'admin' })
+      if (result.success && result.data) {
+        // Filter to show only usmanabid admin (by name or email containing 'usmanabid')
+        const filteredAdmins = result.data.filter(admin => {
+          const name = (admin.name || '').toLowerCase()
+          const email = (admin.email || '').toLowerCase()
+          return name.includes('usmanabid') || email.includes('usmanabid')
+        })
+        setAdmins(filteredAdmins)
+      }
+    } catch (error) {
+      console.error('Error loading admins:', error)
+    }
+  }
+
   const handleAllotCustomer = async (customerId, salesmanId) => {
     if (!salesmanId) {
-      alert('Please select a salesman')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Salesman Required',
+        text: 'Please select a salesman',
+        confirmButtonColor: '#e9931c',
+      })
       return
     }
 
     setLoading(true)
     try {
-      const result = await updateCustomer(customerId, {
-        assignedSalesman: salesmanId,
+      // Get customer details first
+      const customerResult = await getCustomer(customerId)
+      if (!customerResult.success || !customerResult.data) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to load customer details',
+          confirmButtonColor: '#e9931c',
+        })
+        return
+      }
+
+      const customer = customerResult.data
+      const customerName = customer.firstName || customer.name || 'Customer'
+
+      // Create a task (FollowUp) to link customer with salesman
+      // This ensures customer appears in salesman's quotation dropdown
+      const taskResult = await createFollowUp({
+        salesman: salesmanId,
+        customer: customerId,
+        customerName: customerName,
+        customerEmail: customer.email || '',
+        customerPhone: customer.phone || '',
+        type: 'Call',
+        priority: 'Medium',
+        dueDate: new Date().toISOString().split('T')[0],
+        scheduledDate: new Date().toISOString().split('T')[0],
+        description: `Customer allocated: ${customerName}`,
+        notes: 'Customer allocated through Customer Allotment',
       })
 
-      if (result.success) {
-        alert('Customer allotted successfully!')
+      if (taskResult.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Customer allotted successfully! Customer will now appear in salesman\'s quotations.',
+          confirmButtonColor: '#e9931c',
+        })
         loadCustomers()
         setSelectedCustomers([])
+        // Clear the selected salesman from map
+        setSelectedSalesmanMap(prev => {
+          const newMap = { ...prev }
+          delete newMap[customerId]
+          return newMap
+        })
       } else {
-        alert(result.message || 'Failed to allot customer')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: taskResult.message || 'Failed to allot customer',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error allotting customer:', error)
-      alert('Error allotting customer')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error allotting customer: ' + (error.message || 'Unknown error'),
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -103,16 +188,37 @@ const CustomerAllotment = () => {
 
   const handleBulkAllot = async () => {
     if (!bulkSalesman) {
-      alert('Please select a salesman for bulk allotment')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Salesman Required',
+        text: 'Please select a salesman for bulk allotment',
+        confirmButtonColor: '#e9931c',
+      })
       return
     }
 
     if (selectedCustomers.length === 0) {
-      alert('Please select at least one customer')
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Customers Selected',
+        text: 'Please select at least one customer',
+        confirmButtonColor: '#e9931c',
+      })
       return
     }
 
-    if (!window.confirm(`Are you sure you want to allot ${selectedCustomers.length} customer(s) to the selected salesman?`)) {
+    const confirmResult = await Swal.fire({
+      icon: 'question',
+      title: 'Confirm Bulk Allotment',
+      text: `Are you sure you want to allot ${selectedCustomers.length} customer(s) to the selected salesman?`,
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Allot Them',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!confirmResult.isConfirmed) {
       return
     }
 
@@ -122,24 +228,77 @@ const CustomerAllotment = () => {
       let failCount = 0
 
       for (const customerId of selectedCustomers) {
-        const result = await updateCustomer(customerId, {
-          assignedSalesman: bulkSalesman,
-        })
-        if (result.success) {
-          successCount++
-        } else {
+        try {
+          // Get customer details
+          const customerResult = await getCustomer(customerId)
+          if (!customerResult.success || !customerResult.data) {
+            failCount++
+            continue
+          }
+
+          const customer = customerResult.data
+          const customerName = customer.firstName || customer.name || 'Customer'
+
+          // Create a task (FollowUp) to link customer with salesman
+          const taskResult = await createFollowUp({
+            salesman: bulkSalesman,
+            customer: customerId,
+            customerName: customerName,
+            customerEmail: customer.email || '',
+            customerPhone: customer.phone || '',
+            type: 'Call',
+            priority: 'Medium',
+            dueDate: new Date().toISOString().split('T')[0],
+            scheduledDate: new Date().toISOString().split('T')[0],
+            description: `Customer allocated: ${customerName}`,
+            notes: 'Customer allocated through Customer Allotment',
+          })
+
+          if (taskResult.success) {
+            successCount++
+          } else {
+            failCount++
+          }
+        } catch (error) {
+          console.error(`Error allotting customer ${customerId}:`, error)
           failCount++
         }
       }
 
-      alert(`Bulk allotment completed! ${successCount} successful, ${failCount} failed.`)
+      if (successCount > 0 && failCount === 0) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: `All ${successCount} customer(s) allotted successfully! Customers will now appear in salesman's quotations.`,
+          confirmButtonColor: '#e9931c',
+        })
+      } else if (successCount > 0 && failCount > 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Partial Success',
+          html: `Bulk allotment completed!<br><strong>${successCount}</strong> successful, <strong>${failCount}</strong> failed.<br>Customers will now appear in salesman's quotations.`,
+          confirmButtonColor: '#e9931c',
+        })
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: `All ${failCount} customer(s) failed to allot. Please try again.`,
+          confirmButtonColor: '#e9931c',
+        })
+      }
       loadCustomers()
       setSelectedCustomers([])
       setBulkSalesman('')
       setShowBulkAllot(false)
     } catch (error) {
       console.error('Error in bulk allotment:', error)
-      alert('Error in bulk allotment')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error in bulk allotment: ' + (error.message || 'Unknown error'),
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -272,7 +431,7 @@ const CustomerAllotment = () => {
         )}
 
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
             <div className="relative">
@@ -289,6 +448,30 @@ const CustomerAllotment = () => {
                 className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+              <FaFilter className="w-3 h-3" />
+              Created By Admin
+            </label>
+            <select
+              value={filterCreatedBy}
+              onChange={(e) => setFilterCreatedBy(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+            >
+              <option value="">All Customers</option>
+              {admins.map((admin) => {
+                const assignedCount = allCustomers.filter(c => 
+                  (c.createdBy?._id === admin._id || c.createdBy === admin._id) && 
+                  c.status === 'Active'
+                ).length
+                return (
+                  <option key={admin._id || admin.id} value={admin._id || admin.id}>
+                    {admin.name} ({assignedCount} assigned)
+                  </option>
+                )
+              })}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Salesman</label>
@@ -324,6 +507,7 @@ const CustomerAllotment = () => {
               onClick={() => {
                 setFilterSalesman('')
                 setFilterStatus('unassigned')
+                setFilterCreatedBy('')
                 setSearchTerm('')
               }}
               className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-2"
@@ -389,6 +573,7 @@ const CustomerAllotment = () => {
                     <th className="text-left py-3 px-4 text-gray-700 font-semibold">Name</th>
                     <th className="text-left py-3 px-4 text-gray-700 font-semibold">Contact</th>
                     <th className="text-left py-3 px-4 text-gray-700 font-semibold">Company</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Created By</th>
                     <th className="text-left py-3 px-4 text-gray-700 font-semibold">Current Salesman</th>
                     <th className="text-left py-3 px-4 text-gray-700 font-semibold">Allot To</th>
                     <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
@@ -428,6 +613,16 @@ const CustomerAllotment = () => {
                           <div className="text-sm text-gray-500">{customer.phone || 'N/A'}</div>
                         </td>
                         <td className="py-4 px-4 text-gray-700">{customer.company || 'N/A'}</td>
+                        <td className="py-4 px-4">
+                          {customer.createdBy ? (
+                            <div className="flex items-center gap-1 text-sm text-gray-700">
+                              <FaUser className="w-3 h-3 text-gray-500" />
+                              <span>{customer.createdBy.name || customer.createdBy.email || 'N/A'}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">N/A</span>
+                          )}
+                        </td>
                         <td className="py-4 px-4">
                           {customer.assignedSalesman ? (
                             <div className="font-medium text-gray-800">

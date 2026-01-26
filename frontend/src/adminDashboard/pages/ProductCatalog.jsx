@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../../services/adminservices/productService'
-import { FaSearch, FaFilter, FaCheckSquare, FaQrcode, FaDownload, FaTrash, FaChevronDown, FaBarcode } from 'react-icons/fa'
+import { FaSearch, FaFilter, FaCheckSquare, FaQrcode, FaDownload, FaTrash, FaChevronDown, FaBarcode, FaEdit } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const ProductCatalog = () => {
   const [products, setProducts] = useState([])
@@ -12,6 +13,7 @@ const ProductCatalog = () => {
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedProducts, setSelectedProducts] = useState([])
   const [openDownloadDropdown, setOpenDownloadDropdown] = useState(null) // Track which product's dropdown is open
+  const [editingProduct, setEditingProduct] = useState(null) // Track which product is being edited
 
   const [formData, setFormData] = useState({
     name: '',
@@ -140,7 +142,12 @@ const ProductCatalog = () => {
       const result = await createProduct(productData)
       
       if (result.success) {
-        alert('Product added successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Product Created!',
+          text: 'Product added successfully!',
+          confirmButtonColor: '#e9931c'
+        })
         setFormData({
           name: '',
           productCode: '',
@@ -154,7 +161,12 @@ const ProductCatalog = () => {
         setShowAddForm(false)
         loadProducts()
       } else {
-        alert(result.message || 'Failed to create product')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to create product',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error creating product:', error)
@@ -221,7 +233,12 @@ const ProductCatalog = () => {
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        alert('Authentication token not found. Please login again.')
+        Swal.fire({
+          icon: 'error',
+          title: 'Authentication Error',
+          text: 'Authentication token not found. Please login again.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
@@ -236,47 +253,210 @@ const ProductCatalog = () => {
       const data = await response.json()
       
       if (data.success && data.barcodeURL) {
-        // Fetch the barcode image
-        const imgResponse = await fetch(data.barcodeURL)
-        const blob = await imgResponse.blob()
-        
-        // Create a blob URL and download
-        const blobURL = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = blobURL
-        link.download = data.filename || `${product.productCode}_Barcode.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        
-        // Clean up the blob URL
-        window.URL.revokeObjectURL(blobURL)
+        try {
+          // Try to fetch the barcode image with CORS handling
+          const imgResponse = await fetch(data.barcodeURL, {
+            mode: 'cors',
+            credentials: 'omit'
+          })
+          
+          if (!imgResponse.ok) {
+            // If direct fetch fails, try opening in new window or using proxy
+            const link = document.createElement('a')
+            link.href = data.barcodeURL
+            link.target = '_blank'
+            link.download = data.filename || `${product.productCode}_Barcode.png`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            Swal.fire({
+              icon: 'success',
+              title: 'Barcode Downloaded!',
+              text: 'Barcode download initiated.',
+              confirmButtonColor: '#e9931c'
+            })
+            return
+          }
+          
+          const blob = await imgResponse.blob()
+          
+          // Create a blob URL and download
+          const blobURL = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = blobURL
+          link.download = data.filename || `${product.productCode}_Barcode.png`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          
+          // Clean up the blob URL
+          window.URL.revokeObjectURL(blobURL)
+          
+          Swal.fire({
+            icon: 'success',
+            title: 'Barcode Downloaded!',
+            text: 'Barcode downloaded successfully.',
+            confirmButtonColor: '#e9931c'
+          })
+        } catch (fetchError) {
+          // Fallback: open URL directly
+          const link = document.createElement('a')
+          link.href = data.barcodeURL
+          link.target = '_blank'
+          link.download = data.filename || `${product.productCode}_Barcode.png`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          Swal.fire({
+            icon: 'info',
+            title: 'Barcode Opened',
+            text: 'Barcode opened in new tab. Please save it manually.',
+            confirmButtonColor: '#e9931c'
+          })
+        }
       } else {
-        alert(data.message || 'Failed to download barcode')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: data.message || 'Failed to download barcode',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error downloading barcode:', error)
-      alert('Failed to download barcode. Please try again.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to download barcode. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
+    }
+  }
+
+  const handleEditProduct = (product) => {
+    setEditingProduct(product)
+    setFormData({
+      name: product.name || '',
+      productCode: product.productCode || '',
+      price: product.price || '',
+      category: product.category || '',
+      isActive: product.isActive !== undefined ? product.isActive : true,
+      imageUrl: product.image || product.imageUrl || '',
+      description: product.description || '',
+      keyFeatures: Array.isArray(product.keyFeatures) ? product.keyFeatures.join(', ') : (product.keyFeatures || ''),
+    })
+    setShowAddForm(true)
+  }
+
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    
+    try {
+      const code = formData.productCode || generateProductCode()
+      
+      // Convert keyFeatures string to array if provided
+      const keyFeaturesArray = formData.keyFeatures
+        ? formData.keyFeatures.split(',').map(f => f.trim()).filter(f => f)
+        : []
+      
+      const productData = {
+        name: formData.name,
+        productCode: code,
+        price: parseFloat(formData.price) || 0,
+        category: formData.category,
+        stock: editingProduct?.stock || 0,
+        isActive: formData.isActive,
+        image: formData.imageUrl,
+        description: formData.description,
+        keyFeatures: keyFeaturesArray,
+      }
+      
+      const result = await updateProduct(editingProduct._id || editingProduct.id, productData)
+      
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Product Updated!',
+          text: 'Product updated successfully!',
+          confirmButtonColor: '#e9931c'
+        })
+        setFormData({
+          name: '',
+          productCode: '',
+          price: '',
+          category: '',
+          isActive: true,
+          imageUrl: '',
+          description: '',
+          keyFeatures: '',
+        })
+        setEditingProduct(null)
+        setShowAddForm(false)
+        loadProducts()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to update product',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error updating product:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating product',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
   const handleDeleteProduct = async (product) => {
-    if (!window.confirm(`Are you sure you want to delete "${product.name}"? This action cannot be undone.`)) {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Product?',
+      text: `Are you sure you want to delete "${product.name}"? This action cannot be undone.`,
+      showCancelButton: true,
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Yes, delete it'
+    })
+
+    if (!result.isConfirmed) {
       return
     }
 
     setLoading(true)
     try {
-      const result = await deleteProduct(product._id || product.id)
-      if (result.success) {
-        alert('Product deleted successfully!')
+      const deleteResult = await deleteProduct(product._id || product.id)
+      if (deleteResult.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Deleted!',
+          text: 'Product deleted successfully!',
+          confirmButtonColor: '#e9931c'
+        })
         loadProducts() // Reload products list
       } else {
-        alert(result.message || 'Failed to delete product')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: deleteResult.message || 'Failed to delete product',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error deleting product:', error)
-      alert('Error deleting product. Please try again.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting product. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -393,10 +573,13 @@ const ProductCatalog = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-800">Add New Product</h3>
+              <h3 className="text-xl font-semibold text-gray-800">
+                {editingProduct ? 'Edit Product' : 'Add New Product'}
+              </h3>
               <button
                 onClick={() => {
                   setShowAddForm(false)
+                  setEditingProduct(null)
                   setFormData({
                     name: '',
                     productCode: '',
@@ -415,7 +598,7 @@ const ProductCatalog = () => {
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={editingProduct ? handleUpdateProduct : handleAddProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* same form as before */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
@@ -486,6 +669,7 @@ const ProductCatalog = () => {
                   type="button"
                   onClick={() => {
                     setShowAddForm(false)
+                    setEditingProduct(null)
                     setFormData({
                       name: '',
                       productCode: '',
@@ -505,7 +689,7 @@ const ProductCatalog = () => {
                   type="submit"
                   className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
                 >
-                  Add Product
+                  {editingProduct ? 'Update Product' : 'Add Product'}
                 </button>
               </div>
               <div>
@@ -629,6 +813,17 @@ const ProductCatalog = () => {
                       )}
                     </div>
                   )}
+                  {/* Edit Icon */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEditProduct(product)
+                    }}
+                    className="bg-blue-600 text-white p-1.5 rounded-full hover:bg-blue-700 transition-colors shadow-md"
+                    title="Edit Product"
+                  >
+                    <FaEdit className="w-3 h-3" />
+                  </button>
                   {/* Delete Icon */}
                   <button
                     onClick={(e) => {

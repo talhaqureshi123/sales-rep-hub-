@@ -4,6 +4,7 @@ import { getSamples, getSample, createSample, updateSample, deleteSample } from 
 import { getUsers } from '../../services/adminservices/userService'
 import { getCustomers } from '../../services/adminservices/customerService'
 import { getProducts } from '../../services/adminservices/productService'
+import Swal from 'sweetalert2'
 
 const SampleTracker = () => {
   const [samples, setSamples] = useState([])
@@ -158,7 +159,12 @@ const SampleTracker = () => {
   const handleCreateSample = async (e) => {
     e.preventDefault()
     if (!createFormData.salesman || !createFormData.customerName || !createFormData.productName) {
-      alert('Please fill in all required fields (Salesman, Customer Name, Product Name)')
+      Swal.fire({
+        icon: 'warning',
+        title: 'Required Fields Missing',
+        text: 'Please fill in all required fields (Salesman, Customer Name, Product Name)',
+        confirmButtonColor: '#e9931c',
+      })
       return
     }
 
@@ -166,16 +172,31 @@ const SampleTracker = () => {
     try {
       const result = await createSample(createFormData)
       if (result.success) {
-        alert('Sample created successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Sample created successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         setShowCreateModal(false)
         resetCreateForm()
         loadSamples()
       } else {
-        alert(result.message || 'Error creating sample')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Error creating sample',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error creating sample:', error)
-      alert('Error creating sample')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating sample',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -213,7 +234,12 @@ const SampleTracker = () => {
       }
     } catch (error) {
       console.error('Error loading sample:', error)
-      alert('Error loading sample details')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error loading sample details',
+        confirmButtonColor: '#e9931c',
+      })
     }
   }
 
@@ -238,23 +264,49 @@ const SampleTracker = () => {
 
       const result = await updateSample(selectedSample._id, updateData)
       if (result.success) {
-        alert('Sample updated successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Sample updated successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         setShowEditModal(false)
         resetForm()
         loadSamples()
       } else {
-        alert(result.message || 'Error updating sample')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Error updating sample',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error updating sample:', error)
-      alert('Error updating sample')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating sample',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleDeleteSample = async (sampleId) => {
-    if (!window.confirm('Are you sure you want to delete this sample?')) {
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Sample?',
+      text: 'Are you sure you want to delete this sample? This action cannot be undone.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!confirmResult.isConfirmed) {
       return
     }
 
@@ -262,14 +314,29 @@ const SampleTracker = () => {
     try {
       const result = await deleteSample(sampleId)
       if (result.success) {
-        alert('Sample deleted successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Deleted!',
+          text: 'Sample deleted successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         loadSamples()
       } else {
-        alert(result.message || 'Error deleting sample')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Error deleting sample',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error deleting sample:', error)
-      alert('Error deleting sample')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting sample',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -280,18 +347,29 @@ const SampleTracker = () => {
       const result = await getSample(sampleId)
       if (result.success && result.data) {
         const sample = result.data
-        alert(
-          `Sample #${sample.sampleNumber}\n` +
-          `Customer: ${sample.customerName}\n` +
-          `Product: ${sample.productName}\n` +
-          `Status: ${sample.status}\n` +
-          `Visit Date: ${sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'N/A'}\n` +
-          (sample.customerFeedback ? `Feedback: ${sample.customerFeedback}` : '')
-        )
+        Swal.fire({
+          icon: 'info',
+          title: `Sample #${sample.sampleNumber}`,
+          html: `
+            <div style="text-align: left; padding: 10px 0;">
+              <p><strong>Customer:</strong> ${sample.customerName}</p>
+              <p><strong>Product:</strong> ${sample.productName}</p>
+              <p><strong>Status:</strong> ${sample.status}</p>
+              <p><strong>Visit Date:</strong> ${sample.visitDate ? new Date(sample.visitDate).toLocaleDateString() : 'N/A'}</p>
+              ${sample.customerFeedback ? `<p><strong>Feedback:</strong> ${sample.customerFeedback}</p>` : ''}
+            </div>
+          `,
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error loading sample:', error)
-      alert('Error loading sample details')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error loading sample details',
+        confirmButtonColor: '#e9931c',
+      })
     }
   }
 

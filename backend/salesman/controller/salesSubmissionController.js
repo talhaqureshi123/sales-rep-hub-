@@ -81,6 +81,7 @@ const createSalesSubmission = async (req, res) => {
       customerName,
       customerEmail,
       customerPhone,
+      location,
       salesDate,
       salesAmount,
       salesDescription,
@@ -88,10 +89,10 @@ const createSalesSubmission = async (req, res) => {
     } = req.body;
 
     // Validation
-    if (!customerName || !salesDate || !salesAmount) {
+    if (!customerName || !location || !salesDate || !salesAmount) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide customer name, sales date, and sales amount',
+        message: 'Please provide customer name, location, sales date, and sales amount',
       });
     }
 
@@ -119,6 +120,7 @@ const createSalesSubmission = async (req, res) => {
       customerName,
       customerEmail,
       customerPhone,
+      location,
       salesDate: new Date(salesDate),
       salesAmount,
       salesDescription,
@@ -166,6 +168,7 @@ const updateMySalesSubmission = async (req, res) => {
       customerName,
       customerEmail,
       customerPhone,
+      location,
       salesDate,
       salesAmount,
       salesDescription,
@@ -175,6 +178,7 @@ const updateMySalesSubmission = async (req, res) => {
     if (customerName) submission.customerName = customerName;
     if (customerEmail) submission.customerEmail = customerEmail;
     if (customerPhone) submission.customerPhone = customerPhone;
+    if (location) submission.location = location;
     if (salesDate) submission.salesDate = new Date(salesDate);
     if (salesAmount !== undefined) {
       if (salesAmount <= 0) {

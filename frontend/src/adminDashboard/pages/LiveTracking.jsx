@@ -388,9 +388,9 @@ const LiveTracking = () => {
   }, [salesmenLocations, handleSalesmanClick])
 
   return (
-    <div className="w-full flex flex-col" style={{ height: 'calc(100vh - 120px)' }}>
+    <div className="w-full flex flex-col" style={{ height: 'calc(100vh - 120px)', minHeight: '600px' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <div className="flex items-center gap-3">
           <FaMapMarkerAlt className="w-8 h-8 text-[#e9931c]" />
           <div>
@@ -401,27 +401,29 @@ const LiveTracking = () => {
       </div>
 
       {/* Main Content - Map and Sidebar */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0 overflow-hidden">
         {/* Map Section - Takes 2/3 width on large screens */}
-        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: '600px', height: '100%' }}>
           {/* Map Container */}
-          <div className="flex-1 bg-gray-100 relative" style={{ minHeight: '500px' }}>
+          <div className="flex-1 bg-gray-100 relative" style={{ minHeight: '500px', height: '100%', width: '100%' }}>
             {mapMarkers.length > 0 ? (
-              <GoogleMapView
-                key={`map-${firstLat || 0}-${firstLng || 0}`} // Stable key - only change when first location coordinates change
-                milestones={[]}
-                visitTargets={mapMarkers}
-                userLocation={null}
-                center={mapCenter}
-                zoom={13}
-                height="100%"
-                showUserLocation={false}
-                showRadius={false}
-                isTracking={false}
-                onMarkerClick={handleMarkerClick}
-              />
+              <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+                <GoogleMapView
+                  key={`map-${firstLat || 0}-${firstLng || 0}`} // Stable key - only change when first location coordinates change
+                  milestones={[]}
+                  visitTargets={mapMarkers}
+                  userLocation={null}
+                  center={mapCenter}
+                  zoom={mapMarkers.length === 1 ? 16 : 15} // Higher zoom for single salesman (16), multiple salesmen (15)
+                  height="100%"
+                  showUserLocation={false}
+                  showRadius={false}
+                  isTracking={false}
+                  onMarkerClick={handleMarkerClick}
+                />
+              </div>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50" style={{ minHeight: '500px', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
                 <div className="text-center">
                   <FaMapMarkerAlt className="w-24 h-24 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500 text-lg">No Locations Yet</p>
@@ -467,9 +469,9 @@ const LiveTracking = () => {
         </div>
 
         {/* Right Sidebar - Controls and Reps List */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 min-h-0" style={{ height: '100%' }}>
           {/* Controls */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 {autoRefresh ? (
@@ -527,8 +529,8 @@ const LiveTracking = () => {
           </div>
 
           {/* Sales Reps List */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex-1 flex flex-col min-h-0">
-            <div className="p-4 border-b border-gray-200">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden" style={{ maxHeight: '100%' }}>
+            <div className="p-4 border-b border-gray-200 flex-shrink-0">
               <div className="relative mb-3">
                 <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
@@ -571,7 +573,7 @@ const LiveTracking = () => {
             </div>
 
             {/* Reps List */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: 0, maxHeight: '100%' }}>
               {loading ? (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-4 border-[#e9931c] border-t-transparent mx-auto mb-2"></div>

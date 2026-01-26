@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import ProductSelector from '../../universalcomponents/ProductSelector'
 import QRCameraScanner from '../../components/QRCameraScanner'
 import { getScannedProducts } from '../../services/salemanservices/productService'
-import { getQuotations, createQuotation, updateQuotation, deleteQuotation } from '../../services/salemanservices/quotationService'
-import { FaQrcode, FaEye, FaEdit } from 'react-icons/fa'
+import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation } from '../../services/salemanservices/quotationService'
+import { getMyCustomers } from '../../services/salemanservices/customerService'
+import { FaQrcode, FaEye, FaEdit, FaTrash } from 'react-icons/fa'
 
 const Quotation = () => {
   const [quotations, setQuotations] = useState([])
   const [editingQuotation, setEditingQuotation] = useState(null)
+  const [viewingQuotation, setViewingQuotation] = useState(null)
+  const [showViewModal, setShowViewModal] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showProductSelector, setShowProductSelector] = useState(false)
@@ -80,14 +83,15 @@ const Quotation = () => {
           if (existingCustomer) {
             setFormData(prevForm => ({
               ...prevForm,
-              customer: existingCustomer.id.toString(),
+              customer: (existingCustomer.id || existingCustomer._id).toString(),
               customerName: visitTarget.name,
               customerAddress: `${visitTarget.address || ''}, ${visitTarget.city || ''}, ${visitTarget.state || ''} ${visitTarget.pincode || ''}`.trim(),
             }))
             return prev
           } else {
-            // Add visit target as new customer option
-            const newCustomerId = prev.length + 1
+            // Add visit target as new customer option (only if not already in list)
+            const maxId = prev.length > 0 ? Math.max(...prev.map(c => c.id || 0)) : 0
+            const newCustomerId = maxId + 1
             const newCustomer = {
               id: newCustomerId,
               name: visitTarget.name,
@@ -130,14 +134,15 @@ const Quotation = () => {
           if (existingCustomer) {
             setFormData(prevForm => ({
               ...prevForm,
-              customer: existingCustomer.id.toString(),
+              customer: (existingCustomer.id || existingCustomer._id).toString(),
               customerName: milestone.customerName,
               customerAddress: milestone.customerAddress,
             }))
             return prev
           } else {
-            // Add milestone as new customer option
-            const newCustomerId = prev.length + 1
+            // Add milestone as new customer option (only if not already in list)
+            const maxId = prev.length > 0 ? Math.max(...prev.map(c => c.id || 0)) : 0
+            const newCustomerId = maxId + 1
             const newCustomer = {
               id: newCustomerId,
               name: milestone.customerName || milestone.milestoneName,
@@ -161,20 +166,49 @@ const Quotation = () => {
     }
   }, [])
 
-  const [customers, setCustomers] = useState([
-    { id: 1, name: 'John Doe', email: 'john@example.com' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com' },
-    { id: 3, name: 'Mike Johnson', email: 'mike@example.com' },
-  ])
+  const [customers, setCustomers] = useState([])
 
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(false)
 
-  // Load products and quotations from backend on mount
+  // Load products, quotations, and customers from backend on mount
   useEffect(() => {
     loadProducts()
     loadQuotations()
+    loadCustomers()
   }, [])
+
+  // Load customers from backend (assigned to this salesman)
+  const loadCustomers = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        console.warn('No authentication token found. Please login.')
+        setCustomers([])
+        return
+      }
+
+      const result = await getMyCustomers()
+      if (result.success && result.data) {
+        // Transform backend customer data to frontend format
+        const transformedCustomers = result.data.map((customer, index) => ({
+          id: index + 1, // Frontend ID for compatibility
+          _id: customer._id, // Backend ID
+          name: customer.firstName || customer.name || 'Customer',
+          email: customer.email || '',
+          phone: customer.phone || '',
+          address: customer.address || '',
+        }))
+        setCustomers(transformedCustomers)
+      } else {
+        console.error('Failed to load customers:', result.message)
+        setCustomers([])
+      }
+    } catch (error) {
+      console.error('Error loading customers:', error)
+      setCustomers([])
+    }
+  }
 
   // Load quotations from backend
   const loadQuotations = async () => {
@@ -249,6 +283,24 @@ const Quotation = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
+    
+    // If customer dropdown changed, auto-fill customer details
+    if (name === 'customer' && value) {
+      const selectedCustomer = customers.find((c) => 
+        (c.id || c._id)?.toString() === value.toString()
+      )
+      
+      if (selectedCustomer) {
+        setFormData({
+          ...formData,
+          customer: value,
+          customerName: selectedCustomer.name || '',
+          customerAddress: selectedCustomer.address || '',
+        })
+        return
+      }
+    }
+    
     setFormData({
       ...formData,
       [name]: value,
@@ -550,8 +602,12 @@ const Quotation = () => {
       return
     }
 
-    // Get customer details
-    const selectedCustomer = customers.find((c) => c.id === parseInt(formData.customer))
+    // Get customer details - support both id (frontend) and _id (backend)
+    const selectedCustomer = customers.find((c) => 
+      c.id === parseInt(formData.customer) || 
+      c._id === formData.customer ||
+      c.id?.toString() === formData.customer?.toString()
+    )
     
     // Prepare quotation data for backend
     const quotationData = {
@@ -599,8 +655,35 @@ const Quotation = () => {
     }
   }
 
+  // Handle view quotation
+  const handleViewQuotation = async (quotation) => {
+    try {
+      const result = await getQuotation(quotation.id || quotation._id)
+      if (result.success && result.data) {
+        setViewingQuotation(result.data)
+        setShowViewModal(true)
+      } else {
+        alert(result.message || 'Failed to load quotation details')
+      }
+    } catch (error) {
+      console.error('Error loading quotation:', error)
+      alert('Error loading quotation details')
+    }
+  }
+
   // Handle edit quotation
-  const handleEditQuotation = (quotation) => {
+  const handleEditQuotation = async (quotation) => {
+    // Check if quotation belongs to current user (salesman can only edit their own quotations)
+    // Backend already filters, but add extra check for security
+    const currentUserId = localStorage.getItem('userId')
+    const salesmanId = quotation.salesman?._id || quotation.salesman?.id || quotation.salesman
+    
+    // If salesman field exists and doesn't match current user, prevent edit
+    if (salesmanId && salesmanId !== currentUserId && salesmanId.toString() !== currentUserId) {
+      alert('You can only edit your own quotations. Admin quotations cannot be edited by salesmen.')
+      return
+    }
+
     // Load quotation data into form
     setEditingQuotation(quotation)
     setFormData({
@@ -611,13 +694,13 @@ const Quotation = () => {
       lineItems: quotation.items && quotation.items.length > 0 
         ? quotation.items.map((item, index) => ({
             id: index + 1,
-            product: item.productId || '',
-            productId: item.productId || '',
+            product: item.productId || item.product?._id || '',
+            productId: item.productId || item.product?._id || '',
             productName: item.productName || item.name || '',
             quantity: item.quantity || 1,
             unitPrice: item.unitPrice || item.price || 0,
             discount: item.discount || 0,
-            lineTotal: item.lineTotal || (item.quantity * (item.unitPrice || item.price || 0)),
+            lineTotal: item.lineTotal || item.total || (item.quantity * (item.unitPrice || item.price || 0)),
           }))
         : [
             {
@@ -636,6 +719,37 @@ const Quotation = () => {
       total: quotation.total || 0,
     })
     setShowCreateModal(true)
+  }
+
+  // Handle delete quotation
+  const handleDeleteQuotation = async (quotation) => {
+    // Check if quotation belongs to current user (salesman can only delete their own quotations)
+    // Backend already filters, but add extra check for security
+    const currentUserId = localStorage.getItem('userId')
+    const salesmanId = quotation.salesman?._id || quotation.salesman?.id || quotation.salesman
+    
+    // If salesman field exists and doesn't match current user, prevent delete
+    if (salesmanId && salesmanId !== currentUserId && salesmanId.toString() !== currentUserId) {
+      alert('You can only delete your own quotations. Admin quotations cannot be deleted by salesmen.')
+      return
+    }
+
+    if (!window.confirm('Are you sure you want to delete this quotation?')) {
+      return
+    }
+
+    try {
+      const result = await deleteQuotation(quotation.id || quotation._id)
+      if (result.success) {
+        alert('Quotation deleted successfully!')
+        loadQuotations()
+      } else {
+        alert(result.message || 'Failed to delete quotation')
+      }
+    } catch (error) {
+      console.error('Error deleting quotation:', error)
+      alert('Error deleting quotation')
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -665,8 +779,12 @@ const Quotation = () => {
       return
     }
 
-    // Get customer details
-    const selectedCustomer = customers.find((c) => c.id === parseInt(formData.customer))
+    // Get customer details - support both id (frontend) and _id (backend)
+    const selectedCustomer = customers.find((c) => 
+      c.id === parseInt(formData.customer) || 
+      c._id === formData.customer ||
+      c.id?.toString() === formData.customer?.toString()
+    )
     
     // Prepare quotation data for backend
     // Filter and map line items to ensure valid products
@@ -817,6 +935,7 @@ const Quotation = () => {
                       </div>
                       <div className="flex gap-2">
                         <button
+                          onClick={() => handleViewQuotation(quote)}
                           className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                           title="View"
                         >
@@ -828,6 +947,13 @@ const Quotation = () => {
                           title="Edit"
                         >
                           <FaEdit className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQuotation(quote)}
+                          className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                          title="Delete"
+                        >
+                          <FaTrash className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -872,16 +998,25 @@ const Quotation = () => {
                         <td className="py-4 px-4">
                           <div className="flex gap-2">
                             <button
+                              onClick={() => handleViewQuotation(quote)}
                               className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
                               title="View"
                             >
                               <FaEye className="w-5 h-5 text-blue-600" />
                             </button>
                             <button
+                              onClick={() => handleEditQuotation(quote)}
                               className="p-2 rounded-lg hover:bg-green-50 transition-colors"
                               title="Edit"
                             >
                               <FaEdit className="w-5 h-5 text-green-600" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuotation(quote)}
+                              className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <FaTrash className="w-5 h-5 text-red-600" />
                             </button>
                           </div>
                         </td>
@@ -956,12 +1091,16 @@ const Quotation = () => {
                     required
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
                   >
-                    <option value="">Search customers...</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name} ({customer.email})
-                      </option>
-                    ))}
+                    <option value="">Select customer...</option>
+                    {customers.length === 0 ? (
+                      <option value="" disabled>No customers available. Customers will appear after allocation.</option>
+                    ) : (
+                      customers.map((customer) => (
+                        <option key={customer.id || customer._id} value={customer.id || customer._id}>
+                          {customer.name} {customer.email ? `(${customer.email})` : ''}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -1181,6 +1320,171 @@ const Quotation = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Quotation Modal */}
+      {showViewModal && viewingQuotation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Quotation Details</h3>
+                <p className="text-sm text-gray-600 mt-1">Quote #{viewingQuotation.quoteNumber || viewingQuotation.quotationNumber}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowViewModal(false)
+                  setViewingQuotation(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Customer Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Customer Name</p>
+                  <p className="font-semibold text-gray-800">{viewingQuotation.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Customer Email</p>
+                  <p className="font-semibold text-gray-800">{viewingQuotation.customerEmail || 'N/A'}</p>
+                </div>
+                {viewingQuotation.customerPhone && (
+                  <div>
+                    <p className="text-sm text-gray-500">Customer Phone</p>
+                    <p className="font-semibold text-gray-800">{viewingQuotation.customerPhone}</p>
+                  </div>
+                )}
+                {viewingQuotation.validUntil && (
+                  <div>
+                    <p className="text-sm text-gray-500">Valid Until</p>
+                    <p className="font-semibold text-gray-800">{viewingQuotation.validUntil}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">Items</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold text-gray-700">Product</th>
+                        <th className="border border-gray-300 px-4 py-2 text-center text-sm font-semibold text-gray-700">Quantity</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Unit Price</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Discount</th>
+                        <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewingQuotation.items && viewingQuotation.items.length > 0 ? (
+                        viewingQuotation.items.map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-4 py-2 text-sm text-gray-800">
+                              {item.productName || item.name || 'N/A'}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2 text-center text-sm text-gray-800">
+                              {item.quantity}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2 text-right text-sm text-gray-800">
+                              £{item.unitPrice || item.price || 0}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2 text-right text-sm text-gray-800">
+                              {item.discount || 0}%
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-800">
+                              £{item.lineTotal || item.total || 0}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5" className="border border-gray-300 px-4 py-4 text-center text-gray-500">
+                            No items found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="border-t-2 border-gray-200 pt-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700">Subtotal:</span>
+                    <span className="font-semibold">£{viewingQuotation.subtotal?.toFixed(2) || '0.00'}</span>
+                  </div>
+                  {viewingQuotation.tax > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-700">Tax:</span>
+                      <span className="font-semibold">£{viewingQuotation.tax.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {viewingQuotation.discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-700">Discount:</span>
+                      <span className="font-semibold">£{viewingQuotation.discount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
+                    <span className="font-bold text-gray-800">Total:</span>
+                    <span className="font-bold" style={{ color: '#e9931c' }}>
+                      £{viewingQuotation.total?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status and Notes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">Status</p>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(viewingQuotation.status)}`}>
+                    {viewingQuotation.status}
+                  </span>
+                </div>
+                {viewingQuotation.createdAt && (
+                  <div>
+                    <p className="text-sm text-gray-500">Created Date</p>
+                    <p className="font-semibold text-gray-800">{viewingQuotation.createdAt}</p>
+                  </div>
+                )}
+              </div>
+
+              {viewingQuotation.notes && (
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Notes:</span> {viewingQuotation.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowViewModal(false)
+                  setViewingQuotation(null)
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

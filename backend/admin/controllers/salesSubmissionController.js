@@ -1,5 +1,6 @@
 const SalesSubmission = require('../../database/models/SalesSubmission');
 const User = require('../../database/models/User');
+const SalesTarget = require('../../database/models/SalesTarget');
 
 // @desc    Get all sales submissions
 // @route   GET /api/admin/sales-submissions
@@ -109,6 +110,32 @@ const approveSalesSubmission = async (req, res) => {
     if (adminNotes) submission.adminNotes = adminNotes;
 
     await submission.save();
+
+    // Update sales targets automatically when submission is approved
+    try {
+      const salesDate = new Date(submission.salesDate);
+      const salesAmount = submission.salesAmount || 0;
+      
+      // Find all active Revenue targets for this salesman that include the sales date
+      const activeRevenueTargets = await SalesTarget.find({
+        salesman: submission.salesman,
+        targetType: 'Revenue',
+        status: 'Active',
+        startDate: { $lte: salesDate },
+        endDate: { $gte: salesDate }
+      });
+
+      // Update each matching target's currentProgress
+      for (const target of activeRevenueTargets) {
+        target.currentProgress = (target.currentProgress || 0) + salesAmount;
+        await target.save();
+      }
+
+      console.log(`✅ Sales submission approved: ₹${salesAmount} added to ${activeRevenueTargets.length} sales target(s) for salesman ${submission.salesman}`);
+    } catch (targetError) {
+      console.error('Error updating sales targets:', targetError);
+      // Don't fail the approval if target update fails
+    }
 
     const populatedSubmission = await SalesSubmission.findById(submission._id)
       .populate('salesman', 'name email')

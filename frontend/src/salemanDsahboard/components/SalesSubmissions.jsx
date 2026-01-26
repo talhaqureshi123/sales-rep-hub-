@@ -13,7 +13,13 @@ import {
   FaFile,
   FaSearch,
   FaTasks,
-  FaFlask
+  FaFlask,
+  FaVideo,
+  FaPlay,
+  FaUser,
+  FaEnvelope,
+  FaPhone,
+  FaMapMarkerAlt
 } from 'react-icons/fa'
 import { 
   getMySalesSubmissions, 
@@ -26,6 +32,7 @@ import { getMyCustomers } from '../../services/salemanservices/customerService'
 import { createFollowUp } from '../../services/salemanservices/followUpService'
 import { createSample } from '../../services/salemanservices/sampleService'
 import { getMyProducts } from '../../services/salemanservices/productService'
+import { getProductVideos } from '../../services/adminservices/productVideoService'
 import Swal from 'sweetalert2'
 
 const SalesSubmissions = () => {
@@ -35,22 +42,57 @@ const SalesSubmissions = () => {
   const [stats, setStats] = useState(null)
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  const [productVideos, setProductVideos] = useState([])
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [showCustomerView, setShowCustomerView] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingSubmission, setEditingSubmission] = useState(null)
   const [customerSearch, setCustomerSearch] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [playingVideo, setPlayingVideo] = useState(null)
   const fileInputRef = useRef(null)
 
-  const [formData, setFormData] = useState({
+  const [salesFormData, setSalesFormData] = useState({
     customer: '',
     customerName: '',
     customerEmail: '',
     customerPhone: '',
+    location: '', // Location field from visit target
     salesDate: new Date().toISOString().split('T')[0],
     salesAmount: 0,
     salesDescription: '',
     documents: []
   })
+
+  const [taskFormData, setTaskFormData] = useState({
+    customer: '',
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    type: 'Call',
+    priority: 'Medium',
+    dueDate: '',
+    dueTime: '09:00',
+    description: '',
+    notes: ''
+  })
+
+  const [sampleFormData, setSampleFormData] = useState({
+    customer: '',
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    product: '',
+    productName: '',
+    productCode: '',
+    quantity: 1,
+    visitDate: new Date().toISOString().split('T')[0],
+    expectedDate: '',
+    notes: ''
+  })
+
+  const TASK_TYPES = ['Call', 'Email', 'Visit', 'Follow-up', 'Meeting', 'Other']
+  const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
 
   const [filters, setFilters] = useState({
     status: 'All'
@@ -60,12 +102,71 @@ const SalesSubmissions = () => {
     if (activeTab === 'sales') {
       loadSubmissions()
       loadStats()
+      loadProductVideos()
     }
     loadCustomers()
     if (activeTab === 'samples') {
       loadProducts()
     }
   }, [filters, activeTab])
+
+  // Check for visit target data on mount and when activeTab changes to 'sales'
+  useEffect(() => {
+    // Check for visit target data from SalesTracking (when Achievement button is clicked)
+    const visitTargetData = localStorage.getItem('salesUploadVisitTarget')
+    const shouldOpenForm = localStorage.getItem('openSalesUploadForm') === 'true'
+    
+    if (visitTargetData && shouldOpenForm && activeTab === 'sales' && customers.length > 0) {
+      try {
+        const visitTarget = JSON.parse(visitTargetData)
+        
+        // Try to find matching customer from loaded customers
+        const matchingCustomer = customers.find(c => {
+          const customerName = c.firstName || c.name || ''
+          const visitName = visitTarget.customerName || visitTarget.name || ''
+          return customerName.toLowerCase().trim() === visitName.toLowerCase().trim()
+        })
+        
+        // Build location from visit target (address, city, state, pincode)
+        const location = `${visitTarget.address || ''}, ${visitTarget.city || ''}, ${visitTarget.state || ''} ${visitTarget.pincode || ''}`.trim().replace(/^,\s*|,\s*$/g, '')
+        
+        if (matchingCustomer) {
+          // Auto-fill with matching customer
+          handleCustomerSelect(matchingCustomer)
+          // Also set location from visit target (not from customer)
+          setSalesFormData(prev => ({
+            ...prev,
+            location: location
+          }))
+        } else {
+          // Auto-fill with visit target data directly
+          setSalesFormData(prev => ({
+            ...prev,
+            customerName: visitTarget.customerName || visitTarget.name || '',
+            customerEmail: '', // Visit target doesn't have email
+            customerPhone: '', // Visit target doesn't have phone
+            location: location, // Location from visit target
+            // Note: customer field will be empty if no match found
+          }))
+          setCustomerSearch(visitTarget.customerName || visitTarget.name || '')
+        }
+        
+        // Ensure sales tab is active and open the form
+        if (activeTab !== 'sales') {
+          setActiveTab('sales')
+        }
+        setShowForm(true)
+        
+        // Clear the flags
+        localStorage.removeItem('salesUploadVisitTarget')
+        localStorage.removeItem('openSalesUploadForm')
+      } catch (error) {
+        console.error('Error parsing visit target data:', error)
+        localStorage.removeItem('salesUploadVisitTarget')
+        localStorage.removeItem('openSalesUploadForm')
+      }
+    }
+  }, [activeTab, customers])
 
   const loadSubmissions = async () => {
     try {
@@ -116,14 +217,26 @@ const SalesSubmissions = () => {
     }
   }
 
+  const loadProductVideos = async () => {
+    try {
+      const result = await getProductVideos()
+      if (result.success && result.data) {
+        setProductVideos(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error loading product videos:', error)
+    }
+  }
+
   const handleInputChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
+    const finalValue = type === 'checkbox' ? checked : value
     if (activeTab === 'sales') {
-      setSalesFormData(prev => ({ ...prev, [name]: value }))
+      setSalesFormData(prev => ({ ...prev, [name]: finalValue }))
     } else if (activeTab === 'tasks') {
-      setTaskFormData(prev => ({ ...prev, [name]: value }))
+      setTaskFormData(prev => ({ ...prev, [name]: finalValue }))
     } else if (activeTab === 'samples') {
-      setSampleFormData(prev => ({ ...prev, [name]: value }))
+      setSampleFormData(prev => ({ ...prev, [name]: finalValue }))
     }
   }
 
@@ -141,8 +254,53 @@ const SalesSubmissions = () => {
     } else if (activeTab === 'samples') {
       setSampleFormData(prev => ({ ...prev, ...customerData }))
     }
+    setSelectedCustomer(customer)
+    setShowCustomerView(true)
     setShowCustomerDropdown(false)
     setCustomerSearch('')
+  }
+
+  const getEmbedUrl = (url) => {
+    if (!url) return ''
+    
+    // YouTube URL patterns
+    let videoId = null
+    const watchMatch = url.match(/(?:youtube\.com\/watch\?v=)([^&?\s]+)/)
+    if (watchMatch) {
+      videoId = watchMatch[1]
+    }
+    
+    const embedMatch = url.match(/(?:youtube\.com\/embed\/)([^&?\s]+)/)
+    if (embedMatch) {
+      videoId = embedMatch[1]
+    }
+    
+    const shortMatch = url.match(/(?:youtu\.be\/)([^&?\s]+)/)
+    if (shortMatch) {
+      videoId = shortMatch[1]
+    }
+    
+    if (videoId) {
+      videoId = videoId.split('&')[0].split('?')[0]
+      return `https://www.youtube.com/embed/${videoId}`
+    }
+    
+    // Vimeo
+    const vimeoMatch = url.match(/(?:vimeo\.com\/)(?:.*\/)?(\d+)/)
+    if (vimeoMatch) {
+      return `https://player.vimeo.com/video/${vimeoMatch[1]}`
+    }
+    
+    // Direct video
+    if (url.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
+      return url
+    }
+    
+    if (url.includes('youtube.com/embed') || url.includes('player.vimeo.com')) {
+      return url
+    }
+    
+    return url
   }
 
   const handleFileUpload = (e) => {
@@ -165,7 +323,7 @@ const SalesSubmissions = () => {
     Promise.all(newDocuments).then(docs => {
       setSalesFormData(prev => ({
         ...prev,
-        documents: [...prev.documents, ...docs]
+        documents: [...(prev.documents || []), ...docs]
       }))
     })
   }
@@ -180,67 +338,159 @@ const SalesSubmissions = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!formData.customerName || !formData.salesDate || !formData.salesAmount) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'Please fill all required fields (Customer Name, Sales Date, Sales Amount)',
-        confirmButtonColor: '#e9931c'
-      })
-      return
-    }
-
-    if (formData.salesAmount <= 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Invalid Amount',
-        text: 'Sales amount must be greater than 0',
-        confirmButtonColor: '#e9931c'
-      })
-      return
-    }
-
-    setLoading(true)
-    try {
-      let result
-      if (editingSubmission) {
-        result = await updateSalesSubmission(editingSubmission._id, formData)
-      } else {
-        result = await createSalesSubmission(formData)
-      }
-
-      if (result.success) {
+    if (activeTab === 'sales') {
+      if (!salesFormData.customerName || !salesFormData.salesDate || !salesFormData.salesAmount || !salesFormData.location) {
         Swal.fire({
-          icon: 'success',
-          title: 'Success!',
-          text: editingSubmission 
-            ? 'Sales submission updated successfully!' 
-            : 'Sales submission created! Waiting for admin approval.',
+          icon: 'warning',
+          title: 'Validation Error',
+          text: 'Please fill all required fields (Customer Name, Location, Sales Date, Sales Amount)',
           confirmButtonColor: '#e9931c'
         })
-        resetForm()
-        loadSubmissions()
-        loadStats()
-      } else {
+        return
+      }
+
+      if (salesFormData.salesAmount <= 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Invalid Amount',
+          text: 'Sales amount must be greater than 0',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      setLoading(true)
+      try {
+        let result
+        if (editingSubmission) {
+          result = await updateSalesSubmission(editingSubmission._id, salesFormData)
+        } else {
+          result = await createSalesSubmission(salesFormData)
+        }
+
+        if (result.success) {
+          // Show achievement message with sales amount
+          const salesAmount = salesFormData.salesAmount || 0
+          Swal.fire({
+            icon: 'success',
+            title: '🎉 Sales Submitted Successfully!',
+            html: `
+              <div class="text-center">
+                <p class="text-lg mb-3">Sales Amount: <strong>₹${salesAmount.toLocaleString()}</strong></p>
+                <p class="text-sm text-gray-600 mb-2">Waiting for admin approval.</p>
+                <p class="text-sm text-gray-600">Once approved, this will be added to your sales target!</p>
+              </div>
+            `,
+            confirmButtonColor: '#e9931c',
+            confirmButtonText: 'Great!'
+          })
+          resetForm()
+          loadSubmissions()
+          loadStats()
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: result.message || 'Failed to save submission',
+            confirmButtonColor: '#e9931c'
+          })
+        }
+      } catch (error) {
+        console.error('Error saving submission:', error)
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: result.message || 'Failed to save submission',
+          text: 'Error saving submission. Please try again.',
           confirmButtonColor: '#e9931c'
         })
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Error saving submission:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error saving submission. Please try again.',
-        confirmButtonColor: '#e9931c'
-      })
-    } finally {
-      setLoading(false)
+    } else if (activeTab === 'tasks') {
+      if (!taskFormData.customerName || !taskFormData.dueDate || !taskFormData.description) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Validation Error',
+          text: 'Please fill all required fields',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      setLoading(true)
+      try {
+        const result = await createFollowUp(taskFormData)
+        if (result.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Task Created!',
+            text: 'Task created successfully!',
+            confirmButtonColor: '#e9931c'
+          })
+          resetForm()
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: result.message || 'Failed to create task',
+            confirmButtonColor: '#e9931c'
+          })
+        }
+      } catch (error) {
+        console.error('Error creating task:', error)
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Error creating task. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
+      } finally {
+        setLoading(false)
+      }
+    } else if (activeTab === 'samples') {
+      if (!sampleFormData.customerName || !sampleFormData.productName) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Validation Error',
+          text: 'Please fill all required fields',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
+      setLoading(true)
+      try {
+        const result = await createSample(sampleFormData)
+        if (result.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Sample Uploaded!',
+            text: 'Sample uploaded successfully!',
+            confirmButtonColor: '#e9931c'
+          })
+          resetForm()
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: result.message || 'Failed to upload sample',
+            confirmButtonColor: '#e9931c'
+          })
+        }
+      } catch (error) {
+        console.error('Error uploading sample:', error)
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Error uploading sample. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
+      } finally {
+        setLoading(false)
+      }
     }
   }
+
 
   const handleEdit = (submission) => {
     if (submission.approvalStatus !== 'Pending') {
@@ -258,6 +508,7 @@ const SalesSubmissions = () => {
       customerName: submission.customerName || '',
       customerEmail: submission.customerEmail || '',
       customerPhone: submission.customerPhone || '',
+      location: submission.location || '',
       salesDate: submission.salesDate ? new Date(submission.salesDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       salesAmount: submission.salesAmount || 0,
       salesDescription: submission.salesDescription || '',
@@ -325,6 +576,7 @@ const SalesSubmissions = () => {
       customerName: '',
       customerEmail: '',
       customerPhone: '',
+      location: '',
       salesDate: new Date().toISOString().split('T')[0],
       salesAmount: 0,
       salesDescription: '',
@@ -358,6 +610,8 @@ const SalesSubmissions = () => {
     setEditingSubmission(null)
     setShowForm(false)
     setCustomerSearch('')
+    setSelectedCustomer(null)
+    setShowCustomerView(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -564,6 +818,27 @@ const SalesSubmissions = () => {
                 </div>
               )}
             </div>
+
+            {/* Location Field - Only for Sales Tab */}
+            {activeTab === 'sales' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Location <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="location"
+                  value={salesFormData.location}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Enter location (address, city, state, pincode)"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Location from visit target (auto-filled from Achievement button)
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -1001,10 +1276,24 @@ const SalesSubmissions = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{submission.customerName}</p>
-                          {submission.customerEmail && (
-                            <p className="text-xs text-gray-500">{submission.customerEmail}</p>
-                          )}
+                          <button
+                            onClick={() => {
+                              const customer = customers.find(c => 
+                                (c._id || c.id) === submission.customer ||
+                                (c.firstName || c.name) === submission.customerName
+                              )
+                              if (customer) {
+                                setSelectedCustomer(customer)
+                                setShowCustomerView(true)
+                              }
+                            }}
+                            className="text-left hover:text-[#e9931c] transition-colors"
+                          >
+                            <p className="text-sm font-medium text-gray-900">{submission.customerName}</p>
+                            {submission.customerEmail && (
+                              <p className="text-xs text-gray-500">{submission.customerEmail}</p>
+                            )}
+                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -1073,6 +1362,162 @@ const SalesSubmissions = () => {
               ? 'Use the "Upload Task" button above to create a new task. Tasks will be sent for admin approval.'
               : 'Use the "Upload Sample" button above to upload a sample track. Samples will be tracked for feedback.'}
           </p>
+        </div>
+      )}
+
+      {/* Customer View Modal */}
+      {showCustomerView && selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <FaUser className="w-5 h-5 text-[#e9931c]" />
+                Customer Details
+              </h3>
+              <button
+                onClick={() => {
+                  setShowCustomerView(false)
+                  setSelectedCustomer(null)
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <p className="text-gray-900 font-semibold">{selectedCustomer.firstName || selectedCustomer.name || 'N/A'}</p>
+                </div>
+                {selectedCustomer.email && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <FaEnvelope className="w-3 h-3" />
+                      Email
+                    </label>
+                    <p className="text-gray-900">{selectedCustomer.email}</p>
+                  </div>
+                )}
+                {selectedCustomer.phone && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <FaPhone className="w-3 h-3" />
+                      Phone
+                    </label>
+                    <p className="text-gray-900">{selectedCustomer.phone}</p>
+                  </div>
+                )}
+                {selectedCustomer.address && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <FaMapMarkerAlt className="w-3 h-3" />
+                      Address
+                    </label>
+                    <p className="text-gray-900">{selectedCustomer.address}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Videos Section - Only for Sales Tab */}
+      {activeTab === 'sales' && productVideos.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 sm:p-6">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <FaVideo className="w-5 h-5 sm:w-6 sm:h-6 text-[#e9931c]" />
+            Product Videos
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {productVideos.filter(v => v.isActive).slice(0, 6).map((video) => (
+              <div
+                key={video._id || video.id}
+                className="border-2 border-gray-200 rounded-lg overflow-hidden hover:border-[#e9931c] transition-colors cursor-pointer"
+                onClick={() => setPlayingVideo(video)}
+              >
+                <div className="relative aspect-video bg-gray-100">
+                  {video.thumbnailUrl ? (
+                    <img
+                      src={video.thumbnailUrl}
+                      alt={video.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <FaVideo className="w-12 h-12 text-gray-400" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-50 transition-opacity flex items-center justify-center">
+                    <FaPlay className="w-8 h-8 text-white opacity-0 hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+                <div className="p-3">
+                  <h4 className="font-semibold text-gray-800 text-sm mb-1">{video.title}</h4>
+                  {video.category && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      {video.category}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Video Player Modal */}
+      {playingVideo && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-gray-800">{playingVideo.title}</h3>
+              <button
+                onClick={() => setPlayingVideo(null)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-4">
+              {(() => {
+                const embedUrl = getEmbedUrl(playingVideo.videoUrl)
+                const isDirectVideo = playingVideo.videoUrl?.match(/\.(mp4|webm|ogg)(\?.*)?$/i)
+                
+                if (isDirectVideo) {
+                  return (
+                    <video
+                      controls
+                      className="w-full h-full"
+                      src={playingVideo.videoUrl}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  )
+                } else {
+                  return (
+                    <iframe
+                      src={embedUrl}
+                      className="w-full h-full"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={playingVideo.title}
+                    />
+                  )
+                }
+              })()}
+            </div>
+            {playingVideo.description && (
+              <p className="text-sm text-gray-600">{playingVideo.description}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

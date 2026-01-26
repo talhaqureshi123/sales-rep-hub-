@@ -201,6 +201,7 @@ const createCustomer = async (req, res) => {
       status,
       notes,
       competitorInfo,
+      view,
     } = req.body;
 
     // Validate required fields - use firstName if provided, otherwise use name
@@ -233,6 +234,7 @@ const createCustomer = async (req, res) => {
       status: status || 'Not Visited',
       notes: notes || undefined,
       competitorInfo: competitorInfo || undefined,
+      view: view || 'admin_salesman', // Default: visible to both admin and salesman
       createdBy: req.user._id,
       source: 'app', // Mark app-created customers as 'app' source
     });
@@ -292,6 +294,7 @@ const updateCustomer = async (req, res) => {
       status,
       notes,
       competitorInfo,
+      view,
     } = req.body;
 
     let customer = await Customer.findById(req.params.id);
@@ -326,6 +329,7 @@ const updateCustomer = async (req, res) => {
     if (status) customer.status = status;
     if (notes !== undefined) customer.notes = notes;
     if (competitorInfo !== undefined) customer.competitorInfo = competitorInfo;
+    if (view !== undefined) customer.view = view;
 
     await customer.save();
 

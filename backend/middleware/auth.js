@@ -41,6 +41,14 @@ const protect = async (req, res, next) => {
       });
     }
 
+    // Update lastActivity timestamp for online status tracking
+    // Only update if more than 30 seconds have passed to avoid too many DB writes
+    const now = Date.now();
+    const lastActivity = req.user.lastActivity ? new Date(req.user.lastActivity).getTime() : 0;
+    if (now - lastActivity > 30000) { // Update every 30 seconds max
+      await User.findByIdAndUpdate(decoded.userId, { lastActivity: new Date() });
+    }
+
     next();
   } catch (error) {
     console.error("Auth error:", error.message);

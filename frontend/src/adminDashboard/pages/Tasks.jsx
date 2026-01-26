@@ -628,7 +628,18 @@ const Tasks = () => {
   }
 
   const handleApproveTask = async (taskId) => {
-    if (!window.confirm('Approve this task? It will be posted to HubSpot and the salesman will be notified.')) return
+    const confirmResult = await Swal.fire({
+      icon: 'question',
+      title: 'Approve Task?',
+      text: 'Approve this task? It will be posted to HubSpot and the salesman will be notified.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Approve',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!confirmResult.isConfirmed) return
     
     try {
       const res = await approveFollowUp(taskId)
@@ -657,11 +668,21 @@ const Tasks = () => {
         setShowTaskDetail(false)
         setSelectedTask(null)
       } else {
-        alert(res.message || 'Failed to approve task')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: res.message || 'Failed to approve task',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (e) {
       console.error(e)
-      alert('Error approving task')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error approving task',
+        confirmButtonColor: '#e9931c',
+      })
     }
   }
 
@@ -692,11 +713,21 @@ const Tasks = () => {
         setShowTaskDetail(false)
         setSelectedTask(null)
       } else {
-        alert(res.message || 'Failed to reject task')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: res.message || 'Failed to reject task',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (e) {
       console.error(e)
-      alert('Error rejecting task')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error rejecting task',
+        confirmButtonColor: '#e9931c',
+      })
     }
   }
 
