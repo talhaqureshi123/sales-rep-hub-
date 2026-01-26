@@ -202,10 +202,16 @@ const ShiftPhotos = () => {
                   {shift.speedometerImage ? (
                     <>
                       <img
-                        src={shift.speedometerImage}
+                        src={shift.speedometerImage.startsWith('data:') ? shift.speedometerImage : `data:image/jpeg;base64,${shift.speedometerImage}`}
                         alt="Start Meter"
                         className="w-full h-full object-contain cursor-pointer"
                         onClick={() => handleViewPhoto(shift)}
+                        onError={(e) => {
+                          // Fallback: try without base64 prefix if it fails
+                          if (!shift.speedometerImage.startsWith('data:')) {
+                            e.target.src = shift.speedometerImage
+                          }
+                        }}
                       />
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -237,9 +243,14 @@ const ShiftPhotos = () => {
                         {shift.visitedAreaImages.slice(0, 4).map((img, idx) => (
                           <img
                             key={`${shift._id}-visitimg-${idx}`}
-                            src={img}
+                            src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
                             alt={`Visited area ${idx + 1}`}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              if (!img.startsWith('data:')) {
+                                e.target.src = img
+                              }
+                            }}
                           />
                         ))}
                       </div>
@@ -256,10 +267,15 @@ const ShiftPhotos = () => {
                   ) : shift.visitedAreaImage ? (
                     <>
                       <img
-                        src={shift.visitedAreaImage}
+                        src={shift.visitedAreaImage.startsWith('data:') ? shift.visitedAreaImage : `data:image/jpeg;base64,${shift.visitedAreaImage}`}
                         alt="Visited area"
                         className="w-full h-full object-cover cursor-pointer"
                         onClick={() => handleViewPhoto(shift)}
+                        onError={(e) => {
+                          if (!shift.visitedAreaImage.startsWith('data:')) {
+                            e.target.src = shift.visitedAreaImage
+                          }
+                        }}
                       />
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -284,9 +300,14 @@ const ShiftPhotos = () => {
                   {shift.endingMeterImage ? (
                     <>
                       <img
-                        src={shift.endingMeterImage}
+                        src={shift.endingMeterImage.startsWith('data:') ? shift.endingMeterImage : `data:image/jpeg;base64,${shift.endingMeterImage}`}
                         alt="End Meter"
                         className="w-full h-full object-contain cursor-pointer"
+                        onError={(e) => {
+                          if (!shift.endingMeterImage.startsWith('data:')) {
+                            e.target.src = shift.endingMeterImage
+                          }
+                        }}
                         onClick={() => handleViewPhoto(shift)}
                       />
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -413,9 +434,14 @@ const ShiftPhotos = () => {
                   <div>
                     <h4 className="font-medium mb-2">Meter Photo:</h4>
                     <img
-                      src={selectedShift.speedometerImage}
+                      src={selectedShift.speedometerImage.startsWith('data:') ? selectedShift.speedometerImage : `data:image/jpeg;base64,${selectedShift.speedometerImage}`}
                       alt="Shift meter"
                       className="w-full h-auto rounded-lg"
+                      onError={(e) => {
+                        if (!selectedShift.speedometerImage.startsWith('data:')) {
+                          e.target.src = selectedShift.speedometerImage
+                        }
+                      }}
                     />
                   </div>
                 )}
@@ -429,17 +455,27 @@ const ShiftPhotos = () => {
                         {selectedShift.visitedAreaImages.slice(0, 8).map((img, idx) => (
                           <img
                             key={`${selectedShift._id}-modal-visitimg-${idx}`}
-                            src={img}
+                            src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
                             alt={`Visited area ${idx + 1}`}
                             className="w-full h-auto rounded-lg object-cover"
+                            onError={(e) => {
+                              if (!img.startsWith('data:')) {
+                                e.target.src = img
+                              }
+                            }}
                           />
                         ))}
                       </div>
                     ) : (
                       <img
-                        src={selectedShift.visitedAreaImage}
+                        src={selectedShift.visitedAreaImage.startsWith('data:') ? selectedShift.visitedAreaImage : `data:image/jpeg;base64,${selectedShift.visitedAreaImage}`}
                         alt="Visited area"
                         className="w-full h-auto rounded-lg"
+                        onError={(e) => {
+                          if (!selectedShift.visitedAreaImage.startsWith('data:')) {
+                            e.target.src = selectedShift.visitedAreaImage
+                          }
+                        }}
                       />
                     )}
                   </div>
@@ -448,11 +484,16 @@ const ShiftPhotos = () => {
               {selectedShift.endingMeterImage && (
                 <div className="mt-4">
                   <h4 className="font-medium mb-2">Ending Meter:</h4>
-                  <img
-                    src={selectedShift.endingMeterImage}
-                    alt="Ending meter"
-                    className="w-full h-auto rounded-lg"
-                  />
+                    <img
+                      src={selectedShift.endingMeterImage.startsWith('data:') ? selectedShift.endingMeterImage : `data:image/jpeg;base64,${selectedShift.endingMeterImage}`}
+                      alt="Ending meter"
+                      className="w-full h-auto rounded-lg"
+                      onError={(e) => {
+                        if (!selectedShift.endingMeterImage.startsWith('data:')) {
+                          e.target.src = selectedShift.endingMeterImage
+                        }
+                      }}
+                    />
                 </div>
               )}
               <div className="mt-4 space-y-2">

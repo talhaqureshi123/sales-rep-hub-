@@ -253,17 +253,21 @@ const Quotation = () => {
       const { getProducts } = await import('../../services/salemanservices/productService')
       const result = await getProducts()
       if (result.success && result.data) {
+        // Filter out inactive products - only show active products
         // Transform backend data to frontend format
-        const transformedProducts = result.data.map(p => ({
-          id: p._id,
-          _id: p._id, // Add _id for compatibility
-          name: p.name,
-          code: p.productCode,
-          price: p.price,
-          productCode: p.productCode,
-          category: p.category,
-          qrCode: p.qrCode,
-        }))
+        const transformedProducts = result.data
+          .filter(p => p.isActive !== false) // Only include active products (default to true if not specified)
+          .map(p => ({
+            id: p._id,
+            _id: p._id, // Add _id for compatibility
+            name: p.name,
+            code: p.productCode,
+            price: p.price,
+            productCode: p.productCode,
+            category: p.category,
+            qrCode: p.qrCode,
+            isActive: p.isActive !== false, // Store isActive status
+          }))
         setProducts(transformedProducts)
       } else {
         console.error('Failed to load products:', result.message)
@@ -395,6 +399,7 @@ const Quotation = () => {
           const pId = p._id || p.id
           return pId === productId || String(pId) === String(productId)
         })
+        
         if (product) {
           const qty = item.quantity || 1
           const price = product.price || 0
@@ -1179,7 +1184,10 @@ const Quotation = () => {
                                 // Always prefer _id over id for MongoDB compatibility
                                 const productValue = product._id || product.id
                                 return (
-                                  <option key={productValue} value={productValue}>
+                                  <option 
+                                    key={productValue} 
+                                    value={productValue}
+                                  >
                                     {product.name} - £{product.price}
                                   </option>
                                 )
