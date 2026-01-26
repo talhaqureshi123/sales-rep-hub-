@@ -33,18 +33,21 @@ const Notifications = () => {
     loadAllNotifications()
   }, [])
 
-  // Mark all notifications as seen when component mounts (user opened notifications page)
+  // Mark all current notifications as seen when component mounts (user opened notifications page)
+  // Only mark as seen after user has had time to view the notifications (3 seconds delay)
   useEffect(() => {
-    if (!loading) {
-      // Mark all current notifications as seen (update timestamp)
-      markAllNotificationsAsSeen()
-      
-      // Refresh notification count to update badge (should become 0)
-      setTimeout(() => {
+    if (!loading && (tasks.length > 0 || visits.length > 0 || samples.length > 0)) {
+      // Mark all current notifications as seen after a delay
+      // This allows user to see which ones are new before they're marked as seen
+      const timer = setTimeout(() => {
+        markAllNotificationsAsSeen()
+        // Refresh notification count to update badge (should become 0)
         refreshNotificationCount()
-      }, 500)
+      }, 3000) // Wait 3 seconds after loading to mark as seen - gives user time to see new notifications
+      
+      return () => clearTimeout(timer)
     }
-  }, [loading, refreshNotificationCount])
+  }, [loading, tasks.length, visits.length, samples.length, refreshNotificationCount])
 
   const loadAllNotifications = async () => {
     setLoading(true)
@@ -52,25 +55,64 @@ const Notifications = () => {
       // Load tasks (follow-ups)
       const tasksResult = await getMyFollowUps({})
       if (tasksResult.success && tasksResult.data) {
-        setTasks(tasksResult.data)
+        const tasksData = Array.isArray(tasksResult.data) ? tasksResult.data : []
+        setTasks(tasksData)
+        console.log('Loaded tasks:', tasksData.length)
+      } else {
+        console.warn('Failed to load tasks:', tasksResult.message)
+        setTasks([])
       }
 
       // Load visits
       const visitsResult = await getVisitTargets({})
       if (visitsResult.success && visitsResult.data) {
-        setVisits(visitsResult.data)
+        const visitsData = Array.isArray(visitsResult.data) ? visitsResult.data : []
+        setVisits(visitsData)
+        console.log('Loaded visits:', visitsData.length)
+      } else {
+        console.warn('Failed to load visits:', visitsResult.message)
+        setVisits([])
       }
 
       // Load samples
       const samplesResult = await getMySamples({})
       if (samplesResult.success && samplesResult.data) {
-        setSamples(samplesResult.data)
+        const samplesData = Array.isArray(samplesResult.data) ? samplesResult.data : []
+        setSamples(samplesData)
+        console.log('Loaded samples:', samplesData.length)
+      } else {
+        console.warn('Failed to load samples:', samplesResult.message)
+        setSamples([])
       }
     } catch (error) {
       console.error('Error loading notifications:', error)
+      // Set empty arrays on error
+      setTasks([])
+      setVisits([])
+      setSamples([])
     } finally {
       setLoading(false)
     }
+  }
+
+  // Get last seen timestamp to mark new notifications
+  const lastSeenTimestamp = useMemo(() => {
+    const timestamp = localStorage.getItem('notificationsLastSeen')
+    return timestamp ? new Date(timestamp) : null
+  }, [])
+
+  // Get item timestamp for comparison
+  const getItemTimestamp = (item) => {
+    if (item.createdAt) return new Date(item.createdAt)
+    if (item.updatedAt) return new Date(item.updatedAt)
+    return new Date(0)
+  }
+
+  // Check if notification is new (created/updated after last seen)
+  const isNewNotification = (item) => {
+    if (!lastSeenTimestamp) return true // If never seen, all are new
+    const itemTime = getItemTimestamp(item)
+    return itemTime > lastSeenTimestamp
   }
 
   // Categorize notifications
@@ -82,9 +124,11 @@ const Notifications = () => {
 
     const allNotifications = []
 
-    // Process Tasks
+    // Process Tasks (Follow-ups) - Show all except completed
     tasks.forEach(task => {
-      if (task.status === 'Completed') return
+      // Skip only completed tasks
+      const taskStatus = (task.status || '').toLowerCase()
+      if (taskStatus === 'completed') return
       
       const dueDate = task.dueDate ? new Date(task.dueDate) : null
       const dueDateTime = dueDate ? new Date(dueDate) : null
@@ -108,23 +152,31 @@ const Notifications = () => {
         id: `task-${task._id || task.id}`,
         type: 'Task',
         category,
-        title: task.description || 'Task',
-        customer: task.customerName || 'No customer',
+        title: task.description || task.type || 'Task',
+        customer: task.customerName || task.customer?.name || 'No customer',
         dueDate: dueDate,
         dueTime: task.dueTime,
         priority: task.priority || 'Medium',
         status: task.status,
+        description: task.description || task.notes || '',
+        taskType: task.type || '',
+        isNew: isNewNotification(task),
         data: task
       })
     })
 
-    // Process Visits
+    // Process Visits - Show ALL visits including completed/previous ones
     visits.forEach(visit => {
-      if (visit.status === 'Completed') return
+      const visitStatus = (visit.status || '').toLowerCase()
+      const isCompleted = visitStatus === 'completed'
       
       const visitDate = visit.visitDate ? new Date(visit.visitDate) : null
       let category = 'Pending'
-      if (visitDate) {
+      
+      if (isCompleted) {
+        // For completed visits, categorize as "Previous" or "Completed"
+        category = 'Previous'
+      } else if (visitDate) {
         const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
         const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
         
@@ -141,11 +193,14 @@ const Notifications = () => {
         id: `visit-${visit._id || visit.id}`,
         type: 'Visit',
         category,
-        title: visit.name || 'Visit',
-        customer: visit.customerName || visit.address || 'No customer',
+        title: visit.name || visit.description || 'Visit',
+        customer: visit.customerName || visit.customer?.name || visit.address || 'No customer',
         dueDate: visitDate,
         priority: visit.priority || 'Medium',
         status: visit.status,
+        description: visit.description || visit.name || '',
+        address: visit.address || '',
+        isNew: isNewNotification(visit),
         data: visit
       })
     })
@@ -181,46 +236,78 @@ const Notifications = () => {
         dueDate: dueDate,
         priority: 'Medium',
         status: sample.status,
+        isNew: isNewNotification(sample),
         data: sample
       })
     })
 
     return allNotifications
-  }, [tasks, visits, samples])
+  }, [tasks, visits, samples, lastSeenTimestamp])
 
   // Filter notifications
   const filteredNotifications = useMemo(() => {
-    let filtered = categorizedNotifications
+    let filtered = [...categorizedNotifications] // Create a copy to avoid mutation
 
-    // Filter by category (Pending, Due Today, Overdue, Upcoming)
+    // Filter by category (Pending, Due Today, Overdue, Upcoming, Previous)
     if (activeFilter !== 'All') {
-      filtered = filtered.filter(n => n.category === activeFilter)
+      filtered = filtered.filter(n => {
+        const category = (n.category || '').trim()
+        return category === activeFilter
+      })
     }
 
     // Filter by type (Tasks, Visits, Samples)
     if (activeCategory !== 'All') {
-      filtered = filtered.filter(n => n.type === activeCategory)
+      filtered = filtered.filter(n => {
+        const type = (n.type || '').trim()
+        // Handle plural forms: 'Tasks' -> 'Task', 'Visits' -> 'Visit', 'Samples' -> 'Sample'
+        const normalizedCategory = activeCategory === 'Tasks' ? 'Task' : 
+                                   activeCategory === 'Visits' ? 'Visit' : 
+                                   activeCategory === 'Samples' ? 'Sample' : activeCategory
+        return type === normalizedCategory
+      })
     }
 
-    // Search filter
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      filtered = filtered.filter(n => 
-        n.title.toLowerCase().includes(search) ||
-        n.customer.toLowerCase().includes(search)
-      )
+    // Search filter - comprehensive search
+    if (searchTerm && searchTerm.trim()) {
+      const search = searchTerm.toLowerCase().trim()
+      filtered = filtered.filter(n => {
+        // Search in title
+        const titleMatch = (n.title || '').toLowerCase().includes(search)
+        // Search in customer name
+        const customerMatch = (n.customer || '').toLowerCase().includes(search)
+        // Search in description
+        const descMatch = (n.description || '').toLowerCase().includes(search)
+        // Search in type (Task, Visit, Sample)
+        const typeMatch = (n.type || '').toLowerCase().includes(search)
+        // Search in taskType (for tasks)
+        const taskTypeMatch = (n.taskType || '').toLowerCase().includes(search)
+        // Search in address (for visits)
+        const addressMatch = (n.address || '').toLowerCase().includes(search)
+        // Search in status
+        const statusMatch = (n.status || '').toLowerCase().includes(search)
+        // Search in priority
+        const priorityMatch = (n.priority || '').toLowerCase().includes(search)
+        // Search in due date (formatted)
+        const dueDateMatch = n.dueDate ? new Date(n.dueDate).toLocaleDateString().toLowerCase().includes(search) : false
+        
+        return titleMatch || customerMatch || descMatch || typeMatch || taskTypeMatch || addressMatch || statusMatch || priorityMatch || dueDateMatch
+      })
     }
 
-    // Sort: Overdue first, then Due Today, then Upcoming, then Pending
-    const sortOrder = { 'Overdue': 1, 'Due Today': 2, 'Upcoming': 3, 'Pending': 4 }
+    // Sort: Overdue first, then Due Today, then Upcoming, then Pending, then Previous
+    const sortOrder = { 'Overdue': 1, 'Due Today': 2, 'Upcoming': 3, 'Pending': 4, 'Previous': 5 }
     filtered.sort((a, b) => {
-      const orderA = sortOrder[a.category] || 5
-      const orderB = sortOrder[b.category] || 5
+      const orderA = sortOrder[a.category] || 6
+      const orderB = sortOrder[b.category] || 6
       if (orderA !== orderB) return orderA - orderB
       
-      // If same category, sort by date
+      // If same category, sort by date (most recent first for Previous, oldest first for others)
       if (a.dueDate && b.dueDate) {
-        return new Date(a.dueDate) - new Date(b.dueDate)
+        if (a.category === 'Previous') {
+          return new Date(b.dueDate) - new Date(a.dueDate) // Most recent first
+        }
+        return new Date(a.dueDate) - new Date(b.dueDate) // Oldest first
       }
       return 0
     })
@@ -235,7 +322,8 @@ const Notifications = () => {
       'Pending': 0,
       'Due Today': 0,
       'Overdue': 0,
-      'Upcoming': 0
+      'Upcoming': 0,
+      'Previous': 0
     }
     
     categorizedNotifications.forEach(n => {
@@ -298,6 +386,8 @@ const Notifications = () => {
         return 'bg-blue-100 text-blue-700 border-blue-300'
       case 'Pending':
         return 'bg-gray-100 text-gray-700 border-gray-300'
+      case 'Previous':
+        return 'bg-slate-100 text-slate-700 border-slate-300'
       default:
         return 'bg-gray-100 text-gray-700 border-gray-300'
     }
@@ -383,7 +473,7 @@ const Notifications = () => {
             <span className="text-sm font-medium text-gray-700">Status:</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {['All', 'Overdue', 'Due Today', 'Upcoming', 'Pending'].map(filter => (
+            {['All', 'Overdue', 'Due Today', 'Upcoming', 'Pending', 'Previous'].map(filter => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
@@ -415,9 +505,20 @@ const Notifications = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search notifications..."
+            placeholder="Search by title, customer, description, type, address..."
             className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
           />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              title="Clear search"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -428,7 +529,7 @@ const Notifications = () => {
           <p className="text-gray-600 font-medium text-lg">No notifications found</p>
           <p className="text-sm text-gray-500 mt-2">
             {searchTerm || activeFilter !== 'All' || activeCategory !== 'All'
-              ? 'Try adjusting your filters'
+              ? 'Try adjusting your filters or search term'
               : 'You\'re all caught up! No pending items.'}
           </p>
         </div>
@@ -437,19 +538,33 @@ const Notifications = () => {
           {filteredNotifications.map((notification) => (
             <div
               key={notification.id}
-              className="bg-white rounded-lg p-4 border-2 border-gray-200 hover:border-[#e9931c] transition-all shadow-sm hover:shadow-md"
+              className={`bg-white rounded-lg p-4 border-2 transition-all shadow-sm hover:shadow-md ${
+                notification.isNew 
+                  ? 'border-blue-400 hover:border-blue-500 bg-blue-50' 
+                  : 'border-gray-200 hover:border-[#e9931c]'
+              }`}
             >
               <div className="flex items-start gap-4">
                 {/* Icon */}
-                <div className={`p-3 rounded-lg ${getCategoryColor(notification.type)}`}>
+                <div className={`p-3 rounded-lg ${getCategoryColor(notification.type)} relative`}>
                   {getCategoryIcon(notification.type)}
+                  {notification.isNew && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></span>
+                  )}
                 </div>
 
                 {/* Content */}
                 <div className="flex-1">
                   <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-lg mb-1">{notification.title}</h3>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-gray-900 text-lg">{notification.title}</h3>
+                        {notification.isNew && (
+                          <span className="px-2 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded-full">
+                            New
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                         <FaUser className="w-3 h-3" />
                         <span>{notification.customer}</span>

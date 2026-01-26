@@ -4247,10 +4247,33 @@ const SalesTracking = () => {
                   <input
                     type="date"
                     value={selectedDateForView}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const selectedDate = e.target.value
                       setSelectedDateForView(selectedDate)
                       setAssignmentDate(selectedDate)
+                      
+                      // When date is selected, refresh visits from database to get all visits (including completed) for that date
+                      if (selectedDate && assignModalActiveTab === 'visits') {
+                        try {
+                          // Fetch all visits (including completed) from database
+                          const visitTargetsResult = await getVisitTargets({})
+                          if (visitTargetsResult.success && visitTargetsResult.data) {
+                            // Filter only targets with valid coordinates
+                            const validTargets = visitTargetsResult.data.filter(target => {
+                              const lat = parseFloat(target.latitude)
+                              const lng = parseFloat(target.longitude)
+                              const hasValidCoords = !isNaN(lat) && !isNaN(lng) && 
+                                lat >= -90 && lat <= 90 && 
+                                lng >= -180 && lng <= 180
+                              return hasValidCoords
+                            })
+                            setVisitTargets(validTargets)
+                            console.log('Refreshed visits from database for date:', selectedDate, 'Total visits:', validTargets.length)
+                          }
+                        } catch (error) {
+                          console.error('Error refreshing visits:', error)
+                        }
+                      }
                       
                       // Show notification when date is selected
                       if (selectedDate) {
@@ -4266,7 +4289,7 @@ const SalesTracking = () => {
                         Swal.fire({
                           icon: 'info',
                           title: 'Date Selected',
-                          text: `Showing ${tabName} for ${formattedDate}`,
+                          text: `Showing ${tabName} for ${formattedDate} (including previous visits)`,
                           confirmButtonColor: '#e9931c',
                           timer: 2000,
                           timerProgressBar: true,
@@ -4276,7 +4299,7 @@ const SalesTracking = () => {
                         })
                         
                         addNotification({
-                          message: `📅 Viewing ${tabName} for ${formattedDate}`,
+                          message: `📅 Viewing ${tabName} for ${formattedDate} (including previous)`,
                           type: 'info'
                         })
                       }
@@ -4311,51 +4334,164 @@ const SalesTracking = () => {
                     nextWeek.setDate(nextWeek.getDate() + 7)
                     
                     // Filter visits based on selectedDateForView or show all
-                    let visitsToShow = visitTargets.filter(v => v.status !== 'Completed')
+                    // When date is selected, show ALL visits (including completed) for that date
+                    // When no date selected, show only non-completed visits
+                    let visitsToShow = visitTargets.filter(v => {
+                      if (selectedDateForView) {
+                        // When date is selected, show all visits (including completed) for that date
+                        return true
+                      } else {
+                        // When no date selected, filter out completed visits
+                        const status = (v.status || '').toLowerCase()
+                        return status !== 'completed'
+                      }
+                    })
                     
                     if (selectedDateForView) {
-                      const selectedDateObj = new Date(selectedDateForView)
+                      const selectedDateObj = new Date(selectedDateForView + 'T00:00:00') // Add time to avoid timezone issues
                       const selectedDateOnly = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate())
                       
                       visitsToShow = visitsToShow.filter(v => {
-                        if (!v.visitDate) return false
-                        const visitDateOnly = new Date(new Date(v.visitDate).getFullYear(), new Date(v.visitDate).getMonth(), new Date(v.visitDate).getDate())
-                        return visitDateOnly.getTime() === selectedDateOnly.getTime()
+                        if (!v.visitDate) {
+                          // If visit has no date but is assigned to salesman, show it when date is selected
+                          // This allows assigning visits to a date
+                          return true
+                        }
+                        
+                        // Parse visit date properly
+                        const visitDate = new Date(v.visitDate)
+                        // Handle timezone issues by comparing date parts only
+                        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                        
+                        // Compare dates
+                        const dateMatch = visitDateOnly.getTime() === selectedDateOnly.getTime()
+                        
+                        // Also check if date string matches (for different formats)
+                        const visitDateStr = visitDate.toISOString().split('T')[0]
+                        const selectedDateStr = selectedDateForView
+                        const stringMatch = visitDateStr === selectedDateStr
+                        
+                        return dateMatch || stringMatch
                       })
+                      
+                      // Debug log
+                      console.log('Selected date:', selectedDateForView)
+                      console.log('Total visits:', visitTargets.length)
+                      console.log('Filtered visits for date:', visitsToShow.length)
+                      console.log('Visits data:', visitsToShow.map(v => ({
+                        name: v.name,
+                        visitDate: v.visitDate,
+                        status: v.status
+                      })))
                     }
                     
-                    // Categorize visits
-                    const dueVisits = visitsToShow.filter(v => {
-                      if (!v.visitDate) return false
-                      const visitDate = new Date(v.visitDate)
-                      return visitDate < today
-                    })
+                    // Categorize visits - if date is selected, show all visits for that date in one section
+                    let dueVisits = [] // Past due, non-completed visits
+                    let todayVisits = []
+                    let tomorrowVisits = []
+                    let remainingVisits = []
+                    let upcomingVisits = []
+                    let unassignedVisits = []
+                    let completedVisits = [] // Completed visits (separate section)
                     
-                    const todayVisits = visitsToShow.filter(v => {
-                      if (!v.visitDate) return false
-                      const visitDate = new Date(v.visitDate)
-                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-                      return visitDateOnly.getTime() === today.getTime()
-                    })
-                    
-                    const tomorrowVisits = visitsToShow.filter(v => {
-                      if (!v.visitDate) return false
-                      const visitDate = new Date(v.visitDate)
-                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-                      return visitDateOnly.getTime() === tomorrow.getTime()
-                    })
-                    
-                    const remainingVisits = visitsToShow.filter(v => {
-                      if (!v.visitDate) return false
-                      const visitDate = new Date(v.visitDate)
-                      return visitDate > tomorrow && visitDate <= nextWeek
-                    })
-                    
-                    const upcomingVisits = visitsToShow.filter(v => {
-                      if (!v.visitDate) return false
-                      const visitDate = new Date(v.visitDate)
-                      return visitDate > nextWeek
-                    })
+                    if (selectedDateForView) {
+                      // When a specific date is selected, show all visits for that date (including completed/previous)
+                      // Also include visits without dates (for assignment)
+                      const selectedDateObj = new Date(selectedDateForView + 'T00:00:00')
+                      const selectedDateOnly = new Date(selectedDateObj.getFullYear(), selectedDateObj.getMonth(), selectedDateObj.getDate())
+                      
+                      visitsToShow.forEach(v => {
+                        const visitStatus = (v.status || '').toLowerCase()
+                        const isCompleted = visitStatus === 'completed'
+                        
+                        if (!v.visitDate) {
+                          // Visits without date - show in a separate section for assignment (only if not completed)
+                          if (!isCompleted) {
+                            unassignedVisits.push(v)
+                          }
+                        } else {
+                          const visitDate = new Date(v.visitDate)
+                          const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                          
+                          if (visitDateOnly.getTime() === selectedDateOnly.getTime()) {
+                            // Visit matches selected date - categorize by status first, then by relative date
+                            if (isCompleted) {
+                              // Completed visits go to separate "Completed" section
+                              completedVisits.push(v)
+                            } else if (visitDate < today) {
+                              // Past due, non-completed visits
+                              dueVisits.push(v)
+                            } else if (visitDateOnly.getTime() === today.getTime()) {
+                              todayVisits.push(v)
+                            } else if (visitDateOnly.getTime() === tomorrow.getTime()) {
+                              tomorrowVisits.push(v)
+                            } else if (visitDate > tomorrow && visitDate <= nextWeek) {
+                              remainingVisits.push(v)
+                            } else {
+                              upcomingVisits.push(v)
+                            }
+                          }
+                        }
+                      })
+                    } else {
+                      // No date selected - categorize normally
+                      dueVisits = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        const isCompleted = visitStatus === 'completed'
+                        if (isCompleted) return false // Exclude completed visits from due
+                        const visitDate = new Date(v.visitDate)
+                        return visitDate < today
+                      })
+                      
+                      // Separate completed visits
+                      completedVisits = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        return visitStatus === 'completed'
+                      })
+                      
+                      todayVisits = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        if (visitStatus === 'completed') return false // Exclude completed
+                        const visitDate = new Date(v.visitDate)
+                        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                        return visitDateOnly.getTime() === today.getTime()
+                      })
+                      
+                      tomorrowVisits = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        if (visitStatus === 'completed') return false // Exclude completed
+                        const visitDate = new Date(v.visitDate)
+                        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+                        return visitDateOnly.getTime() === tomorrow.getTime()
+                      })
+                      
+                      remainingVisits = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        if (visitStatus === 'completed') return false // Exclude completed
+                        const visitDate = new Date(v.visitDate)
+                        return visitDate > tomorrow && visitDate <= nextWeek
+                      })
+                      
+                      upcomingVisits = visitsToShow.filter(v => {
+                        if (!v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        if (visitStatus === 'completed') return false // Exclude completed
+                        const visitDate = new Date(v.visitDate)
+                        return visitDate > nextWeek
+                      })
+                      
+                      // Visits without dates (only non-completed)
+                      unassignedVisits = visitsToShow.filter(v => {
+                        if (v.visitDate) return false
+                        const visitStatus = (v.status || '').toLowerCase()
+                        return visitStatus !== 'completed'
+                      })
+                    }
                     
                     return (
                       <div className="space-y-4">
@@ -4384,6 +4520,42 @@ const SalesTracking = () => {
                                       <p className="text-xs text-red-600 mt-1">
                                         Due: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
                                       </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Completed Visits */}
+                        {completedVisits.length > 0 && (
+                          <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCheckCircle className="text-green-600" />
+                              <h4 className="font-semibold text-green-800">Completed Visits ({completedVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {completedVisits.map((visit) => (
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-green-200 cursor-pointer hover:bg-green-50 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800">{visit.name}</p>
+                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                      <p className="text-xs text-green-600 mt-1">
+                                        Completed: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <FaCheckCircle className="text-green-600" />
                                     </div>
                                   </div>
                                 </div>
@@ -4533,14 +4705,70 @@ const SalesTracking = () => {
                           </div>
                         )}
 
-                        {visitsToShow.length === 0 && (
+                        {/* Unassigned Visits (for date assignment) */}
+                        {unassignedVisits.length > 0 && selectedDateForView && (
+                          <div className="border-2 border-orange-200 bg-orange-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCalendarAlt className="text-orange-600" />
+                              <h4 className="font-semibold text-orange-800">Unassigned Visits ({unassignedVisits.length})</h4>
+                              <span className="text-xs text-orange-600 ml-auto">Select to assign to {new Date(selectedDateForView).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {unassignedVisits.map((visit) => (
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  className="p-3 bg-white rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-50 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedVisitsForAssignment.includes(visit._id || visit.id)}
+                                          onChange={(e) => {
+                                            const visitId = visit._id || visit.id
+                                            if (e.target.checked) {
+                                              setSelectedVisitsForAssignment(prev => [...prev, visitId])
+                                            } else {
+                                              setSelectedVisitsForAssignment(prev => prev.filter(id => id !== visitId))
+                                            }
+                                          }}
+                                          className="w-4 h-4 text-[#e9931c] border-gray-300 rounded focus:ring-[#e9931c]"
+                                        />
+                                        <div className="flex-1">
+                                          <p className="font-medium text-gray-800">{visit.name}</p>
+                                          <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                          <p className="text-xs text-orange-600 mt-1">No date assigned - Click to assign</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {visitsToShow.length === 0 && unassignedVisits.length === 0 && (
                           <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
                             <FaCalendarAlt className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                             <p className="text-gray-600 font-medium">
-                              {selectedDateForView ? 'No visits scheduled for this date' : 'No visits available'}
+                              {selectedDateForView ? `No visits scheduled for ${new Date(selectedDateForView).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No visits available'}
                             </p>
                             <p className="text-sm text-gray-500 mt-1">
-                              {selectedDateForView ? 'Select another date or assign visits to this date' : 'Visits will appear here once assigned'}
+                              {selectedDateForView ? (
+                                <>
+                                  Select another date or assign visits to this date.
+                                  <br />
+                                  <span className="text-xs text-gray-400 mt-2 block">
+                                    Total visits: {visitTargets.length} | 
+                                    Without date: {visitTargets.filter(v => !v.visitDate && (v.status || '').toLowerCase() !== 'completed').length} |
+                                    Approved: {visitTargets.filter(v => (v.approvalStatus || 'Approved') === 'Approved' && (v.status || '').toLowerCase() !== 'completed').length}
+                                  </span>
+                                </>
+                              ) : (
+                                'Visits will appear here once assigned'
+                              )}
                             </p>
                           </div>
                         )}

@@ -43,19 +43,22 @@ export const useNotificationCount = () => {
       // Load tasks (non-completed)
       const tasksResult = await getMyFollowUps({})
       if (tasksResult.success && tasksResult.data) {
-        tasks = tasksResult.data.filter(t => t.status !== 'Completed')
+        const taskStatus = (t.status || '').toLowerCase()
+        tasks = tasksResult.data.filter(t => taskStatus !== 'completed')
       }
 
       // Load visits (non-completed)
       const visitsResult = await getVisitTargets({})
       if (visitsResult.success && visitsResult.data) {
-        visits = visitsResult.data.filter(v => v.status !== 'Completed')
+        const visitStatus = (v.status || '').toLowerCase()
+        visits = visitsResult.data.filter(v => visitStatus !== 'completed')
       }
 
       // Load samples (non-converted)
       const samplesResult = await getMySamples({})
       if (samplesResult.success && samplesResult.data) {
-        samples = samplesResult.data.filter(s => s.status !== 'Converted')
+        const sampleStatus = (s.status || '').toLowerCase()
+        samples = samplesResult.data.filter(s => sampleStatus !== 'converted')
       }
 
       // Get last seen timestamp

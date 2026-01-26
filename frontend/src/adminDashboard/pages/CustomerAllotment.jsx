@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getCustomers, updateCustomer, getCustomer } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
-import { createFollowUp } from '../../services/adminservices/followUpService'
+import { createFollowUp, getFollowUps } from '../../services/adminservices/followUpService'
 import { FaUser, FaFilter } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
@@ -19,12 +19,14 @@ const CustomerAllotment = () => {
   const [bulkSalesman, setBulkSalesman] = useState('')
   const [showBulkAllot, setShowBulkAllot] = useState(false)
   const [selectedSalesmanMap, setSelectedSalesmanMap] = useState({}) // Map customerId -> salesmanId
+  const [customerSalesmanMap, setCustomerSalesmanMap] = useState({}) // Map customerId -> {salesmanId, salesmanName} from tasks
 
   // Load data on mount
   useEffect(() => {
-    loadCustomers()
     loadSalesmen()
     loadAdmins()
+    // Load mapping first, then customers (mapping will trigger customers reload)
+    loadCustomerSalesmanMapping()
   }, [])
 
   // Reload when filters change
@@ -52,8 +54,8 @@ const CustomerAllotment = () => {
         setAllCustomers(raw)
 
         let filteredCustomers = raw
-        if (filterStatus === 'unassigned') filteredCustomers = raw.filter(c => !c.assignedSalesman)
-        if (filterStatus === 'assigned') filteredCustomers = raw.filter(c => !!c.assignedSalesman)
+        if (filterStatus === 'unassigned') filteredCustomers = raw.filter(c => !customerSalesmanMap[c._id] && !c.assignedSalesman)
+        if (filterStatus === 'assigned') filteredCustomers = raw.filter(c => !!customerSalesmanMap[c._id] || !!c.assignedSalesman)
         
         // Filter by admin who created the customer
         if (filterCreatedBy) {
@@ -64,6 +66,18 @@ const CustomerAllotment = () => {
         }
         
         setCustomers(filteredCustomers)
+        
+        // Update selectedSalesmanMap with currently assigned salesmen
+        setSelectedSalesmanMap(prev => {
+          const newMap = { ...prev }
+          raw.forEach(customer => {
+            const assignedSalesmanId = customer.assignedSalesman?._id || customer.assignedSalesman
+            if (assignedSalesmanId) {
+              newMap[customer._id] = assignedSalesmanId
+            }
+          })
+          return newMap
+        })
       } else {
         console.error('Failed to load customers:', result.message)
         setAllCustomers([])
@@ -103,6 +117,46 @@ const CustomerAllotment = () => {
       }
     } catch (error) {
       console.error('Error loading admins:', error)
+    }
+  }
+
+  // Load customer-salesman mapping from tasks/follow-ups
+  const loadCustomerSalesmanMapping = async () => {
+    try {
+      const result = await getFollowUps({})
+      if (result.success && result.data) {
+        const mapping = {}
+        const tasks = Array.isArray(result.data) ? result.data : []
+        
+        // Create mapping: customerId -> {salesmanId, salesmanName}
+        tasks.forEach(task => {
+          if (task.customer) {
+            const customerId = task.customer._id || task.customer
+            const salesmanId = task.salesman?._id || task.salesman
+            const salesmanName = task.salesman?.name || task.hubspot_owner_name || ''
+            
+            // Only update if not already mapped (first task wins) or if this is a more recent allocation
+            if (customerId && salesmanId) {
+              if (!mapping[customerId] || task.createdAt > (mapping[customerId].createdAt || 0)) {
+                mapping[customerId] = {
+                  salesmanId,
+                  salesmanName,
+                  createdAt: task.createdAt
+                }
+              }
+            }
+          }
+        })
+        
+        setCustomerSalesmanMap(mapping)
+        // Reload customers to update filters based on new mapping
+        // Use setTimeout to ensure state is updated before filtering
+        setTimeout(() => {
+          loadCustomers()
+        }, 100)
+      }
+    } catch (error) {
+      console.error('Error loading customer-salesman mapping:', error)
     }
   }
 
@@ -157,14 +211,15 @@ const CustomerAllotment = () => {
           text: 'Customer allotted successfully! Customer will now appear in salesman\'s quotations.',
           confirmButtonColor: '#e9931c',
         })
+        // Update the selectedSalesmanMap to show the newly assigned salesman
+        setSelectedSalesmanMap(prev => ({
+          ...prev,
+          [customerId]: salesmanId
+        }))
+        // Reload customer-salesman mapping to reflect new assignment
+        loadCustomerSalesmanMapping()
         loadCustomers()
         setSelectedCustomers([])
-        // Clear the selected salesman from map
-        setSelectedSalesmanMap(prev => {
-          const newMap = { ...prev }
-          delete newMap[customerId]
-          return newMap
-        })
       } else {
         Swal.fire({
           icon: 'error',
@@ -272,6 +327,16 @@ const CustomerAllotment = () => {
           text: `All ${successCount} customer(s) allotted successfully! Customers will now appear in salesman's quotations.`,
           confirmButtonColor: '#e9931c',
         })
+        // Update selectedSalesmanMap to show assigned salesmen
+        setSelectedSalesmanMap(prev => {
+          const newMap = { ...prev }
+          selectedCustomers.forEach(customerId => {
+            newMap[customerId] = bulkSalesman
+          })
+          return newMap
+        })
+        // Reload customer-salesman mapping
+        loadCustomerSalesmanMapping()
       } else if (successCount > 0 && failCount > 0) {
         Swal.fire({
           icon: 'warning',
@@ -279,6 +344,8 @@ const CustomerAllotment = () => {
           html: `Bulk allotment completed!<br><strong>${successCount}</strong> successful, <strong>${failCount}</strong> failed.<br>Customers will now appear in salesman's quotations.`,
           confirmButtonColor: '#e9931c',
         })
+        // Reload customer-salesman mapping
+        loadCustomerSalesmanMapping()
       } else {
         Swal.fire({
           icon: 'error',
@@ -287,6 +354,7 @@ const CustomerAllotment = () => {
           confirmButtonColor: '#e9931c',
         })
       }
+      loadCustomerSalesmanMapping()
       loadCustomers()
       setSelectedCustomers([])
       setBulkSalesman('')
@@ -317,9 +385,9 @@ const CustomerAllotment = () => {
   const toggleSelectAll = () => {
     const selectable =
       filterStatus === 'unassigned'
-        ? customers.filter(c => !c.assignedSalesman)
+        ? customers.filter(c => !customerSalesmanMap[c._id] && !c.assignedSalesman)
         : filterStatus === 'assigned'
-          ? customers.filter(c => !!c.assignedSalesman)
+          ? customers.filter(c => !!customerSalesmanMap[c._id] || !!c.assignedSalesman)
           : []
 
     if (selectedCustomers.length === selectable.length) {
@@ -334,10 +402,20 @@ const CustomerAllotment = () => {
   }
 
   const getSalesmanCustomerCount = (salesmanId) => {
-    return allCustomers.filter(c => 
-      (c.assignedSalesman?._id === salesmanId || c.assignedSalesman === salesmanId) && 
-      c.status === 'Active'
-    ).length
+    // Count customers assigned to this salesman through tasks/follow-ups
+    let count = 0
+    Object.keys(customerSalesmanMap).forEach(customerId => {
+      const mapping = customerSalesmanMap[customerId]
+      const mappingSalesmanId = mapping.salesmanId?._id || mapping.salesmanId
+      if (mappingSalesmanId && (mappingSalesmanId === salesmanId || mappingSalesmanId.toString() === salesmanId.toString())) {
+        // Check if customer is active
+        const customer = allCustomers.find(c => (c._id === customerId || c._id?.toString() === customerId))
+        if (customer && customer.status === 'Active') {
+          count++
+        }
+      }
+    })
+    return count
   }
 
   return (
@@ -384,13 +462,15 @@ const CustomerAllotment = () => {
                     const assignedCount = getSalesmanCustomerCount(salesman._id || salesman.id)
                     const limit = salesman.customerLimit
                     const remaining = limit !== null && limit !== undefined ? limit - assignedCount : null
+                    // Only show count if greater than 0
+                    const countText = assignedCount > 0
+                          ? (limit !== null && limit !== undefined
+                              ? ` (${assignedCount}/${limit}${remaining !== null ? `, ${remaining} remaining` : ''})`
+                              : ` (${assignedCount} assigned)`)
+                          : ''
                     return (
                       <option key={salesman._id || salesman.id} value={salesman._id || salesman.id}>
-                        {salesman.name}
-                        {limit !== null && limit !== undefined
-                          ? ` (${assignedCount}/${limit}${remaining !== null ? `, ${remaining} remaining` : ''})`
-                          : ` (${assignedCount} assigned)`
-                        }
+                        {salesman.name}{countText}
                       </option>
                     )
                   })}
@@ -465,9 +545,11 @@ const CustomerAllotment = () => {
                   (c.createdBy?._id === admin._id || c.createdBy === admin._id) && 
                   c.status === 'Active'
                 ).length
+                // Only show count if greater than 0
+                const countText = assignedCount > 0 ? ` (${assignedCount} assigned)` : ''
                 return (
                   <option key={admin._id || admin.id} value={admin._id || admin.id}>
-                    {admin.name} ({assignedCount} assigned)
+                    {admin.name}{countText}
                   </option>
                 )
               })}
@@ -557,11 +639,11 @@ const CustomerAllotment = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-full">
+              <table className="w-full min-w-full table-fixed">
                 <thead>
-                  <tr className="border-b-2 border-gray-200">
+                  <tr className="border-b-2 border-gray-200 bg-gray-50">
                     {(filterStatus === 'unassigned' || filterStatus === 'assigned') && (
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">
+                      <th className="text-left py-3 px-3 text-gray-700 font-semibold w-12">
                         <input
                           type="checkbox"
                           checked={selectedCustomers.length === customers.length && customers.length > 0}
@@ -570,20 +652,25 @@ const CustomerAllotment = () => {
                         />
                       </th>
                     )}
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Name</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Contact</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Company</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Created By</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Current Salesman</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Allot To</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-48">Name</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-48">Contact</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-40">Company</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-40">Created By</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-40">Current Salesman</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-56">Allot To</th>
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-32">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {customers.map((customer) => {
-                    const isUnassigned = !customer.assignedSalesman
+                    // Check if customer is assigned through tasks
+                    const taskMapping = customerSalesmanMap[customer._id]
+                    const isUnassigned = !taskMapping && !customer.assignedSalesman
                     const isSelected = selectedCustomers.includes(customer._id)
-                    const selectedSalesman = selectedSalesmanMap[customer._id] || ''
+                    // Get currently assigned salesman ID from tasks or legacy field, or selected one from map
+                    const currentAssignedSalesmanId = taskMapping?.salesmanId?._id || taskMapping?.salesmanId || 
+                                                     customer.assignedSalesman?._id || customer.assignedSalesman
+                    const selectedSalesman = selectedSalesmanMap[customer._id] || currentAssignedSalesmanId || ''
 
                     return (
                       <tr
@@ -593,7 +680,7 @@ const CustomerAllotment = () => {
                         }`}
                       >
                         {(filterStatus === 'unassigned' || filterStatus === 'assigned') && (
-                          <td className="py-4 px-4">
+                          <td className="py-3 px-3 align-middle">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -602,37 +689,56 @@ const CustomerAllotment = () => {
                             />
                           </td>
                         )}
-                        <td className="py-4 px-4">
-                          <div className="font-semibold text-gray-800">{customer.name}</div>
+                        <td className="py-3 px-3 align-top">
+                          <div className="font-semibold text-gray-800 whitespace-nowrap truncate" title={customer.name}>{customer.name}</div>
                           {customer.address && (
-                            <div className="text-sm text-gray-500">{customer.address}</div>
+                            <div className="text-xs text-gray-500 truncate" title={customer.address}>{customer.address}</div>
                           )}
                         </td>
-                        <td className="py-4 px-4">
-                          <div className="text-sm text-gray-800">{customer.email || 'N/A'}</div>
-                          <div className="text-sm text-gray-500">{customer.phone || 'N/A'}</div>
+                        <td className="py-3 px-3 align-top">
+                          <div className="text-sm text-gray-800 truncate" title={customer.email || 'N/A'}>{customer.email || 'N/A'}</div>
+                          <div className="text-sm text-gray-500 truncate" title={customer.phone || 'N/A'}>{customer.phone || 'N/A'}</div>
                         </td>
-                        <td className="py-4 px-4 text-gray-700">{customer.company || 'N/A'}</td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-3 align-top text-gray-700">
+                          <span className="truncate block" title={customer.company || 'N/A'}>{customer.company || 'N/A'}</span>
+                        </td>
+                        <td className="py-3 px-3 align-top">
                           {customer.createdBy ? (
                             <div className="flex items-center gap-1 text-sm text-gray-700">
-                              <FaUser className="w-3 h-3 text-gray-500" />
-                              <span>{customer.createdBy.name || customer.createdBy.email || 'N/A'}</span>
+                              <FaUser className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                              <span className="truncate" title={customer.createdBy.name || customer.createdBy.email || 'N/A'}>
+                                {customer.createdBy.name || customer.createdBy.email || 'N/A'}
+                              </span>
                             </div>
                           ) : (
                             <span className="text-gray-400 text-sm">N/A</span>
                           )}
                         </td>
-                        <td className="py-4 px-4">
-                          {customer.assignedSalesman ? (
-                            <div className="font-medium text-gray-800">
-                              {customer.assignedSalesman.name || getSalesmanInfo(customer.assignedSalesman?._id || customer.assignedSalesman)?.name}
-                            </div>
-                          ) : (
-                            <span className="text-red-500 font-medium">Not Assigned</span>
-                          )}
+                        <td className="py-3 px-3 align-top">
+                          {(() => {
+                            // Check customer-salesman mapping from tasks
+                            const mapping = customerSalesmanMap[customer._id]
+                            if (mapping && mapping.salesmanId) {
+                              const salesman = getSalesmanInfo(mapping.salesmanId)
+                              return (
+                                <div className="font-medium text-gray-800 truncate" title={mapping.salesmanName || salesman?.name || 'Assigned'}>
+                                  {mapping.salesmanName || salesman?.name || 'Assigned'}
+                                </div>
+                              )
+                            }
+                            // Fallback to old assignedSalesman field (for legacy data)
+                            if (customer.assignedSalesman) {
+                              const salesmanName = customer.assignedSalesman.name || getSalesmanInfo(customer.assignedSalesman?._id || customer.assignedSalesman)?.name
+                              return (
+                                <div className="font-medium text-gray-800 truncate" title={salesmanName}>
+                                  {salesmanName}
+                                </div>
+                              )
+                            }
+                            return <span className="text-red-500 font-medium text-sm">Not Assigned</span>
+                          })()}
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-3 align-top">
                           <div className="flex gap-2 items-center">
                             <select
                               value={selectedSalesman}
@@ -642,25 +748,27 @@ const CustomerAllotment = () => {
                                   [customer._id]: e.target.value
                                 }))
                               }}
-                              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] text-sm"
+                              className="flex-1 min-w-0 px-2 py-1.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] text-sm"
                             >
-                              <option value="">Select Salesman</option>
+                              <option value="">Select...</option>
                               {salesmen.map((salesman) => {
                                 const assignedCount = getSalesmanCustomerCount(salesman._id || salesman.id)
                                 const limit = salesman.customerLimit
                                 const remaining = limit !== null && limit !== undefined ? limit - assignedCount : null
                                 const isAtLimit = limit !== null && limit !== undefined && assignedCount >= limit
+                                // Only show count if greater than 0
+                                const countText = assignedCount > 0
+                                      ? (limit !== null && limit !== undefined
+                                          ? ` (${assignedCount}/${limit}${remaining !== null ? `, ${remaining} remaining` : ''})`
+                                          : ` (${assignedCount} assigned)`)
+                                      : ''
                                 return (
                                   <option
                                     key={salesman._id || salesman.id}
                                     value={salesman._id || salesman.id}
                                     disabled={isAtLimit && customer.assignedSalesman?._id !== salesman._id}
                                   >
-                                    {salesman.name}
-                                    {limit !== null && limit !== undefined
-                                      ? ` (${assignedCount}/${limit}${remaining !== null ? `, ${remaining} remaining` : ''})`
-                                      : ` (${assignedCount} assigned)`
-                                    }
+                                    {salesman.name}{countText}
                                     {isAtLimit && customer.assignedSalesman?._id !== salesman._id ? ' - Limit Reached' : ''}
                                   </option>
                                 )
@@ -676,19 +784,19 @@ const CustomerAllotment = () => {
                                     return newMap
                                   })
                                 }}
-                                className="p-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors"
+                                className="p-1.5 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors flex-shrink-0"
                                 title="Allot Customer"
                               >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                               </button>
                             )}
                           </div>
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-3 align-middle">
                           <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                            className={`inline-block px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
                               customer.status === 'Active'
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-gray-100 text-gray-800'

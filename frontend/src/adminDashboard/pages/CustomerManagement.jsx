@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
+import GoogleMapView from '../../universalcomponents/GoogleMapView'
 import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
@@ -18,6 +19,8 @@ const CustomerManagement = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
   const [userRole, setUserRole] = useState(null) // Current user role
+  const [mapCenter, setMapCenter] = useState({ lat: 28.6139, lng: 77.2090 }) // Default: Delhi
+  const [selectedCustomerForMap, setSelectedCustomerForMap] = useState(null)
   // Customer Detail Modal State
   const [showCustomerDetailModal, setShowCustomerDetailModal] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -1098,12 +1101,115 @@ const CustomerManagement = () => {
             </div>
           )}
         </>
-      ) : (
-        <div className="bg-white border-2 border-gray-200 rounded-lg p-4 text-center">
-          <FaMapMarkerAlt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-600">Map view coming soon...</p>
+      ) : viewMode === 'map' ? (
+        <div className="bg-white border-2 border-gray-200 rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 300px)', minHeight: '600px' }}>
+          {useMemo(() => {
+            // Convert customers to visit targets format for map display
+            const customerMarkers = customers
+              .filter(customer => {
+                // Only show customers with address information
+                return customer.address || customer.city || customer.postcode || customer.pincode
+              })
+              .map(customer => {
+                // Try to extract coordinates if available, otherwise use geocoding
+                let lat = null
+                let lng = null
+                
+                // Check if customer has coordinates (if added in future)
+                if (customer.latitude && customer.longitude) {
+                  lat = parseFloat(customer.latitude)
+                  lng = parseFloat(customer.longitude)
+                }
+                
+                // Build address string for geocoding
+                const addressParts = []
+                if (customer.address) addressParts.push(customer.address)
+                if (customer.city) addressParts.push(customer.city)
+                if (customer.state) addressParts.push(customer.state)
+                if (customer.postcode) addressParts.push(customer.postcode)
+                else if (customer.pincode) addressParts.push(customer.pincode)
+                
+                const fullAddress = addressParts.join(', ')
+                
+                // Customer name
+                const customerName = customer.name || 
+                                    customer.company || 
+                                    (customer.firstName ? `${customer.firstName}${customer.contactPerson ? ` ${customer.contactPerson}` : ''}` : '') ||
+                                    customer.email ||
+                                    'Customer'
+                
+                return {
+                  _id: customer._id,
+                  id: customer._id,
+                  name: customerName,
+                  address: fullAddress || 'No address',
+                  latitude: lat ? String(lat) : null,
+                  longitude: lng ? String(lng) : null,
+                  description: customer.notes || '',
+                  status: customer.status || 'Not Visited',
+                  priority: customer.orderPotential || 'Medium',
+                  customer: customer, // Store full customer object
+                }
+              })
+              .filter(marker => {
+                // Only include markers with valid coordinates or address for geocoding
+                if (marker.latitude && marker.longitude) {
+                  const lat = parseFloat(marker.latitude)
+                  const lng = parseFloat(marker.longitude)
+                  return !isNaN(lat) && !isNaN(lng) && 
+                         lat >= -90 && lat <= 90 && 
+                         lng >= -180 && lng <= 180
+                }
+                // Include markers with address (will be geocoded by GoogleMapView)
+                return marker.address && marker.address !== 'No address'
+              })
+            
+            // Calculate map center from customer locations
+            const validCoords = customerMarkers.filter(m => m.latitude && m.longitude)
+            let calculatedCenter = mapCenter
+            if (validCoords.length > 0) {
+              const avgLat = validCoords.reduce((sum, m) => sum + parseFloat(m.latitude), 0) / validCoords.length
+              const avgLng = validCoords.reduce((sum, m) => sum + parseFloat(m.longitude), 0) / validCoords.length
+              if (!isNaN(avgLat) && !isNaN(avgLng)) {
+                calculatedCenter = { lat: avgLat, lng: avgLng }
+              }
+            }
+            
+            return customerMarkers.length > 0 ? (
+              <GoogleMapView
+                key={`customer-map-${customers.length}-${calculatedCenter.lat}-${calculatedCenter.lng}`}
+                milestones={[]}
+                visitTargets={customerMarkers}
+                userLocation={null}
+                center={calculatedCenter}
+                zoom={customerMarkers.length === 1 ? 15 : 12}
+                height="100%"
+                showUserLocation={false}
+                showRadius={false}
+                isTracking={false}
+                onMarkerClick={(marker) => {
+                  // Open customer detail modal when marker is clicked
+                  if (marker.customer) {
+                    setSelectedCustomer(marker.customer)
+                    setShowCustomerDetailModal(true)
+                    loadCustomerDetails(marker.customer._id)
+                  }
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
+                <div className="text-center">
+                  <FaMapMarkerAlt className="w-24 h-24 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg font-medium">No Customers with Address</p>
+                  <p className="text-gray-400 text-sm mt-2">
+                    Add address information to customers to view them on the map
+                  </p>
+                </div>
+              </div>
+            )
+          }, [customers, mapCenter])}
         </div>
-      )}
+      ) : null}
 
       {/* Customer Detail Modal */}
       {showCustomerDetailModal && selectedCustomer && (
