@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
 import { getSalesOrders, deleteSalesOrder } from '../../services/adminservices/salesOrderService'
 import SalesOrderForm from './SalesOrderForm'
+import Swal from 'sweetalert2'
 
 const SalesOrders = () => {
   const [orders, setOrders] = useState([])
@@ -39,6 +40,23 @@ const SalesOrders = () => {
 
   useEffect(() => {
     loadOrders()
+    
+    // Check if form should be opened from achievement click or sales submission
+    const shouldOpenForm = localStorage.getItem('openSalesOrderForm') === 'true'
+    const editOrderId = localStorage.getItem('editSalesOrderId')
+    
+    if (shouldOpenForm) {
+      setShowForm(true)
+      setEditingOrderId(null) // Ensure it's a new form
+      localStorage.removeItem('openSalesOrderForm')
+    }
+    
+    if (editOrderId) {
+      setEditingOrderId(editOrderId)
+      setShowForm(true)
+      localStorage.removeItem('editSalesOrderId')
+    }
+    
   }, [])
 
   useEffect(() => {
@@ -50,7 +68,53 @@ const SalesOrders = () => {
     try {
       const result = await getSalesOrders()
       if (result.success && result.data) {
+        const previousOrders = orders
         setOrders(result.data)
+        
+        // Check if salesman should be redirected after admin approval
+        // Check for orders that were Pending and are now Confirmed
+        const user = JSON.parse(localStorage.getItem('user') || '{}')
+        if (user.role === 'salesman' && previousOrders.length > 0) {
+          const newlyApproved = result.data.filter(newOrder => {
+            const oldOrder = previousOrders.find(o => (o._id || o.id) === (newOrder._id || newOrder.id))
+            return oldOrder && 
+                   oldOrder.orderStatus === 'Pending' && 
+                   newOrder.orderStatus === 'Confirmed'
+          })
+          
+          if (newlyApproved.length > 0) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Order Approved!',
+              text: `Your ${newlyApproved.length} order(s) have been approved by admin. They will now appear in your Sales Targets.`,
+              confirmButtonColor: '#e9931c'
+            }).then(() => {
+              // Navigate to Sales Targets
+              const event = new CustomEvent('navigateToTab', { detail: 'sales-targets' })
+              window.dispatchEvent(event)
+            })
+          }
+        }
+        
+        // Also check localStorage flag (for immediate redirect after admin approval)
+        const shouldRedirect = localStorage.getItem('orderApprovedRedirect') === 'true'
+        if (shouldRedirect && user.role === 'salesman') {
+          Swal.fire({
+            icon: 'success',
+            title: 'Order Approved!',
+            text: 'Your order has been approved by admin. It will now appear in your Sales Targets.',
+            confirmButtonColor: '#e9931c'
+          }).then(() => {
+            localStorage.removeItem('orderApprovedRedirect')
+            localStorage.removeItem('approvedOrderId')
+            // Navigate to Sales Targets
+            const event = new CustomEvent('navigateToTab', { detail: 'sales-targets' })
+            window.dispatchEvent(event)
+          })
+        } else if (shouldRedirect && user.role !== 'salesman') {
+          localStorage.removeItem('orderApprovedRedirect')
+          localStorage.removeItem('approvedOrderId')
+        }
       } else {
         console.error('Failed to load orders:', result.message)
         setOrders([])
@@ -363,6 +427,10 @@ const SalesOrders = () => {
             orderId={editingOrderId}
             onClose={() => {
               setShowForm(false)
+              setEditingOrderId(null)
+              // Clear achievement flags when closing
+              localStorage.removeItem('salesOrderFromAchievement')
+              localStorage.removeItem('salesOrderVisitTarget')
               setEditingOrderId(null)
               loadOrders()
             }}

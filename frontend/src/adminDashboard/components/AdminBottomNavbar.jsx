@@ -30,7 +30,6 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
     { id: 'follow-up-manager', label: 'Follow-ups', icon: FaBell },
     { id: 'user-management', label: 'Salesmen', icon: FaUsers },
     { id: 'customer-management', label: 'Customers', icon: FaUser },
-    { id: 'assign-target', label: 'Assign', icon: FaMapMarkerAlt },
     { id: 'shift-photos', label: 'Photos', icon: FaCamera },
     { id: 'live-tracking', label: 'Tracking', icon: FaMapMarkedAlt },
   ]

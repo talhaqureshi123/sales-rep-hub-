@@ -55,6 +55,7 @@ const SalesTracking = () => {
     customerId: '',
     customerName: '',
     name: '',
+    targetName: '', // Add target name field
     description: '',
     address: '',
     city: '',
@@ -108,10 +109,15 @@ const SalesTracking = () => {
   const groupVisitsByDate = (targets) => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    today.setHours(0, 0, 0, 0)
+    
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const nextWeek = new Date(today)
-    nextWeek.setDate(nextWeek.getDate() + 7)
+    tomorrow.setHours(0, 0, 0, 0)
+    
+    const endOfWeek = new Date(today)
+    endOfWeek.setDate(endOfWeek.getDate() + 7)
+    endOfWeek.setHours(23, 59, 59, 999)
 
     const grouped = {
       today: [],
@@ -128,19 +134,40 @@ const SalesTracking = () => {
         return
       }
 
-      const visitDate = new Date(target.visitDate)
-      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+      try {
+        const visitDate = new Date(target.visitDate)
+        // Handle invalid dates
+        if (isNaN(visitDate.getTime())) {
+          grouped.noDate.push(target)
+          return
+        }
+        
+        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
+        visitDateOnly.setHours(0, 0, 0, 0)
 
-      if (visitDateOnly.getTime() === today.getTime()) {
-        grouped.today.push(target)
-      } else if (visitDateOnly.getTime() === tomorrow.getTime()) {
-        grouped.tomorrow.push(target)
-      } else if (visitDateOnly < today) {
-        grouped.past.push(target)
-      } else if (visitDateOnly <= nextWeek) {
-        grouped.thisWeek.push(target)
-      } else {
-        grouped.upcoming.push(target)
+        const todayTime = today.getTime()
+        const tomorrowTime = tomorrow.getTime()
+        const endOfWeekTime = endOfWeek.getTime()
+        const visitTime = visitDateOnly.getTime()
+
+        if (visitTime === todayTime) {
+          grouped.today.push(target)
+        } else if (visitTime === tomorrowTime) {
+          grouped.tomorrow.push(target)
+        } else if (visitTime < todayTime) {
+          grouped.past.push(target)
+        } else if (visitTime > tomorrowTime && visitTime <= endOfWeekTime) {
+          // This week includes dates after tomorrow up to end of week (7 days from today)
+          grouped.thisWeek.push(target)
+        } else if (visitTime > endOfWeekTime) {
+          grouped.upcoming.push(target)
+        } else {
+          // Fallback: should not happen, but add to thisWeek if between today and end of week
+          grouped.thisWeek.push(target)
+        }
+      } catch (e) {
+        console.error('Error parsing visit date:', e, target)
+        grouped.noDate.push(target)
       }
     })
 
@@ -148,7 +175,9 @@ const SalesTracking = () => {
   }
 
   // Filter visits based on date filter
-  const getFilteredVisits = () => {
+  const filteredVisits = useMemo(() => {
+    if (!visitTargets || visitTargets.length === 0) return []
+    
     let filtered = []
     
     if (dateFilter === 'All') {
@@ -163,6 +192,7 @@ const SalesTracking = () => {
           filtered = grouped.tomorrow
           break
         case 'This Week':
+          // This Week includes: Today + Tomorrow + Rest of this week (next 7 days)
           filtered = [...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek]
           break
         case 'Upcoming':
@@ -181,9 +211,16 @@ const SalesTracking = () => {
       if (!a.visitDate && !b.visitDate) return 0
       if (!a.visitDate) return 1
       if (!b.visitDate) return -1
-      return new Date(a.visitDate) - new Date(b.visitDate)
+      const dateA = new Date(a.visitDate)
+      const dateB = new Date(b.visitDate)
+      if (isNaN(dateA.getTime())) return 1
+      if (isNaN(dateB.getTime())) return -1
+      return dateA.getTime() - dateB.getTime()
     })
-  }
+  }, [visitTargets, dateFilter])
+  
+  // Keep function for backward compatibility
+  const getFilteredVisits = () => filteredVisits
 
   // Get today's visits center for map
   const getTodayVisitsCenter = () => {
@@ -282,7 +319,21 @@ const SalesTracking = () => {
               lng >= -180 && lng <= 180
             return hasValidCoords
           })
-          setVisitTargets(validTargets)
+          
+          // Ensure visitDate is properly formatted
+          const processedTargets = validTargets.map(target => {
+            if (target.visitDate) {
+              // Ensure visitDate is a valid Date object
+              const visitDate = new Date(target.visitDate)
+              if (!isNaN(visitDate.getTime())) {
+                return { ...target, visitDate: visitDate.toISOString() }
+              }
+            }
+            return target
+          })
+          
+          setVisitTargets(processedTargets)
+          console.log(`✅ Loaded ${processedTargets.length} visit targets with dates`)
         } else {
           console.warn('Failed to load visit targets:', visitTargetsResult.message || 'Unknown error')
           setVisitTargets([])
@@ -329,7 +380,18 @@ const SalesTracking = () => {
             lng >= -180 && lng <= 180
           return hasValidCoords
         })
-        setVisitTargets(validTargets)
+        // Ensure visitDate is properly formatted
+        const processedTargets = validTargets.map(target => {
+          if (target.visitDate) {
+            const visitDate = new Date(target.visitDate)
+            if (!isNaN(visitDate.getTime())) {
+              return { ...target, visitDate: visitDate.toISOString() }
+            }
+          }
+          return target
+        })
+        
+        setVisitTargets(processedTargets)
       }
 
       // Load salesman's own visit requests (pending/rejected)
@@ -416,6 +478,7 @@ const SalesTracking = () => {
       setRequestSubmitting(true)
       const payload = {
         name: requestForm.name,
+        targetName: requestForm.targetName || requestForm.name, // Add target name to payload
         description: requestForm.description || '',
         address: requestForm.address || '',
         city: requestForm.city || '',
@@ -426,6 +489,8 @@ const SalesTracking = () => {
         notes: requestForm.notes || '',
         latitude: lat,
         longitude: lng,
+        customerName: requestForm.customerName || '', // Add customer name to payload
+        customerId: requestForm.customerId || '', // Add customer ID for reference
       }
 
       const result = await createVisitRequest(payload)
@@ -434,13 +499,17 @@ const SalesTracking = () => {
           icon: 'success',
           title: 'Request Submitted!',
           text: result.message || 'Your visit request has been submitted. Admin will review and approve it.',
-          confirmButtonColor: '#e9931c'
+          confirmButtonColor: '#e9931c',
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: true
         })
         setShowRequestVisitModal(false)
         setRequestForm({
           customerId: '',
           customerName: '',
           name: '',
+          targetName: '',
           description: '',
           address: '',
           city: '',
@@ -2516,17 +2585,6 @@ const SalesTracking = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                setShowVisitAssignmentModal(true)
-                setSelectedVisitsForAssignment(visitTargets.filter(v => v.status !== 'Completed').map(v => v._id || v.id))
-              }}
-              className="px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 bg-gray-600 text-white hover:bg-gray-700"
-              title="Assign visits to dates"
-            >
-              <FaCalendarAlt className="w-5 h-5" />
-              <span className="text-sm md:text-base" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Assign</span>
-            </button>
-            <button
-              onClick={() => {
                 setShowRequestVisitModal(true)
                 // Load customers when modal opens
                 if (customers.length === 0) {
@@ -2761,17 +2819,30 @@ const SalesTracking = () => {
                     </div>
                 
                 {/* Date-wise Grouped Visit Targets */}
-                {visitTargets.length === 0 ? (
-                  <div className="text-center py-8">
-                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                    </svg>
-                    <p className="text-gray-600 font-medium">No visit targets assigned</p>
-                    <p className="text-sm text-gray-500 mt-1">Admin will assign visit targets to you</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
-                    {visitTargets.map((target) => {
+                {(() => {
+                  const filtered = getFilteredVisits()
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-8">
+                        <svg className="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                        <p className="text-gray-600 font-medium">
+                          {dateFilter !== 'All' 
+                            ? `No visit targets for ${dateFilter}` 
+                            : 'No visit targets assigned'}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {dateFilter !== 'All' 
+                            ? 'Try selecting a different date filter' 
+                            : 'Admin will assign visit targets to you'}
+                        </p>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+                      {filtered.map((target) => {
                       const targetId = target._id || target.id
                       const isSelected = selectedVisitTarget && (selectedVisitTarget._id === targetId || selectedVisitTarget.id === targetId)
                       return (
@@ -2849,7 +2920,8 @@ const SalesTracking = () => {
                       )
                     })}
                   </div>
-                )}
+                  )
+                })()}
                 
                 {visitRequests && visitRequests.length > 0 && (
                   <div className="mt-6 mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -3897,33 +3969,27 @@ const SalesTracking = () => {
                     // Store visit target customer info for sales upload form auto-fill
                     if (selectedVisitTarget) {
                       const visitTargetData = {
-                        id: selectedVisitTarget._id || selectedVisitTarget.id,
-                        _id: selectedVisitTarget._id || selectedVisitTarget.id,
-                        name: selectedVisitTarget.name,
-                        address: selectedVisitTarget.address,
-                        city: selectedVisitTarget.city,
-                        state: selectedVisitTarget.state,
-                        pincode: selectedVisitTarget.pincode,
-                        // Customer details from visit target
-                        customerName: selectedVisitTarget.name || '',
-                        customerAddress: `${selectedVisitTarget.address || ''}, ${selectedVisitTarget.city || ''}, ${selectedVisitTarget.state || ''} ${selectedVisitTarget.pincode || ''}`.trim(),
+                        customerName: selectedVisitTarget.name || selectedVisitTarget.customerName || '',
+                        customerEmail: selectedVisitTarget.email || selectedVisitTarget.customerEmail || '',
+                        customerPhone: selectedVisitTarget.phone || selectedVisitTarget.customerPhone || '',
+                        deliveryAddress: selectedVisitTarget.address || selectedVisitTarget.deliveryAddress || '',
+                        visitTargetId: selectedVisitTarget._id || selectedVisitTarget.id
                       }
-                      
-                      localStorage.setItem('salesUploadVisitTarget', JSON.stringify(visitTargetData))
-                      localStorage.setItem('openSalesUploadForm', 'true')
+                      localStorage.setItem('salesOrderVisitTarget', JSON.stringify(visitTargetData))
+                      localStorage.setItem('openSalesOrderForm', 'true')
+                      localStorage.setItem('salesOrderFromAchievement', 'true')
                     }
-                    
                     setShowVisitTargetModal(false)
-                    // Navigate to sales-submissions tab
-                    const event = new CustomEvent('navigateToTab', { detail: 'sales-submissions' })
+                    // Navigate to Sales Orders tab
+                    const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
                     window.dispatchEvent(event)
                   }}
-                  className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
+                  className="w-full px-3 py-2 bg-[#e9931c] text-white rounded-lg text-sm font-medium hover:bg-[#d8830a] transition-colors flex items-center justify-center gap-1.5"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
-                  Achievement
+                  Create Sales Order
                 </button>
 
                 {selectedVisitTarget.status !== 'Completed' && (
@@ -4025,6 +4091,15 @@ const SalesTracking = () => {
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                     placeholder="Visit name (auto-filled from customer)"
                     readOnly={!!requestForm.customerId}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Target Name</label>
+                  <input
+                    value={requestForm.targetName}
+                    onChange={(e) => setRequestForm(prev => ({ ...prev, targetName: e.target.value }))}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter target name (optional)"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -4493,90 +4568,30 @@ const SalesTracking = () => {
                       })
                     }
                     
+                    // Sort visits within each category by date (recent first, today first)
+                    const sortVisitsByDate = (visits) => {
+                      return [...visits].sort((a, b) => {
+                        if (!a.visitDate && !b.visitDate) return 0
+                        if (!a.visitDate) return 1
+                        if (!b.visitDate) return -1
+                        return new Date(b.visitDate) - new Date(a.visitDate) // Recent first (descending)
+                      })
+                    }
+                    
                     return (
                       <div className="space-y-4">
-                        {/* Due Visits (Past) */}
-                        {dueVisits.length > 0 && (
-                          <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <FaExclamationTriangle className="text-red-600" />
-                              <h4 className="font-semibold text-red-800">Due Visits ({dueVisits.length})</h4>
-                            </div>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {dueVisits.map((visit) => (
-                                <div 
-                                  key={visit._id || visit.id} 
-                                  onClick={() => {
-                                    if (visit.latitude && visit.longitude) {
-                                      handleVisitTargetClick(visit)
-                                    }
-                                  }}
-                                  className="p-3 bg-white rounded-lg border border-red-200 cursor-pointer hover:bg-red-50 transition-colors"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                      <p className="font-medium text-gray-800">{visit.name}</p>
-                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
-                                      <p className="text-xs text-red-600 mt-1">
-                                        Due: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Completed Visits */}
-                        {completedVisits.length > 0 && (
-                          <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <FaCheckCircle className="text-green-600" />
-                              <h4 className="font-semibold text-green-800">Completed Visits ({completedVisits.length})</h4>
-                            </div>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {completedVisits.map((visit) => (
-                                <div 
-                                  key={visit._id || visit.id} 
-                                  onClick={() => {
-                                    if (visit.latitude && visit.longitude) {
-                                      handleVisitTargetClick(visit)
-                                    }
-                                  }}
-                                  className="p-3 bg-white rounded-lg border border-green-200 cursor-pointer hover:bg-green-50 transition-colors"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                      <p className="font-medium text-gray-800">{visit.name}</p>
-                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
-                                      <p className="text-xs text-green-600 mt-1">
-                                        Completed: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <FaCheckCircle className="text-green-600" />
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Today's Visits */}
-                        {todayVisits.length > 0 && (
+                        {/* Today's Visits - Show First */}
+                        {sortVisitsByDate(todayVisits).length > 0 && (
                           <div className="border-2 border-blue-200 bg-blue-50 rounded-lg p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <FaClock className="text-blue-600" />
                               <h4 className="font-semibold text-blue-800">Today's Visits ({todayVisits.length})</h4>
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {todayVisits.map((visit) => (
+                              {sortVisitsByDate(todayVisits).map((visit) => (
                                 <div 
                                   key={visit._id || visit.id} 
                                   onClick={(e) => {
-                                    // Don't trigger if clicking the button
                                     if (e.target.closest('button')) return
                                     if (visit.latitude && visit.longitude) {
                                       handleVisitTargetClick(visit)
@@ -4612,15 +4627,84 @@ const SalesTracking = () => {
                           </div>
                         )}
 
+                        {/* Due Visits (Past) */}
+                        {sortVisitsByDate(dueVisits).length > 0 && (
+                          <div className="border-2 border-red-200 bg-red-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaExclamationTriangle className="text-red-600" />
+                              <h4 className="font-semibold text-red-800">Due Visits ({dueVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {sortVisitsByDate(dueVisits).map((visit) => (
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-red-200 cursor-pointer hover:bg-red-50 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800">{visit.name}</p>
+                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                      <p className="text-xs text-red-600 mt-1">
+                                        Due: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Completed Visits */}
+                        {sortVisitsByDate(completedVisits).length > 0 && (
+                          <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <FaCheckCircle className="text-green-600" />
+                              <h4 className="font-semibold text-green-800">Completed Visits ({completedVisits.length})</h4>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {sortVisitsByDate(completedVisits).map((visit) => (
+                                <div 
+                                  key={visit._id || visit.id} 
+                                  onClick={() => {
+                                    if (visit.latitude && visit.longitude) {
+                                      handleVisitTargetClick(visit)
+                                    }
+                                  }}
+                                  className="p-3 bg-white rounded-lg border border-green-200 cursor-pointer hover:bg-green-50 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-gray-800">{visit.name}</p>
+                                      <p className="text-sm text-gray-600">{visit.address || 'No address'}</p>
+                                      <p className="text-xs text-green-600 mt-1">
+                                        Completed: {visit.visitDate ? new Date(visit.visitDate).toLocaleDateString() : 'No date'}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <FaCheckCircle className="text-green-600" />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Tomorrow's Visits */}
-                        {tomorrowVisits.length > 0 && (
+                        {sortVisitsByDate(tomorrowVisits).length > 0 && (
                           <div className="border-2 border-green-200 bg-green-50 rounded-lg p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <FaCalendarAlt className="text-green-600" />
                               <h4 className="font-semibold text-green-800">Tomorrow's Visits ({tomorrowVisits.length})</h4>
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {tomorrowVisits.map((visit) => (
+                              {sortVisitsByDate(tomorrowVisits).map((visit) => (
                                 <div 
                                   key={visit._id || visit.id} 
                                   onClick={() => {
@@ -4644,14 +4728,14 @@ const SalesTracking = () => {
                         )}
 
                         {/* Remaining Visits (This Week) */}
-                        {remainingVisits.length > 0 && (
+                        {sortVisitsByDate(remainingVisits).length > 0 && (
                           <div className="border-2 border-yellow-200 bg-yellow-50 rounded-lg p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <FaArrowRight className="text-yellow-600" />
                               <h4 className="font-semibold text-yellow-800">This Week ({remainingVisits.length})</h4>
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {remainingVisits.map((visit) => (
+                              {sortVisitsByDate(remainingVisits).map((visit) => (
                                 <div 
                                   key={visit._id || visit.id} 
                                   onClick={() => {
@@ -4675,14 +4759,14 @@ const SalesTracking = () => {
                         )}
 
                         {/* Upcoming Visits */}
-                        {upcomingVisits.length > 0 && (
+                        {sortVisitsByDate(upcomingVisits).length > 0 && (
                           <div className="border-2 border-purple-200 bg-purple-50 rounded-lg p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <FaCalendarAlt className="text-purple-600" />
                               <h4 className="font-semibold text-purple-800">Upcoming Visits ({upcomingVisits.length})</h4>
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {upcomingVisits.map((visit) => (
+                              {sortVisitsByDate(upcomingVisits).map((visit) => (
                                 <div 
                                   key={visit._id || visit.id} 
                                   onClick={() => {
@@ -5313,6 +5397,32 @@ const SalesTracking = () => {
               </div>
 
               <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    // Store visit target customer info for Sales Order form pre-fill
+                    if (selectedVisitTarget) {
+                      const visitTargetData = {
+                        customerName: selectedVisitTarget.name || selectedVisitTarget.customerName || '',
+                        customerEmail: selectedVisitTarget.email || selectedVisitTarget.customerEmail || '',
+                        customerPhone: selectedVisitTarget.phone || selectedVisitTarget.customerPhone || '',
+                        deliveryAddress: selectedVisitTarget.address || selectedVisitTarget.deliveryAddress || '',
+                        visitTargetId: selectedVisitTarget._id || selectedVisitTarget.id
+                      }
+                      localStorage.setItem('salesOrderVisitTarget', JSON.stringify(visitTargetData))
+                      localStorage.setItem('openSalesOrderForm', 'true')
+                    }
+                    setShowAchievementModal(false)
+                    // Navigate to Sales Orders tab
+                    const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+                    window.dispatchEvent(event)
+                  }}
+                  className="w-full px-3 py-2 bg-[#e9931c] text-white rounded-lg text-sm font-medium hover:bg-[#d8830a] transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                  Create Sales Order
+                </button>
                 <button
                   onClick={() => {
                     setShowAchievementModal(false)

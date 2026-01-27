@@ -495,10 +495,17 @@ const createTimelineEvent = async (
     const headers = await getHeaders();
     if (!headers || !contactId) return null;
 
-    // Use engagements API for notes
+    // Map event types to HubSpot engagement types
+    let hubspotType = "NOTE";
+    if (eventType === "EMAIL") hubspotType = "EMAIL";
+    else if (eventType === "CALL") hubspotType = "CALL";
+    else if (eventType === "MEETING") hubspotType = "MEETING";
+    else if (eventType === "NOTE") hubspotType = "NOTE";
+
+    // Use engagements API for timeline events
     const engagementData = {
       engagement: {
-        type: eventType === "NOTE" ? "NOTE" : "MEETING",
+        type: hubspotType,
         active: true,
       },
       associations: {
@@ -516,7 +523,7 @@ const createTimelineEvent = async (
       { headers }
     );
 
-    console.log("HubSpot timeline event created");
+    console.log(`HubSpot ${hubspotType} timeline event created`);
     return response.data;
   } catch (error) {
     console.error(
@@ -1818,8 +1825,60 @@ const updateTaskObjectInHubSpot = async (taskId, task = {}) => {
     const subject = (task.subject || "").toString();
     const body = (task.body || "").toString();
     const status = (task.status || "NOT_STARTED").toString();
-    const priority = (task.priority || "NONE").toString();
-    const type = (task.type || "TODO").toString();
+    
+    // Map priority to HubSpot format (NONE, LOW, MEDIUM, HIGH)
+    let priority = "NONE";
+    const priorityInput = (task.priority || "").toString().toLowerCase();
+    if (priorityInput === "urgent" || priorityInput === "high") {
+      priority = "HIGH";
+    } else if (priorityInput === "medium") {
+      priority = "MEDIUM";
+    } else if (priorityInput === "low") {
+      priority = "LOW";
+    } else if (priorityInput === "none") {
+      priority = "NONE";
+    } else if (priorityInput === "MEDIUM" || priorityInput === "HIGH" || priorityInput === "LOW" || priorityInput === "NONE") {
+      // Already in correct format
+      priority = priorityInput.toUpperCase();
+    }
+    
+    // Map task type to HubSpot format (CALL, EMAIL, MEETING, TODO, etc.)
+    // HubSpot allowed types: CALL, EMAIL, LINKED_IN, MEETING, LINKED_IN_CONNECT, LINKED_IN_MESSAGE, TODO
+    const typeInput = (task.type || "TODO").toString().trim();
+    let type = "TODO"; // Default
+    
+    const typeLower = typeInput.toLowerCase();
+    
+    // Map CRM task types to HubSpot types
+    if (typeLower === "call" || typeLower === "follow-up" || typeLower === "follow up" || typeLower.includes("follow")) {
+      type = "CALL";
+    } else if (typeLower === "email") {
+      type = "EMAIL";
+    } else if (typeLower === "visit" || typeLower === "visit target" || typeLower.includes("visit")) {
+      type = "MEETING";
+    } else if (typeLower === "sample feedback" || typeLower.includes("sample")) {
+      type = "CALL"; // Map sample tracking to CALL (follow-up type)
+    } else if (typeLower === "todo" || typeLower === "task") {
+      type = "TODO";
+    } else if (typeLower === "meeting") {
+      type = "MEETING";
+    } else if (typeLower === "linked_in") {
+      type = "LINKED_IN";
+    } else if (typeLower === "linked_in_connect") {
+      type = "LINKED_IN_CONNECT";
+    } else if (typeLower === "linked_in_message") {
+      type = "LINKED_IN_MESSAGE";
+    } else {
+      // If already in uppercase and matches allowed types, use as is
+      const upperType = typeInput.toUpperCase();
+      const allowedTypes = ["CALL", "EMAIL", "LINKED_IN", "MEETING", "LINKED_IN_CONNECT", "LINKED_IN_MESSAGE", "TODO"];
+      if (allowedTypes.includes(upperType)) {
+        type = upperType;
+      } else {
+        // Default to TODO for unknown types
+        type = "TODO";
+      }
+    }
 
     // HubSpot expects hs_timestamp as epoch millis
     const due = task.dueDate ? new Date(task.dueDate) : null;
@@ -1869,7 +1928,44 @@ const createTaskObjectInHubSpot = async (task = {}) => {
     const body = (task.body || "").toString();
     const status = (task.status || "NOT_STARTED").toString(); // NOT_STARTED | IN_PROGRESS | COMPLETED | WAITING
     const priority = (task.priority || "NONE").toString(); // NONE | LOW | MEDIUM | HIGH
-    const type = (task.type || "TODO").toString(); // TODO | CALL | EMAIL (varies by portal)
+    
+    // Map task type to HubSpot format (CALL, EMAIL, MEETING, TODO, etc.)
+    // HubSpot allowed types: CALL, EMAIL, LINKED_IN, MEETING, LINKED_IN_CONNECT, LINKED_IN_MESSAGE, TODO
+    const typeInput = (task.type || "TODO").toString().trim();
+    let type = "TODO"; // Default
+    
+    const typeLower = typeInput.toLowerCase();
+    
+    // Map CRM task types to HubSpot types
+    if (typeLower === "call" || typeLower === "follow-up" || typeLower === "follow up" || typeLower.includes("follow")) {
+      type = "CALL";
+    } else if (typeLower === "email") {
+      type = "EMAIL";
+    } else if (typeLower === "visit" || typeLower === "visit target" || typeLower.includes("visit")) {
+      type = "MEETING";
+    } else if (typeLower === "sample feedback" || typeLower.includes("sample")) {
+      type = "CALL"; // Map sample tracking to CALL (follow-up type)
+    } else if (typeLower === "todo" || typeLower === "task") {
+      type = "TODO";
+    } else if (typeLower === "meeting") {
+      type = "MEETING";
+    } else if (typeLower === "linked_in") {
+      type = "LINKED_IN";
+    } else if (typeLower === "linked_in_connect") {
+      type = "LINKED_IN_CONNECT";
+    } else if (typeLower === "linked_in_message") {
+      type = "LINKED_IN_MESSAGE";
+    } else {
+      // If already in uppercase and matches allowed types, use as is
+      const upperType = typeInput.toUpperCase();
+      const allowedTypes = ["CALL", "EMAIL", "LINKED_IN", "MEETING", "LINKED_IN_CONNECT", "LINKED_IN_MESSAGE", "TODO"];
+      if (allowedTypes.includes(upperType)) {
+        type = upperType;
+      } else {
+        // Default to TODO for unknown types
+        type = "TODO";
+      }
+    }
 
     // HubSpot expects hs_timestamp as epoch millis (commonly due date/time)
     const due = task.dueDate ? new Date(task.dueDate) : null;
@@ -2040,4 +2136,5 @@ module.exports = {
   syncHubSpotData,
   getCurrentHubSpotUserId,
   getOwnerById,
+  getHeaders, // Export getHeaders for use in routes
 };

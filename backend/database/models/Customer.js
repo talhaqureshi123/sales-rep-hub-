@@ -72,6 +72,22 @@ const customerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  // Associated Contact and Company
+  associatedContactName: {
+    type: String,
+    trim: true,
+  },
+  associatedCompanyName: {
+    type: String,
+    trim: true,
+  },
+  // Last Contact and Engagement dates
+  lastContact: {
+    type: Date,
+  },
+  lastEngagement: {
+    type: Date,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

@@ -11,7 +11,6 @@ import SalesTargets from './SalesTargets'
 // import MilestoneManagement from './MilestoneManagement' // COMMENTED OUT
 import CustomerManagement from './CustomerManagement'
 import CustomerAllotment from './CustomerAllotment'
-import AssignTarget from './AssignTarget'
 import VisitedTargets from './VisitedTargets'
 import ConversionsTracking from './ConversionsTracking'
 import ShiftPhotos from './ShiftPhotos'
@@ -37,7 +36,7 @@ const AdminDashboard = ({ onLogout }) => {
   // Listen for navigation events from dashboard
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sample-tracker', 'follow-up-manager', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'assign-target', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
+      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sample-tracker', 'follow-up-manager', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
         setActivePage(event.detail)
       }
     }
@@ -76,8 +75,6 @@ const AdminDashboard = ({ onLogout }) => {
         return <CustomerManagement />
       case 'customer-allotment':
         return <CustomerAllotment />
-      case 'assign-target':
-        return <AssignTarget />
       case 'visited-targets':
         return <VisitedTargets />
       case 'conversions-tracking':

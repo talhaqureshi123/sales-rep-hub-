@@ -21,7 +21,7 @@ const SalesTargets = () => {
   const [filters, setFilters] = useState({
     status: 'All',
     period: 'All',
-    targetType: 'All'
+    targetType: 'Orders' // Only show Orders type
   })
 
   useEffect(() => {
@@ -35,7 +35,8 @@ const SalesTargets = () => {
       const filterParams = {}
       if (filters.status !== 'All') filterParams.status = filters.status
       if (filters.period !== 'All') filterParams.period = filters.period
-      if (filters.targetType !== 'All') filterParams.targetType = filters.targetType
+      // Always filter by Orders type
+      filterParams.targetType = 'Orders'
 
       const result = await getMySalesTargets(filterParams)
       if (result.success && result.data) {
@@ -103,6 +104,33 @@ const SalesTargets = () => {
       default:
         return 'bg-blue-100 text-blue-800 border-blue-300'
     }
+  }
+
+  const getTargetLabel = (targetType) => {
+    switch (targetType) {
+      case 'Orders':
+        return { singular: 'order', plural: 'orders', unit: '' }
+      case 'Revenue':
+        return { singular: 'revenue', plural: 'revenue', unit: '£' }
+      case 'Visits':
+        return { singular: 'visit', plural: 'visits', unit: '' }
+      case 'New Customers':
+        return { singular: 'customer', plural: 'customers', unit: '' }
+      case 'Quotes':
+        return { singular: 'quote', plural: 'quotes', unit: '' }
+      case 'Conversions':
+        return { singular: 'conversion', plural: 'conversions', unit: '' }
+      default:
+        return { singular: 'item', plural: 'items', unit: '' }
+    }
+  }
+
+  const formatTargetValue = (value, targetType) => {
+    const label = getTargetLabel(targetType)
+    if (targetType === 'Revenue') {
+      return `${label.unit}${value.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    }
+    return `${value.toLocaleString()} ${label.plural}`
   }
 
   if (loading) {
@@ -213,12 +241,6 @@ const SalesTargets = () => {
               onChange={(e) => handleFilterChange('targetType', e.target.value)}
               className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
             >
-              <option value="All">All Types</option>
-              <option value="Revenue">Revenue</option>
-              <option value="Visits">Visits</option>
-              <option value="New Customers">New Customers</option>
-              <option value="Quotes">Quotes</option>
-              <option value="Conversions">Conversions</option>
               <option value="Orders">Orders</option>
             </select>
           </div>
@@ -231,7 +253,7 @@ const SalesTargets = () => {
           <FaBullseye className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-600 font-medium text-lg">No sales targets found</p>
           <p className="text-sm text-gray-500 mt-2">
-            {filters.status !== 'All' || filters.period !== 'All' || filters.targetType !== 'All'
+            {filters.status !== 'All' || filters.period !== 'All'
               ? 'Try adjusting your filters'
               : 'No targets have been assigned to you yet'}
           </p>
@@ -246,64 +268,117 @@ const SalesTargets = () => {
             const isCompleted = progressPercentage >= 100 || target.status === 'Completed'
             const remaining = Math.max(0, target.targetValue - target.currentProgress)
             const exceededBy = isExceeded ? target.currentProgress - target.targetValue : 0
+            const targetLabel = getTargetLabel(target.targetType || 'Orders')
 
             return (
               <div
                 key={target._id}
-                className={`bg-white rounded-lg p-4 sm:p-6 border-2 shadow-lg hover:shadow-xl transition-all ${
+                className={`bg-white rounded-lg p-2 border shadow-sm hover:shadow-md transition-all ${
                   isExceeded 
                     ? 'border-green-400 bg-gradient-to-br from-green-50 to-white' 
                     : 'border-gray-200'
                 }`}
               >
                 {/* Header */}
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-1.5">
                   <div className="flex-1">
-                    <h3 className="font-bold text-gray-800 text-lg mb-1 flex items-center gap-2">
+                    <h3 className="font-bold text-gray-800 text-xs mb-0.5 flex items-center gap-1.5">
                       {target.targetName || `${target.targetType} Target`}
                       {isExceeded && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                          <FaPlus className="w-3 h-3" />
+                        <span className="flex items-center gap-1 px-1 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                          <FaPlus className="w-2 h-2" />
                           Exceeded!
                         </span>
                       )}
                     </h3>
-                    <p className="text-sm text-gray-600">{target.targetType}</p>
+                    <p className="text-xs text-gray-600">{target.targetType}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     {isExceeded && (
                       <div className="relative">
-                        <FaStar className="w-7 h-7 text-yellow-400 animate-pulse" />
-                        <FaPlus className="w-4 h-4 text-green-600 absolute -top-1 -right-1 bg-white rounded-full p-0.5" />
+                        <FaStar className="w-4 h-4 text-yellow-400 animate-pulse" />
+                        <FaPlus className="w-2.5 h-2.5 text-green-600 absolute -top-0.5 -right-0.5 bg-white rounded-full p-0.5" />
                       </div>
                     )}
                     {isCompleted && !isExceeded && (
-                      <FaTrophy className="w-6 h-6 text-yellow-500" />
+                      <FaTrophy className="w-3.5 h-3.5 text-yellow-500" />
                     )}
-                    {getStatusIcon(target.status)}
+                    <div className="scale-70">{getStatusIcon(target.status)}</div>
+                  </div>
+                </div>
+
+                {/* Target Figures - Money Display */}
+                <div className="mb-2 bg-gradient-to-br from-blue-50 to-gray-50 rounded-lg p-1.5 border border-gray-300">
+                  <div className="space-y-1.5">
+                    {/* Total Target */}
+                    <div className="bg-white rounded-lg p-1.5 border border-gray-200">
+                      <p className="text-xs text-gray-600 mb-0.5 font-medium">
+                        Total Target {target.targetType}
+                      </p>
+                      <p className="text-base font-bold text-gray-800">
+                        {formatTargetValue(target.targetValue || 0, target.targetType)}
+                      </p>
+                    </div>
+                    
+                    {/* Current Progress */}
+                    <div className="bg-white rounded-lg p-1.5 border border-gray-200">
+                      <p className="text-xs text-gray-600 mb-0.5 font-medium">
+                        Current {target.targetType}
+                      </p>
+                      <p className="text-base font-bold text-blue-600">
+                        {formatTargetValue(target.currentProgress || 0, target.targetType)}
+                      </p>
+                    </div>
+                    
+                    {/* Remaining Target or Exceeded */}
+                    {isExceeded ? (
+                      <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
+                        <p className="text-xs text-gray-700 mb-0.5 font-medium">
+                          Exceeded By
+                        </p>
+                        <p className="text-lg font-bold text-green-700 flex items-center justify-center gap-1">
+                          <FaPlus className="w-3 h-3" />
+                          {formatTargetValue(exceededBy, target.targetType)}
+                        </p>
+                      </div>
+                    ) : !isCompleted ? (
+                      <div className="bg-orange-100 rounded-lg p-1.5 border border-orange-400">
+                        <p className="text-xs text-gray-700 mb-0.5 font-medium">
+                          Remaining Target {target.targetType}
+                        </p>
+                        <p className="text-lg font-bold text-orange-700">
+                          {formatTargetValue(remaining, target.targetType)}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
+                        <p className="text-xs text-gray-700 mb-0.5 font-medium">Status</p>
+                        <p className="text-base font-bold text-green-700">Target Achieved!</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Progress Bar */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between text-sm mb-2">
+                <div className="mb-1.5">
+                  <div className="flex items-center justify-between text-xs mb-0.5">
                     <span className="text-gray-600 font-medium">Progress</span>
-                    <span className={`font-bold ${
+                    <span className={`font-bold text-xs ${
                       isExceeded ? 'text-green-600' : 'text-gray-800'
                     }`}>
                       {isExceeded ? (
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-0.5">
                           {progressPercentage.toFixed(1)}%
-                          <FaPlus className="w-3 h-3 text-green-600" />
+                          <FaPlus className="w-2 h-2 text-green-600" />
                         </span>
                       ) : (
                         `${progressPercentage.toFixed(1)}%`
                       )}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 relative overflow-hidden">
                     <div
-                      className={`h-3 rounded-full transition-all ${
+                      className={`h-1.5 rounded-full transition-all ${
                         isExceeded
                           ? 'bg-gradient-to-r from-green-500 to-green-600'
                           : isCompleted
@@ -317,67 +392,40 @@ const SalesTargets = () => {
                       style={{ width: `${Math.min(progressPercentage, 100)}%` }}
                     />
                     {isExceeded && (
-                      <div className="absolute top-0 right-0 h-3 w-3 bg-green-600 rounded-full flex items-center justify-center">
-                        <FaPlus className="w-2 h-2 text-white" />
+                      <div className="absolute top-0 right-0 h-1.5 w-1.5 bg-green-600 rounded-full flex items-center justify-center">
+                        <FaPlus className="w-1 h-1 text-white" />
                       </div>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between text-xs mt-2">
-                    <span className="text-gray-600">
-                      {target.currentProgress?.toLocaleString() || 0} / {target.targetValue?.toLocaleString() || 0}
-                    </span>
-                    {isExceeded ? (
-                      <span className="flex items-center gap-1 text-green-600 font-bold">
-                        <FaPlus className="w-3 h-3" />
-                        +{exceededBy.toLocaleString()} over target!
-                      </span>
-                    ) : !isCompleted ? (
-                      <span className="text-orange-600 font-semibold">
-                        {remaining.toLocaleString()} remaining
-                      </span>
-                    ) : (
-                      <span className="text-green-600 font-semibold">Target Achieved!</span>
                     )}
                   </div>
                 </div>
 
                 {/* Status Badge */}
-                <div className="mb-4 flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(target.status)}`}>
+                <div className="mb-1.5 flex items-center gap-1">
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold border ${getStatusColor(target.status)}`}>
                     {target.status}
                   </span>
                   {isExceeded && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300">
-                      <FaStar className="w-3 h-3" />
-                      Exceeded Target
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300">
+                      <FaStar className="w-2 h-2" />
+                      Exceeded
                     </span>
                   )}
                 </div>
 
                 {/* Details */}
-                <div className="space-y-2 text-sm text-gray-600 border-t pt-4">
-                  <div className="flex items-center gap-2">
-                    <FaCalendarAlt className="w-4 h-4 text-gray-400" />
+                <div className="space-y-0.5 text-xs text-gray-600 border-t pt-1.5">
+                  <div className="flex items-center gap-1">
+                    <FaCalendarAlt className="w-2.5 h-2.5 text-gray-400" />
                     <span>
                       {new Date(target.startDate).toLocaleDateString()} - {new Date(target.endDate).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <FaChartLine className="w-4 h-4 text-gray-400" />
+                  <div className="flex items-center gap-1">
+                    <FaChartLine className="w-2.5 h-2.5 text-gray-400" />
                     <span>Period: {target.period}</span>
                   </div>
-                  {isExceeded && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center gap-2 text-green-700">
-                        <FaStar className="w-4 h-4" />
-                        <span className="font-semibold text-xs">
-                          Outstanding! You've exceeded your target by {exceededBy.toLocaleString()} ({((exceededBy / target.targetValue) * 100).toFixed(1)}%)
-                        </span>
-                      </div>
-                    </div>
-                  )}
                   {target.createdBy && typeof target.createdBy === 'object' && (
-                    <div className="text-xs text-gray-500 mt-2">
+                    <div className="text-xs text-gray-500">
                       Assigned by: {target.createdBy.name || target.createdBy.email}
                     </div>
                   )}

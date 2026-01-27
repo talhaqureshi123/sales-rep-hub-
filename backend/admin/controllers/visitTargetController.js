@@ -34,7 +34,7 @@ const getVisitTargets = async (req, res) => {
 
     const visitTargets = await VisitTarget.find(filter)
       .populate('salesman', 'name email')
-      .populate('createdBy', 'name email')
+      .populate('createdBy', 'name email role')
       .sort({ createdAt: -1 });
 
     // Sync pending+approved visit targets as tasks to HubSpot (async, non-blocking)
@@ -248,6 +248,10 @@ const createVisitTarget = async (req, res) => {
           notes: visitTarget.notes || '',
           visitTarget: visitTarget._id,
           createdBy: req.user._id,
+          approvalStatus: 'Approved', // Auto-approved since visit target is already approved
+          approvedBy: req.user._id,
+          approvedAt: new Date(),
+          source: 'app', // Mark as app-created task
         });
       } catch (e) {
         // Non-blocking; don't fail visit target create if follow-up fails
@@ -458,6 +462,10 @@ const updateVisitTarget = async (req, res) => {
             notes: visitTarget.notes || '',
             visitTarget: visitTarget._id,
             createdBy: req.user._id,
+            approvalStatus: 'Approved', // Auto-approved since visit target is already approved
+            approvedBy: req.user._id,
+            approvedAt: new Date(),
+            source: 'app', // Mark as app-created task
           });
         } catch (e) {
           console.error('Error creating follow-up for approved request (non-blocking):', e.message);

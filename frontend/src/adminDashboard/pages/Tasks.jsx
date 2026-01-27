@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { 
   FaCheckCircle, 
   FaClock, 
@@ -33,8 +33,12 @@ import {
 } from 'react-icons/fa'
 import { getFollowUps, getFollowUp, createFollowUp, updateFollowUp, deleteFollowUp, approveFollowUp, rejectFollowUp, pushToHubSpot } from '../../services/adminservices/followUpService'
 import { getUsers } from '../../services/adminservices/userService'
-import { getCustomers } from '../../services/adminservices/customerService'
+import { getCustomers, getCustomer } from '../../services/adminservices/customerService'
+import { getQuotations, getQuotation } from '../../services/adminservices/quotationService'
 import { importHubSpotTasksToDb } from '../../services/adminservices/hubspotService'
+import { createVisitTarget, getVisitTargets, updateVisitTarget } from '../../services/adminservices/visitTargetService'
+import { getSalesTargets } from '../../services/adminservices/salesTargetService'
+import { getSamples, createSample } from '../../services/adminservices/sampleService'
 import appTheme from '../../apptheme/apptheme'
 import Swal from 'sweetalert2'
 
@@ -50,8 +54,8 @@ const TABS = [
   { id: 'Completed', label: 'Completed' },
 ]
 
-// Task types - include both app types and HubSpot types
-const TASK_TYPES = ['Call', 'Visit', 'Email', 'Quote Follow-up', 'Sample Feedback', 'Order Check', 'TODO', 'CALL', 'VISIT', 'MEETING']
+// Task types - Visit Target, Follow-up, Sample Track
+const TASK_TYPES = ['Visit Target', 'Follow-up', 'Sample Track']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
 
 const Tasks = () => {
@@ -93,6 +97,23 @@ const Tasks = () => {
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
+  const [openApprovalDropdown, setOpenApprovalDropdown] = useState(null) // Track which task's approval dropdown is open
+  const [taskCustomerDetails, setTaskCustomerDetails] = useState(null) // Full customer details for selected task
+  const [taskQuotations, setTaskQuotations] = useState([]) // Quotations for selected task
+  const [taskActivities, setTaskActivities] = useState([]) // Activities/notes for selected task
+  const [relatedTasks, setRelatedTasks] = useState([]) // Related tasks for same email/user
+  const [hubspotDeals, setHubspotDeals] = useState([]) // HubSpot deals for selected task
+  const [salesTargets, setSalesTargets] = useState([]) // Sales targets for selected task
+  const [taskSamples, setTaskSamples] = useState([]) // Samples for selected task
+  const [showNoteModal, setShowNoteModal] = useState(false) // Show note creation modal
+  const [showMeetingModal, setShowMeetingModal] = useState(false) // Show meeting creation modal
+  const [showStartTaskModal, setShowStartTaskModal] = useState(false) // Show start task modal
+  const [taskToStart, setTaskToStart] = useState(null) // Task to start
+  const [meterPicture, setMeterPicture] = useState(null) // Meter picture for starting task
+  const [meterReading, setMeterReading] = useState('') // Meter reading value
+  const [noteInput, setNoteInput] = useState('') // Input for quick note typing
+  const noteInputRef = useRef(null) // Ref for note input field
+  const [activitiesSearch, setActivitiesSearch] = useState('') // Search filter for activities
   
   const [formData, setFormData] = useState({
     salesman: '',
@@ -192,11 +213,78 @@ const Tasks = () => {
         return noHubSpotId && t.approvalStatus === 'Approved'
       })
     } else if (activeTab === 'Pending') {
-      list = list.filter((t) => t.approvalStatus === 'Pending')
+      // Show tasks with Pending approval status
+      // Also include tasks created by salesman that don't have approvalStatus set (for backward compatibility)
+      list = list.filter((t) => {
+        const approvalStatus = t.approvalStatus || 'Pending' // Default to Pending if not set
+        const createdByRole = t.createdBy?.role
+        // Show if approvalStatus is Pending, OR if created by salesman and no approvalStatus is set
+        return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
+      })
     } else if (activeTab !== 'All') {
       // Status-based filters (Overdue, Today, Upcoming, Completed)
       list = list.filter((t) => t.status === activeTab)
     }
+    // Remove duplicate tasks for same customer - keep only one task per customer
+    // This ensures same customer's tasks show only once in the main list
+    const uniqueTasks = []
+    const seenCustomers = new Set()
+    
+    list.forEach(task => {
+      // Create a unique key for this task based on customer
+      const customerId = task.customer ? (typeof task.customer === 'object' ? task.customer._id : task.customer) : null
+      const taskEmail = task.customerEmail || 
+                       (task.customer && typeof task.customer === 'object' ? task.customer.email : '') || 
+                       task.associatedContactEmail
+      const taskName = task.customerName || 
+                      (task.customer && typeof task.customer === 'object' ? (task.customer.name || task.customer.firstName) : '') || 
+                      task.associatedContactName
+      
+      // Create unique identifier
+      const uniqueKey = customerId ? `customer_${customerId}` : 
+                       taskEmail ? `email_${taskEmail.toLowerCase().trim()}` :
+                       taskName ? `name_${taskName.toLowerCase().trim()}` :
+                       `task_${task._id}`
+      
+      // Only add if we haven't seen this customer before
+      // Keep the most recent task (by dueDate or createdAt)
+      if (!seenCustomers.has(uniqueKey)) {
+        seenCustomers.add(uniqueKey)
+        uniqueTasks.push(task)
+      } else {
+        // If we've seen this customer, check if current task is more recent
+        const existingIndex = uniqueTasks.findIndex(t => {
+          const tCustomerId = t.customer ? (typeof t.customer === 'object' ? t.customer._id : t.customer) : null
+          const tEmail = t.customerEmail || 
+                        (t.customer && typeof t.customer === 'object' ? t.customer.email : '') || 
+                        t.associatedContactEmail
+          const tName = t.customerName || 
+                        (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') || 
+                        t.associatedContactName
+          
+          const tUniqueKey = tCustomerId ? `customer_${tCustomerId}` : 
+                            tEmail ? `email_${tEmail.toLowerCase().trim()}` :
+                            tName ? `name_${tName.toLowerCase().trim()}` :
+                            `task_${t._id}`
+          
+          return tUniqueKey === uniqueKey
+        })
+        
+        if (existingIndex !== -1) {
+          const existingTask = uniqueTasks[existingIndex]
+          const taskDate = new Date(task.dueDate || task.createdAt || 0).getTime()
+          const existingDate = new Date(existingTask.dueDate || existingTask.createdAt || 0).getTime()
+          
+          // Keep the more recent task
+          if (taskDate > existingDate) {
+            uniqueTasks[existingIndex] = task
+          }
+        }
+      }
+    })
+    
+    list = uniqueTasks
+
     // Apply active filters
     if (activeFilters.taskType.length > 0) {
       list = list.filter(t => {
@@ -219,13 +307,13 @@ const Tasks = () => {
           if (filterLower === 'email') {
             return taskTypeLower === 'email' || taskTypeLower.includes('email')
           }
-          if (filterLower === 'visit') {
-            return taskTypeLower === 'visit' || taskTypeLower === 'meeting' || taskTypeLower.includes('visit') || taskTypeLower.includes('meeting')
+          if (filterLower === 'visit' || filterLower === 'visit target') {
+            return taskTypeLower === 'visit' || taskTypeLower === 'visit target' || taskTypeLower === 'meeting' || taskTypeLower.includes('visit') || taskTypeLower.includes('meeting')
           }
-          if (filterLower === 'quote follow-up' || filterLower === 'quote follow up') {
-            return taskTypeLower.includes('quote') || taskTypeLower.includes('quotation')
+          if (filterLower === 'follow-up' || filterLower === 'follow up') {
+            return taskTypeLower === 'call' || taskTypeLower.includes('follow') || taskTypeLower.includes('call')
           }
-          if (filterLower === 'sample feedback') {
+          if (filterLower === 'sample feedback' || filterLower === 'sample track' || filterLower === 'sample') {
             return taskTypeLower.includes('sample')
           }
           if (filterLower === 'order check') {
@@ -340,6 +428,13 @@ const Tasks = () => {
     loadTasks()
     loadSalesmen()
     loadCustomers()
+    
+    // Auto-refresh tasks every 30 seconds to get updates from salesman
+    const intervalId = setInterval(() => {
+      loadTasks()
+    }, 30000) // Refresh every 30 seconds
+    
+    return () => clearInterval(intervalId)
   }, [])
 
 
@@ -352,22 +447,88 @@ const Tasks = () => {
         setShowPriorityDropdown(false)
         setShowSalesmanDropdown(false)
         setShowTimeDropdown(false)
+        setOpenApprovalDropdown(null)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+
   const loadTasks = async () => {
     setLoading(true)
     try {
       // Fetch all tasks - no tab filtering
       const res = await getFollowUps({})
+      let allTasks = []
+      
       if (res.success) {
-        setTasks(res.data || [])
-      } else {
-        setTasks([])
+        allTasks = res.data || []
       }
+
+      // Also fetch pending visit targets and convert them to task-like objects
+      try {
+        const visitTargetsRes = await getVisitTargets({ approvalStatus: 'Pending' })
+        if (visitTargetsRes.success && visitTargetsRes.data) {
+          const pendingVisits = visitTargetsRes.data
+          // Convert visit targets to task-like objects
+          const visitTasks = pendingVisits.map(visit => ({
+            _id: visit._id,
+            followUpNumber: `VT-${visit._id.toString().slice(-6)}`, // Create a follow-up number for display
+            salesman: visit.salesman,
+            customer: visit.customerId,
+            customerName: visit.customerName || visit.name,
+            customerEmail: visit.customer?.email || '',
+            customerPhone: visit.customer?.phone || '',
+            type: 'Visit',
+            priority: visit.priority || 'Medium',
+            status: visit.status === 'Pending' ? 'Upcoming' : visit.status,
+            scheduledDate: visit.visitDate ? new Date(visit.visitDate) : new Date(),
+            dueDate: visit.visitDate ? new Date(visit.visitDate) : new Date(),
+            description: visit.description || `Visit request: ${visit.name}`,
+            notes: visit.notes || '',
+            approvalStatus: visit.approvalStatus || 'Pending',
+            createdBy: visit.createdBy,
+            source: 'app',
+            isVisitTarget: true, // Flag to identify this is a visit target
+            visitTargetId: visit._id, // Store original visit target ID
+            visitTarget: visit, // Store full visit target object
+            // Additional visit-specific fields
+            address: visit.address,
+            city: visit.city,
+            state: visit.state,
+            pincode: visit.pincode,
+            latitude: visit.latitude,
+            longitude: visit.longitude,
+          }))
+          
+          // Merge visit tasks with regular tasks
+          allTasks = [...allTasks, ...visitTasks]
+          
+          console.log(`Loaded ${visitTasks.length} pending visit requests as tasks`)
+        }
+      } catch (visitError) {
+        console.error('Error loading visit targets:', visitError)
+        // Continue even if visit targets fail to load
+      }
+
+      // Debug: Log pending tasks
+      const pendingTasks = allTasks.filter(t => {
+        const approvalStatus = t.approvalStatus || 'Pending'
+        const createdByRole = t.createdBy?.role
+        return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
+      })
+      console.log('Total tasks loaded:', allTasks.length)
+      console.log('Pending tasks found:', pendingTasks.length)
+      console.log('Pending tasks details:', pendingTasks.map(t => ({
+        id: t._id,
+        approvalStatus: t.approvalStatus,
+        createdByRole: t.createdBy?.role,
+        customerName: t.customerName,
+        isVisitTarget: t.isVisitTarget || false
+      })))
+      
+      setTasks(allTasks)
     } catch (e) {
       console.error(e)
       setTasks([])
@@ -429,22 +590,20 @@ const Tasks = () => {
         : new Date()
 
       // Map task type to valid backend enum values
-      // Backend enum: ['Call', 'Visit', 'Email', 'Quote Follow-up', 'Sample Feedback', 'Order Check']
       const mapTaskType = (type) => {
         const typeLower = (type || '').toLowerCase().trim()
-        // Map HubSpot types to backend enum values
-        if (typeLower === 'todo' || typeLower === 'call') return 'Call'
-        if (typeLower === 'visit' || typeLower === 'meeting') return 'Visit'
-        if (typeLower === 'email') return 'Email'
-        if (typeLower.includes('quote') || typeLower.includes('quotation')) return 'Quote Follow-up'
-        if (typeLower.includes('sample')) return 'Sample Feedback'
-        if (typeLower.includes('order')) return 'Order Check'
-        // If already a valid enum value, return as is
-        const validTypes = ['Call', 'Visit', 'Email', 'Quote Follow-up', 'Sample Feedback', 'Order Check']
-        if (validTypes.includes(type)) return type
+        // Map task types to backend enum values
+        if (typeLower === 'visit target' || typeLower.includes('visit')) return 'Visit'
+        if (typeLower === 'follow-up' || typeLower === 'follow up' || typeLower.includes('follow')) return 'Call'
+        if (typeLower === 'sample track' || typeLower.includes('sample')) return 'Sample Feedback'
         // Default fallback
         return 'Call'
       }
+
+      // Get current user role to set approval status
+      const currentUserRole = localStorage.getItem('userRole') || 'admin'
+      // Admin-created tasks are auto-approved, salesman-created need approval
+      const approvalStatus = currentUserRole === 'admin' ? 'Approved' : 'Pending'
 
       const taskData = {
         salesman: formData.salesman,
@@ -464,30 +623,121 @@ const Tasks = () => {
         dueDate: dueDateTime,
         description: formData.description || `Follow up with ${formData.customerName}`,
         notes: formData.notes || undefined,
+        approvalStatus: approvalStatus, // Set approval status based on user role
       }
 
       const res = await createFollowUp(taskData)
       if (res.success) {
+        const createdTask = res.data
+        
+        // If task type is Visit Target, also create a visit target
+        const mappedType = mapTaskType(formData.type)
+        const taskTypeLower = (formData.type || '').toLowerCase().trim()
+        if (taskTypeLower === 'visit target' || taskTypeLower.includes('visit target')) {
+          try {
+            // Get customer details for visit target
+            const selectedCustomer = customers.find(c => c._id === formData.customer)
+            
+            // Location is required for visit target - use customer location or default
+            const latitude = selectedCustomer?.latitude || formData.latitude || 24.8607 // Default to Karachi
+            const longitude = selectedCustomer?.longitude || formData.longitude || 67.0011
+            
+            const visitTargetData = {
+              name: formData.customerName || formData.description || 'Visit Task',
+              description: formData.description || `Visit task for ${formData.customerName || 'customer'}`,
+              salesman: formData.salesman,
+              priority: formData.priority || 'Medium',
+              visitDate: formData.dueDate ? new Date(`${formData.dueDate}T${formData.dueTime || '09:00'}`).toISOString() : undefined,
+              notes: formData.notes || `Created from task: ${createdTask._id}`,
+              status: 'Pending',
+              approvalStatus: 'Approved', // Admin-created visit targets are auto-approved
+              // Customer information
+              customerName: formData.customerName || '',
+              customerId: formData.customer || undefined,
+              // Location from customer if available, or use defaults
+              address: selectedCustomer?.address || formData.address || '',
+              city: selectedCustomer?.city || formData.city || '',
+              state: selectedCustomer?.state || formData.state || '',
+              pincode: selectedCustomer?.postcode || selectedCustomer?.pincode || formData.pincode || '',
+              latitude: latitude,
+              longitude: longitude,
+            }
+            
+            const visitTargetRes = await createVisitTarget(visitTargetData)
+            if (visitTargetRes.success) {
+              console.log('Visit target created successfully from task')
+            } else {
+              console.warn('Task created but visit target creation failed:', visitTargetRes.message)
+            }
+          } catch (visitError) {
+            console.error('Error creating visit target from task:', visitError)
+            // Don't fail the task creation if visit target creation fails
+          }
+        }
+        
+        // If task type is Sample Track, also create a sample
+        if (taskTypeLower === 'sample track' || taskTypeLower.includes('sample track') || taskTypeLower.includes('sample')) {
+          try {
+            // Get customer details for sample
+            const selectedCustomer = customers.find(c => c._id === formData.customer)
+            const sampleData = {
+              salesman: formData.salesman,
+              customer: formData.customer || undefined,
+              customerName: formData.customerName || '',
+              customerEmail: formData.customerEmail || selectedCustomer?.email || undefined,
+              customerPhone: formData.customerPhone || selectedCustomer?.phone || undefined,
+              product: formData.product || undefined,
+              productName: formData.productName || 'Sample Product',
+              productCode: formData.productCode || undefined,
+              quantity: formData.quantity || 1,
+              visitDate: formData.dueDate ? new Date(`${formData.dueDate}T${formData.dueTime || '09:00'}`).toISOString() : undefined,
+              expectedDate: formData.expectedDate || undefined,
+              notes: formData.notes || `Created from task: ${createdTask._id}`,
+            }
+            
+            const sampleRes = await createSample(sampleData)
+            if (sampleRes.success) {
+              console.log('Sample created successfully from task')
+            } else {
+              console.warn('Task created but sample creation failed:', sampleRes.message)
+            }
+          } catch (sampleError) {
+            console.error('Error creating sample from task:', sampleError)
+            // Don't fail the task creation if sample creation fails
+          }
+        }
+
         // Wait a bit for async HubSpot sync to complete
         await new Promise(resolve => setTimeout(resolve, 2000))
         
         // Reload task to check if HubSpot sync was successful
         const updatedRes = await getFollowUp(res.data._id)
-        if (updatedRes.success && updatedRes.data.hubspotTaskId) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Task Created!',
-            text: 'Task created successfully and posted to HubSpot!',
-            confirmButtonColor: '#e9931c'
-          })
+        const approvalMessage = approvalStatus === 'Approved' 
+          ? 'Task has been automatically approved.' 
+          : 'Task is pending approval. It will appear in tasks list once approved by admin.'
+        
+        // Determine success message based on task type
+        let successMessage = ''
+        if (taskTypeLower === 'visit target' || taskTypeLower.includes('visit target')) {
+          successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
+            ? `Task and Visit Target created successfully and posted to HubSpot! ${approvalMessage}`
+            : `Task and Visit Target created successfully! You can push it to HubSpot manually if needed. ${approvalMessage}`
+        } else if (taskTypeLower === 'sample track' || taskTypeLower.includes('sample track') || taskTypeLower.includes('sample')) {
+          successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
+            ? `Task and Sample created successfully and posted to HubSpot! ${approvalMessage}`
+            : `Task and Sample created successfully! You can push it to HubSpot manually if needed. ${approvalMessage}`
         } else {
-          Swal.fire({
-            icon: 'success',
-            title: 'Task Created!',
-            text: 'Task created successfully! You can push it to HubSpot manually if needed.',
-            confirmButtonColor: '#e9931c'
-          })
+          successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
+            ? `Task created successfully and posted to HubSpot! ${approvalMessage}`
+            : `Task created successfully! You can push it to HubSpot manually if needed. ${approvalMessage}`
         }
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Task Created!',
+          text: successMessage,
+          confirmButtonColor: '#e9931c'
+        })
         setShowCreateForm(false)
         resetForm()
         await loadTasks()
@@ -522,6 +772,337 @@ const Tasks = () => {
         // Find current task index in filtered list
         const index = filtered.findIndex(t => t._id === task._id)
         setCurrentTaskIndex(index >= 0 ? index : 0)
+        
+        // Parse activities from notes
+        if (res.data.notes) {
+          try {
+            // Parse notes to extract activities
+            const notesLines = res.data.notes.split('\n').filter(line => line.trim())
+            const parsedActivities = []
+            
+            notesLines.forEach(line => {
+              // Match pattern: [DD/MM/YYYY, HH:MM:SS] Type: Content
+              const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
+              if (match) {
+                const [, dateStr, timeStr, type, content] = match
+                try {
+                  // Parse date: DD/MM/YYYY -> YYYY-MM-DD
+                  const [day, month, year] = dateStr.split('/')
+                  const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
+                  
+                  // Handle Meeting type with link
+                  if (type === 'Meeting' && content.includes('http')) {
+                    const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
+                    const link = linkMatch ? linkMatch[1] : ''
+                    const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
+                    parsedActivities.push({
+                      type: 'Meeting',
+                      content: meetingTitle || 'Meeting',
+                      link: link,
+                      date: dateTime.toISOString(),
+                      createdAt: dateTime.toISOString()
+                    })
+                  } else {
+                    parsedActivities.push({
+                      type: type,
+                      content: content,
+                      date: dateTime.toISOString(),
+                      createdAt: dateTime.toISOString()
+                    })
+                  }
+                } catch (dateError) {
+                  console.error('Error parsing date:', dateError, line)
+                  // Fallback: use current date
+                  parsedActivities.push({
+                    type: type,
+                    content: content,
+                    date: new Date().toISOString(),
+                    createdAt: new Date().toISOString()
+                  })
+                }
+              }
+            })
+            
+            // Sort activities by date (newest first)
+            parsedActivities.sort((a, b) => {
+              const dateA = new Date(a.date || a.createdAt || 0)
+              const dateB = new Date(b.date || b.createdAt || 0)
+              return dateB.getTime() - dateA.getTime()
+            })
+            
+            setTaskActivities(parsedActivities)
+          } catch (e) {
+            console.error('Error parsing activities from notes:', e)
+            setTaskActivities([])
+          }
+        } else {
+          setTaskActivities([])
+        }
+        // Related tasks will be loaded below, don't reset here
+        
+        // Load customer details if customer ID exists
+        // For HubSpot tasks, customer data might be in task itself
+        if (res.data.source === 'hubspot') {
+          // Extract name from task description if not available (e.g., "Follow up with Fran Simpson" -> "Fran Simpson")
+          let extractedName = ''
+          if (res.data.description) {
+            const desc = res.data.description
+            // Try to extract name from patterns like "Follow up with [Name]", "Call [Name]", etc.
+            const nameMatch = desc.match(/(?:follow up|call|email|meeting|visit|task).*?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                            desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                            desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
+            if (nameMatch && nameMatch[1]) {
+              extractedName = nameMatch[1].trim()
+            }
+          }
+          
+          // HubSpot tasks - create customer details from task data
+          const customerName = res.data.customerName || res.data.associatedContactName || extractedName || ''
+          const customerEmail = res.data.customerEmail || res.data.associatedContactEmail || ''
+          
+          if (customerEmail || customerName) {
+            setTaskCustomerDetails({
+              name: customerName,
+              firstName: customerName,
+              email: customerEmail,
+              phone: res.data.customerPhone || '',
+              associatedContactName: res.data.associatedContactName || customerName || '',
+              associatedContactEmail: res.data.associatedContactEmail || customerEmail || '',
+              associatedCompanyName: res.data.associatedCompanyName || '',
+              company: res.data.associatedCompanyName || '',
+              source: 'hubspot'
+            })
+          } else {
+            setTaskCustomerDetails(null)
+          }
+          
+          // Fetch HubSpot deals for this contact
+          if (customerEmail) {
+            try {
+              const dealsRes = await fetch(`/api/hubspot/deals?contactEmail=${encodeURIComponent(customerEmail)}`, {
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+              })
+              if (dealsRes.ok) {
+                const dealsData = await dealsRes.json()
+                setHubspotDeals(dealsData.deals || [])
+              } else {
+                setHubspotDeals([])
+              }
+            } catch (e) {
+              console.error('Error fetching HubSpot deals:', e)
+              setHubspotDeals([])
+            }
+          } else {
+            setHubspotDeals([])
+          }
+        } else if (res.data.customer && typeof res.data.customer === 'object' && res.data.customer._id) {
+          try {
+            const customerRes = await getCustomer(res.data.customer._id)
+            if (customerRes.success) {
+              setTaskCustomerDetails(customerRes.data)
+            } else {
+              setTaskCustomerDetails(null)
+            }
+          } catch (e) {
+            console.error('Error loading customer details:', e)
+            setTaskCustomerDetails(null)
+          }
+        } else if (res.data.customer && typeof res.data.customer === 'string') {
+          try {
+            const customerRes = await getCustomer(res.data.customer)
+            if (customerRes.success) {
+              setTaskCustomerDetails(customerRes.data)
+            } else {
+              setTaskCustomerDetails(null)
+            }
+          } catch (e) {
+            console.error('Error loading customer details:', e)
+            setTaskCustomerDetails(null)
+          }
+        } else {
+          // Fallback: Try to create customer details from task data if available
+          if (res.data.customerEmail || res.data.customerName) {
+            setTaskCustomerDetails({
+              name: res.data.customerName || res.data.associatedContactName || '',
+              firstName: res.data.customerName || res.data.associatedContactName || '',
+              email: res.data.customerEmail || res.data.associatedContactEmail || '',
+              phone: res.data.customerPhone || '',
+              associatedContactName: res.data.associatedContactName || res.data.customerName || '',
+              associatedContactEmail: res.data.associatedContactEmail || res.data.customerEmail || '',
+              associatedCompanyName: res.data.associatedCompanyName || '',
+              company: res.data.associatedCompanyName || ''
+            })
+          } else {
+            setTaskCustomerDetails(null)
+          }
+        }
+        
+        // Load quotations for this customer
+        // For HubSpot tasks, use task's email/name directly
+        const taskEmail = res.data.customerEmail || 
+                         res.data.associatedContactEmail ||
+                         (res.data.customer && typeof res.data.customer === 'object' ? res.data.customer.email : '') ||
+                         (res.data.source === 'hubspot' ? res.data.customerEmail : '')
+        const taskName = res.data.customerName || 
+                        res.data.associatedContactName ||
+                        (res.data.customer && typeof res.data.customer === 'object' ? (res.data.customer.name || res.data.customer.firstName) : '') ||
+                        (res.data.source === 'hubspot' ? res.data.customerName : '')
+        
+        if (taskEmail || taskName) {
+          try {
+            const searchQuery = taskEmail || taskName
+            const quotationsRes = await getQuotations({ 
+              search: searchQuery 
+            })
+            if (quotationsRes.success && quotationsRes.data) {
+              // Filter quotations that match customer email or name
+              const matchingQuotations = quotationsRes.data.filter(q => {
+                return (
+                  (q.customerEmail && taskEmail && q.customerEmail.toLowerCase() === taskEmail.toLowerCase()) ||
+                  (q.customerName && taskName && q.customerName.toLowerCase().includes(taskName.toLowerCase()))
+                )
+              })
+              setTaskQuotations(matchingQuotations)
+            } else {
+              setTaskQuotations([])
+            }
+          } catch (e) {
+            console.error('Error loading quotations:', e)
+            setTaskQuotations([])
+          }
+        } else {
+          setTaskQuotations([])
+        }
+        
+        // Load sales targets for this customer/salesman
+        try {
+          const salesmanId = res.data.salesman && typeof res.data.salesman === 'object' 
+            ? res.data.salesman._id 
+            : res.data.salesman
+          const targetsRes = await getSalesTargets({
+            salesman: salesmanId || '',
+            status: 'Active'
+          })
+          if (targetsRes.success && targetsRes.data) {
+            setSalesTargets(targetsRes.data)
+          } else {
+            setSalesTargets([])
+          }
+        } catch (e) {
+          console.error('Error loading sales targets:', e)
+          setSalesTargets([])
+        }
+        
+        // Load samples for this customer/salesman
+        try {
+          const salesmanId = res.data.salesman && typeof res.data.salesman === 'object' 
+            ? res.data.salesman._id 
+            : res.data.salesman
+          const customerId = res.data.customer && typeof res.data.customer === 'object' 
+            ? res.data.customer._id 
+            : res.data.customer
+          
+          // Load samples by customer or salesman
+          const samplesRes = await getSamples({
+            salesman: salesmanId || '',
+            search: taskEmail || taskName || ''
+          })
+          if (samplesRes.success && samplesRes.data) {
+            // Filter samples that match customer email, name, or ID
+            const matchingSamples = samplesRes.data.filter(s => {
+              if (customerId && s.customer) {
+                const sampleCustomerId = typeof s.customer === 'object' ? s.customer._id : s.customer
+                if (sampleCustomerId && customerId.toString() === sampleCustomerId.toString()) {
+                  return true
+                }
+              }
+              if (taskEmail && s.customerEmail && taskEmail.toLowerCase() === s.customerEmail.toLowerCase()) {
+                return true
+              }
+              if (taskName && s.customerName && taskName.toLowerCase().includes(s.customerName.toLowerCase())) {
+                return true
+              }
+              return false
+            })
+            setTaskSamples(matchingSamples)
+          } else {
+            setTaskSamples([])
+          }
+        } catch (e) {
+          console.error('Error loading samples:', e)
+          setTaskSamples([])
+        }
+        
+        // Load related tasks for same email/user
+        try {
+          const taskEmail = res.data.customerEmail || 
+                           (res.data.customer && typeof res.data.customer === 'object' ? res.data.customer.email : '') ||
+                           res.data.associatedContactEmail
+          const taskName = res.data.customerName || 
+                         (res.data.customer && typeof res.data.customer === 'object' ? (res.data.customer.name || res.data.customer.firstName) : '') ||
+                         res.data.associatedContactName
+          
+          if (taskEmail || taskName || res.data.customer) {
+            const allTasksRes = await getFollowUps({})
+            if (allTasksRes.success && allTasksRes.data) {
+              // Filter tasks that match the same customer - strict matching
+              const matchingTasks = allTasksRes.data.filter(t => {
+                // Skip current task
+                if (t._id === res.data._id) return false
+                
+                // Priority 1: Match by customer ID (most reliable)
+                if (res.data.customer && t.customer) {
+                  const currentCustomerId = typeof res.data.customer === 'object' ? res.data.customer._id : res.data.customer
+                  const taskCustomerId = typeof t.customer === 'object' ? t.customer._id : t.customer
+                  if (currentCustomerId && taskCustomerId && currentCustomerId.toString() === taskCustomerId.toString()) {
+                    return true
+                  }
+                }
+                
+                // Priority 2: Match by email (exact match only)
+                if (taskEmail) {
+                  const tEmail = t.customerEmail || 
+                                (t.customer && typeof t.customer === 'object' ? t.customer.email : '') ||
+                                t.associatedContactEmail
+                  if (tEmail && taskEmail.toLowerCase().trim() === tEmail.toLowerCase().trim()) {
+                    return true
+                  }
+                }
+                
+                // Priority 3: Match by name (exact match only, not partial)
+                if (taskName) {
+                  const tName = t.customerName || 
+                               (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') ||
+                               t.associatedContactName
+                  if (tName && taskName.toLowerCase().trim() === tName.toLowerCase().trim()) {
+                    return true
+                  }
+                }
+                
+                return false
+              })
+              
+              // Show ALL tasks for this customer (no duplicate removal in activities)
+              // Sort by dueDate or createdAt (newest first)
+              matchingTasks.sort((a, b) => {
+                const dateA = new Date(a.dueDate || a.createdAt || 0)
+                const dateB = new Date(b.dueDate || b.createdAt || 0)
+                return dateB.getTime() - dateA.getTime() // Newest first
+              })
+              
+              setRelatedTasks(matchingTasks)
+            } else {
+              setRelatedTasks([])
+            }
+          } else {
+            setRelatedTasks([])
+          }
+        } catch (e) {
+          console.error('Error loading related tasks:', e)
+          setRelatedTasks([])
+        }
       }
     } catch (e) {
       console.error(e)
@@ -557,7 +1138,18 @@ const Tasks = () => {
       confirmButtonColor: '#e9931c',
       cancelButtonColor: '#6c757d',
       confirmButtonText: 'Yes, Complete',
-      cancelButtonText: 'Cancel'
+      cancelButtonText: 'Cancel',
+      customClass: {
+        container: 'swal2-container-custom',
+        popup: 'swal2-popup-custom'
+      },
+      didOpen: () => {
+        // Ensure SweetAlert appears on top
+        const swalContainer = document.querySelector('.swal2-container')
+        if (swalContainer) {
+          swalContainer.style.zIndex = '99999'
+        }
+      }
     })
     if (!result.isConfirmed) return
     
@@ -567,15 +1159,65 @@ const Tasks = () => {
         completedDate: new Date(),
       })
       if (res.success) {
+        // Reload task details to get updated status
+        const updatedRes = await getFollowUp(taskId)
+        if (updatedRes.success) {
+          setSelectedTask(updatedRes.data)
+        }
         await loadTasks()
+        // Check if this is the last task
+        const isLastTask = currentTaskIndex === filtered.length - 1
+        
+        // Show success message with high z-index to appear on top
+        await Swal.fire({
+          icon: 'success',
+          title: 'Task Completed!',
+          text: 'Task has been marked as completed successfully.',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true,
+          customClass: {
+            container: 'swal2-container-custom',
+            popup: 'swal2-popup-custom'
+          },
+          didOpen: () => {
+            // Ensure SweetAlert appears on top
+            const swalContainer = document.querySelector('.swal2-container')
+            if (swalContainer) {
+              swalContainer.style.zIndex = '99999'
+            }
+          }
+        })
+        
+        if (isLastTask) {
+          // Close modal if it's the last task
         setShowTaskDetail(false)
-        setSelectedTask(null)
+          // Don't reset state - keep it for when modal reopens
+          // setSelectedTask(null)
+          // setTaskCustomerDetails(null)
+          // setTaskQuotations([])
+          // setTaskActivities([])
+          // setRelatedTasks([])
+        } else {
+          // Move to next task
+          handleNextTask()
+        }
       } else {
         Swal.fire({
           icon: 'error',
           title: 'Failed',
           text: res.message || 'Failed to update task',
-          confirmButtonColor: '#e9931c'
+          confirmButtonColor: '#e9931c',
+          customClass: {
+            container: 'swal2-container-custom',
+            popup: 'swal2-popup-custom'
+          },
+          didOpen: () => {
+            const swalContainer = document.querySelector('.swal2-container')
+            if (swalContainer) {
+              swalContainer.style.zIndex = '99999'
+            }
+          }
         })
       }
     } catch (e) {
@@ -584,7 +1226,17 @@ const Tasks = () => {
         icon: 'error',
         title: 'Error',
         text: 'Error updating task',
-        confirmButtonColor: '#e9931c'
+        confirmButtonColor: '#e9931c',
+        customClass: {
+          container: 'swal2-container-custom',
+          popup: 'swal2-popup-custom'
+        },
+        didOpen: () => {
+          const swalContainer = document.querySelector('.swal2-container')
+          if (swalContainer) {
+            swalContainer.style.zIndex = '99999'
+          }
+        }
       })
     }
   }
@@ -607,7 +1259,8 @@ const Tasks = () => {
       if (res.success) {
         await loadTasks()
         setShowTaskDetail(false)
-        setSelectedTask(null)
+        // Keep selectedTask for when modal reopens - only reset if needed
+        // setSelectedTask(null)
       } else {
         Swal.fire({
           icon: 'error',
@@ -642,27 +1295,49 @@ const Tasks = () => {
     if (!confirmResult.isConfirmed) return
     
     try {
-      const res = await approveFollowUp(taskId)
+      // Check if this is a visit target
+      const task = tasks.find(t => t._id === taskId)
+      const isVisitTarget = task?.isVisitTarget || task?.visitTargetId
+      
+      let res
+      if (isVisitTarget) {
+        // Approve visit target
+        const visitTargetId = task.visitTargetId || taskId
+        res = await updateVisitTarget(visitTargetId, { approvalStatus: 'Approved' })
+      } else {
+        // Approve regular task
+        res = await approveFollowUp(taskId)
+      }
+      
       if (res.success) {
-        // Wait a bit for async HubSpot sync
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        
-        // Reload to check HubSpot sync status
-        const updatedRes = await getFollowUp(taskId)
-        if (updatedRes.success && updatedRes.data.hubspotTaskId) {
+        if (isVisitTarget) {
           Swal.fire({
             icon: 'success',
-            title: 'Task Approved!',
-            text: 'Task approved successfully! It has been posted to HubSpot. Salesman will be notified.',
+            title: 'Visit Request Approved!',
+            text: 'Visit request approved successfully! A task has been created for the salesman.',
             confirmButtonColor: '#e9931c'
           })
         } else {
-          Swal.fire({
-            icon: 'success',
-            title: 'Task Approved!',
-            text: 'Task approved successfully! HubSpot sync is in progress. Salesman will be notified.',
-            confirmButtonColor: '#e9931c'
-          })
+          // Wait a bit for async HubSpot sync
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // Reload to check HubSpot sync status
+          const updatedRes = await getFollowUp(taskId)
+          if (updatedRes.success && updatedRes.data.hubspotTaskId) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Task Approved!',
+              text: 'Task approved successfully! It has been posted to HubSpot. Salesman will be notified.',
+              confirmButtonColor: '#e9931c'
+            })
+          } else {
+            Swal.fire({
+              icon: 'success',
+              title: 'Task Approved!',
+              text: 'Task approved successfully! HubSpot sync is in progress. Salesman will be notified.',
+              confirmButtonColor: '#e9931c'
+            })
+          }
         }
         await loadTasks()
         setShowTaskDetail(false)
@@ -686,6 +1361,125 @@ const Tasks = () => {
     }
   }
 
+  const handleUpdateTaskStatus = async (taskId, newStatus) => {
+    try {
+      const res = await updateFollowUp(taskId, { taskStatus: newStatus })
+      if (res.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Status Updated!',
+          text: `Task status updated to ${newStatus}`,
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
+        await loadTasks()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: res.message || 'Failed to update task status',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error updating task status:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating task status',
+        confirmButtonColor: '#e9931c'
+      })
+    }
+  }
+
+  const handleStartTask = (task) => {
+    setTaskToStart(task)
+    setMeterPicture(null)
+    setMeterReading('')
+    setShowStartTaskModal(true)
+  }
+
+  const handleMeterPictureUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setMeterPicture(event.target.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleCaptureMeterPicture = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.capture = 'environment' // Use back camera on mobile
+    input.onchange = (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          setMeterPicture(event.target.result)
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+    input.click()
+  }
+
+  const handleConfirmStartTask = async () => {
+    if (!meterPicture) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Meter Picture Required',
+        text: 'Please upload meter picture to start the task',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+
+    try {
+      const updateData = {
+        startedAt: new Date(),
+        meterPicture: meterPicture,
+        meterReading: meterReading || '',
+        status: 'Today' // Keep status as Today when started
+      }
+
+      const res = await updateFollowUp(taskToStart._id, updateData)
+      if (res.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Task Started!',
+          text: 'Task has been started successfully with meter picture',
+          confirmButtonColor: '#e9931c'
+        })
+        setShowStartTaskModal(false)
+        setTaskToStart(null)
+        setMeterPicture(null)
+        setMeterReading('')
+        await loadTasks()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: res.message || 'Failed to start task',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error starting task:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error starting task',
+        confirmButtonColor: '#e9931c'
+      })
+    }
+  }
+
   const handleRejectTask = async (taskId) => {
     const { value: reason, isConfirmed } = await Swal.fire({
       title: 'Reject Task',
@@ -701,12 +1495,28 @@ const Tasks = () => {
     if (!isConfirmed) return
     
     try {
-      const res = await rejectFollowUp(taskId, reason || '')
+      // Check if this is a visit target
+      const task = tasks.find(t => t._id === taskId)
+      const isVisitTarget = task?.isVisitTarget || task?.visitTargetId
+      
+      let res
+      if (isVisitTarget) {
+        // Reject visit target
+        const visitTargetId = task.visitTargetId || taskId
+        res = await updateVisitTarget(visitTargetId, { 
+          approvalStatus: 'Rejected',
+          rejectionReason: reason || ''
+        })
+      } else {
+        // Reject regular task
+        res = await rejectFollowUp(taskId, reason || '')
+      }
+      
       if (res.success) {
         Swal.fire({
           icon: 'success',
-          title: 'Task Rejected',
-          text: 'Task rejected successfully.',
+          title: isVisitTarget ? 'Visit Request Rejected' : 'Task Rejected',
+          text: isVisitTarget ? 'Visit request rejected successfully.' : 'Task rejected successfully.',
           confirmButtonColor: '#e9931c'
         })
         await loadTasks()
@@ -884,18 +1694,7 @@ const Tasks = () => {
   }
 
   const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'Urgent':
-        return 'bg-red-100 text-red-700'
-      case 'High':
-        return 'bg-orange-100 text-orange-700'
-      case 'Medium':
-        return 'bg-yellow-100 text-yellow-700'
-      case 'Low':
-        return 'bg-blue-100 text-blue-700'
-      default:
-        return 'bg-gray-100 text-gray-700'
-    }
+    return 'bg-gray-100 text-gray-800'
   }
 
   const handleSort = (field) => {
@@ -930,9 +1729,60 @@ const Tasks = () => {
       : <FaChevronDown className="w-3 h-3 ml-1" />
   }
 
-  // Sort filtered tasks
+  // Sort filtered tasks - Today's tasks first by default
   const sortedTasks = useMemo(() => {
     let sorted = [...filtered]
+    
+    // Check if we're sorting by dueDate (default) and no custom sort is applied
+    const isDefaultDueDateSort = sortField === 'dueDate' && sortOrder === 'asc'
+    
+    if (isDefaultDueDateSort) {
+      // Separate today's tasks from others
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const todayTasks = []
+      const otherTasks = []
+      
+      sorted.forEach(task => {
+        if (!task.dueDate) {
+          otherTasks.push(task)
+          return
+        }
+        
+        const dueDate = new Date(task.dueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        
+        // Check if task is due today
+        if (dueDate.getTime() === today.getTime()) {
+          todayTasks.push(task)
+        } else {
+          otherTasks.push(task)
+        }
+      })
+      
+      // Sort today's tasks by time (if available) or keep original order
+      todayTasks.sort((a, b) => {
+        if (a.dueTime && b.dueTime) {
+          return a.dueTime.localeCompare(b.dueTime)
+        }
+        return 0
+      })
+      
+      // Sort other tasks by date (ascending - oldest first)
+      otherTasks.sort((a, b) => {
+        const aDate = new Date(a.dueDate || 0).getTime()
+        const bDate = new Date(b.dueDate || 0).getTime()
+        return aDate - bDate
+      })
+      
+      // Return today's tasks first, then others
+      return [...todayTasks, ...otherTasks]
+    }
+    
+    // For other sort fields, use normal sorting
     sorted.sort((a, b) => {
       let aVal, bVal
       switch (sortField) {
@@ -1004,7 +1854,11 @@ const Tasks = () => {
         const noHubSpotId = !t.hubspotTaskId || t.hubspotTaskId === '' || t.hubspotTaskId === null
         return noHubSpotId && t.approvalStatus === 'Approved'
       }).length,
-      Pending: tasks.filter(t => t.approvalStatus === 'Pending').length,
+      Pending: tasks.filter(t => {
+        const approvalStatus = t.approvalStatus || 'Pending'
+        const createdByRole = t.createdBy?.role
+        return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
+      }).length,
       Overdue: tasks.filter(t => t.status === 'Overdue').length,
       Today: tasks.filter(t => t.status === 'Today').length,
       Upcoming: tasks.filter(t => t.status === 'Upcoming').length,
@@ -1064,12 +1918,12 @@ const Tasks = () => {
     search.trim() !== ''
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
         <div>
-          <h2 className="text-2xl font-bold" style={{ color: appTheme.text.primary }}>Tasks</h2>
-          <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+          <h2 className="text-2xl font-semibold" style={{ color: '#1f2937', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Tasks</h2>
+          <p className="text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
             {loading ? 'Loading...' : `${sortedTasks.length} of ${tasks.length} tasks`} | Follow-up sample tracker - Manage all tasks and assign to salesmen
           </p>
         </div>
@@ -1108,30 +1962,30 @@ const Tasks = () => {
         <div className="flex flex-wrap items-center gap-3 mb-3">
           {/* Active Filter Tags */}
           {activeFilters.taskType.map(type => (
-            <span key={type} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+            <span key={type} className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
               Task type: {type}
-              <button onClick={() => removeFilter('taskType', type)} className="hover:bg-blue-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
+              <button onClick={() => removeFilter('taskType', type)} className="hover:bg-gray-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
             </span>
           ))}
           {activeFilters.priority.map(priority => (
-            <span key={priority} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+            <span key={priority} className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
               Priority: {priority}
-              <button onClick={() => removeFilter('priority', priority)} className="hover:bg-blue-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
+              <button onClick={() => removeFilter('priority', priority)} className="hover:bg-gray-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
             </span>
           ))}
           {activeFilters.salesman.map(salesmanId => {
             const salesman = salesmen.find(s => (s._id || s.id) === salesmanId)
             return salesman ? (
-              <span key={salesmanId} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+              <span key={salesmanId} className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
                 Assigned to: {salesman.name}
-                <button onClick={() => removeFilter('salesman', salesmanId)} className="hover:bg-blue-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
+                <button onClick={() => removeFilter('salesman', salesmanId)} className="hover:bg-gray-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
               </span>
             ) : null
           })}
           {activeFilters.dueDateRange && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-medium">
               Due date: {activeFilters.dueDateRange}
-              <button onClick={() => removeFilter('dueDateRange')} className="hover:bg-blue-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
+              <button onClick={() => removeFilter('dueDateRange')} className="hover:bg-gray-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
             </span>
           )}
           {hasActiveFilters && (
@@ -1266,8 +2120,7 @@ const Tasks = () => {
                         handleFilterChange('dueDateRange', option.value)
                         setShowDueDateDropdown(false)
                       }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                        activeFilters.dueDateRange === option.value ? 'bg-blue-50 text-blue-700' : ''
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${activeFilters.dueDateRange === option.value ? 'bg-gray-100 text-gray-800' : ''
                       }`}
                     >
                       {option.label}
@@ -1426,8 +2279,7 @@ const Tasks = () => {
                         handleFilterChange('timeRange', option.value)
                         setShowTimeDropdown(false)
                       }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                        activeFilters.timeRange === option.value ? 'bg-blue-50 text-blue-700' : ''
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${activeFilters.timeRange === option.value ? 'bg-gray-100 text-gray-800' : ''
                       }`}
                     >
                       {option.label}
@@ -1447,15 +2299,15 @@ const Tasks = () => {
 
       {/* Search Bar */}
         <div className="mt-3 flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
-          <FaSearch style={{ color: appTheme.text.tertiary }} className="flex-shrink-0" />
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-gray-500 focus-within:border-gray-500 transition-all">
+            <FaSearch style={{ color: '#9ca3af', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }} className="flex-shrink-0" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks by title, contact, company, type, status, priority, notes..."
             className="flex-1 bg-transparent outline-none text-sm"
-            style={{ color: appTheme.text.primary }}
+              style={{ color: '#1f2937', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
           />
           {search && search.trim() && (
             <button
@@ -1471,11 +2323,11 @@ const Tasks = () => {
             </button>
           )}
         </div>
-          <button className="px-4 py-2 border border-blue-500 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors">
+          <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
             Save view
           </button>
           {selectedRows.length > 0 && (
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+            <button className="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
               Start {selectedRows.length} tasks
             </button>
           )}
@@ -1489,19 +2341,19 @@ const Tasks = () => {
       <div className="rounded-lg overflow-hidden" style={{ backgroundColor: appTheme.background.white, boxShadow: appTheme.shadow.md }}>
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <FaSpinner className="animate-spin" style={{ color: appTheme.primary.main }} size={32} />
+            <FaSpinner className="animate-spin" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }} size={32} />
           </div>
         ) : paginatedTasks.length === 0 ? (
           <div className="text-center py-12">
-            <FaCalendarAlt className="mx-auto mb-4" style={{ color: appTheme.text.light }} size={48} />
-            <p className="font-medium" style={{ color: appTheme.text.secondary }}>No tasks found</p>
-            <p className="text-sm mt-2" style={{ color: appTheme.text.tertiary }}>
+            <FaCalendarAlt className="mx-auto mb-4" style={{ color: '#d1d5db', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }} size={48} />
+            <p className="font-medium" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>No tasks found</p>
+            <p className="text-sm mt-2" style={{ color: '#9ca3af', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
               {search ? 'Try a different search term' : 'Create your first task to get started'}
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto" style={{ maxWidth: '100%' }}>
-            <table className="w-full border-collapse" style={{ minWidth: '1600px' }}>
+            <table className="w-full border-collapse" style={{ minWidth: '1600px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
               <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
                 <tr>
                   <th className="px-4 py-3 text-left sticky left-0 bg-gray-50 z-10">
@@ -1515,7 +2367,7 @@ const Tasks = () => {
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
-                    style={{ color: appTheme.text.secondary }}
+                    style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('status')}
                   >
                     <div className="flex items-center">
@@ -1525,7 +2377,7 @@ const Tasks = () => {
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[200px]"
-                    style={{ color: appTheme.text.secondary }}
+                    style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('description')}
                   >
                     <div className="flex items-center">
@@ -1535,7 +2387,7 @@ const Tasks = () => {
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[150px]"
-                    style={{ color: appTheme.text.secondary }}
+                    style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('customerName')}
                   >
                     <div className="flex items-center">
@@ -1543,12 +2395,12 @@ const Tasks = () => {
                       <SortIcon field="customerName" />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[150px]" style={{ color: appTheme.text.secondary }}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[150px]" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     ASSOCIATED COMPANY
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[150px]"
-                    style={{ color: appTheme.text.secondary }}
+                    style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('salesman')}
                   >
                     <div className="flex items-center">
@@ -1556,15 +2408,15 @@ const Tasks = () => {
                       <SortIcon field="salesman" />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[120px]" style={{ color: appTheme.text.secondary }}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[120px]" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     LAST CONTACT
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[120px]" style={{ color: appTheme.text.secondary }}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[120px]" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     LAST ENGAGEMENT
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
-                    style={{ color: appTheme.text.secondary }}
+                    style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('type')}
                   >
                     <div className="flex items-center">
@@ -1574,7 +2426,7 @@ const Tasks = () => {
                   </th>
                   <th 
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
-                    style={{ color: appTheme.text.secondary }}
+                    style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('dueDate')}
                   >
                     <div className="flex items-center">
@@ -1582,7 +2434,10 @@ const Tasks = () => {
                       <SortIcon field="dueDate" />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 z-10" style={{ color: appTheme.text.secondary }}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+                    APPROVAL
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 z-10" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     ACTIONS
                   </th>
                 </tr>
@@ -1594,7 +2449,8 @@ const Tasks = () => {
               return (
                     <tr
                   key={task._id}
-                      className="hover:bg-blue-50 transition-colors border-b border-gray-100"
+                      className="hover:bg-gray-50 transition-colors border-b border-gray-100"
+                      style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     >
                       <td className="px-4 py-3 sticky left-0 bg-white z-10" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -1608,16 +2464,37 @@ const Tasks = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 whitespace-nowrap group relative">
                           <StatusIcon className="w-4 h-4" style={{ color: statusStyle.text }} />
-                        <span
-                            className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold font-sans transition-all hover:opacity-80 cursor-default"
-                            style={{ backgroundColor: statusStyle.bg, color: '#000000' }}
-                            title={task.status}
-                        >
-                          {task.status}
-                        </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // Cycle through: Approved -> Reject -> Pending -> Approved
+                              const statusOrder = ['Approved', 'Reject', 'Pending']
+                              const currentStatus = task.taskStatus || task.status || 'Approved'
+                              const currentIndex = statusOrder.indexOf(currentStatus) >= 0 ? statusOrder.indexOf(currentStatus) : 0
+                              const nextIndex = (currentIndex + 1) % statusOrder.length
+                              const newStatus = statusOrder[nextIndex]
+                              
+                              handleUpdateTaskStatus(task._id, newStatus)
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:opacity-80 cursor-pointer ${
+                              task.taskStatus === 'Approved' || (!task.taskStatus && task.status === 'Approved') ? 'bg-gray-100 text-gray-800' :
+                              task.taskStatus === 'Reject' || task.status === 'Reject' ? 'bg-gray-100 text-gray-800' :
+                              task.taskStatus === 'Pending' || task.status === 'Pending' ? 'bg-gray-100 text-gray-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}
+                            style={{ 
+                              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                              color: '#1f2937'
+                            }}
+                            title={`Current status: ${task.taskStatus || task.status || 'Approved'}. Click to change.`}
+                          >
+                            {(task.taskStatus === 'Approved' || (!task.taskStatus && task.status === 'Approved')) && '✓ '}
+                            {task.taskStatus || task.status}
+                          </button>
                         {task.approvalStatus === 'Pending' && (
                             <span 
-                              className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-yellow-100 text-black transition-all hover:opacity-80 cursor-default"
+                              className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 transition-all hover:opacity-80 cursor-default"
+                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                               title="Pending Approval"
                             >
                               Pending
@@ -1626,7 +2503,8 @@ const Tasks = () => {
                         {/* Show HubSpot badge if task is pushed to HubSpot */}
                         {task.hubspotTaskId && (
                             <span 
-                              className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-green-100 text-black transition-all hover:opacity-80 cursor-default"
+                              className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 transition-all hover:opacity-80 cursor-default"
+                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                               title="Posted to HubSpot"
                             >
                               ✓ HubSpot
@@ -1642,27 +2520,29 @@ const Tasks = () => {
                               handleTaskClick(task)
                             }}
                             className="text-left text-sm font-medium hover:underline transition-colors cursor-pointer"
-                            style={{ color: '#0066cc' }}
+                            style={{ 
+                              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                              color: '#1f2937'
+                            }}
                           >
                         {task.description || `Follow up with ${task.customerName}`}
                           </button>
-                      {task.notes && (
-                            <p className="text-xs mt-1 text-gray-500 line-clamp-1">
-                          {task.notes}
-                        </p>
-                      )}
                           </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-[150px]">
                           {(() => {
-                            // Get the actual contact name - prefer associatedContactName, then customerName (but filter out "HubSpot Contact")
-                            const displayName = task.associatedContactName || 
+                            // Get associated contact - prioritize from customer object, then task fields
+                            const associatedContactName = (task.customer && typeof task.customer === 'object' ? task.customer.associatedContactName : null) ||
+                              task.associatedContactName ||
                               (task.customerName && task.customerName !== 'HubSpot Contact' ? task.customerName : '') ||
-                              task.customerEmail || '';
-                            const displayEmail = task.associatedContactEmail || task.customerEmail || '';
-                            
-                            if (!displayName && !displayEmail) {
+                              '';
+                            const associatedContactEmail = (task.customer && typeof task.customer === 'object' ? task.customer.associatedContactEmail : null) ||
+                              task.associatedContactEmail ||
+                              task.customerEmail ||
+                              '';
+
+                            if (!associatedContactName && !associatedContactEmail) {
                               return <span className="text-sm text-gray-400">—</span>;
                             }
                             
@@ -1670,16 +2550,16 @@ const Tasks = () => {
                               <>
                                 <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
                                   <span className="text-xs font-semibold text-gray-600">
-                                    {(displayName || displayEmail || '?')[0].toUpperCase()}
+                                    {(associatedContactName || associatedContactEmail || '?')[0].toUpperCase()}
                                   </span>
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate" style={{ color: appTheme.text.primary }}>
-                                    {displayName || '—'}
+                                    {associatedContactName || '—'}
                                   </p>
-                                  {displayEmail && (
+                                  {associatedContactEmail && (
                                     <p className="text-xs text-gray-500 truncate">
-                                      {displayEmail}
+                                      {associatedContactEmail}
                                     </p>
                                   )}
                                 </div>
@@ -1691,11 +2571,12 @@ const Tasks = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-[150px]">
                           {(() => {
-                            // Show company from associatedCompanyName first, then customer.company
-                            const companyName = task.associatedCompanyName || 
-                              (task.customer && task.customer.company ? task.customer.company.trim() : '');
-                            
-                            if (!companyName) {
+                            // Show associated company - prioritize from customer object, then task fields
+                            const companyName = (task.customer && typeof task.customer === 'object' ? (task.customer.associatedCompanyName || task.customer.company) : null) ||
+                              task.associatedCompanyName ||
+                              '';
+
+                            if (!companyName || !companyName.trim()) {
                               return <span className="text-sm text-gray-400" title="No company associated">—</span>;
                             }
                             
@@ -1703,11 +2584,11 @@ const Tasks = () => {
                               <>
                                 <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
                                   <span className="text-xs font-semibold text-gray-600">
-                                    {companyName[0].toUpperCase()}
+                                    {companyName.trim()[0].toUpperCase()}
                                   </span>
                                 </div>
                                 <span className="text-sm truncate" style={{ color: appTheme.text.primary }}>
-                                  {companyName}
+                                  {companyName.trim()}
                                 </span>
                               </>
                             );
@@ -1734,11 +2615,11 @@ const Tasks = () => {
                                   <div className="flex items-center gap-2">
                                     <FaUser className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                                     <div className="flex flex-col min-w-0">
-                                      <span className="text-sm font-medium truncate" style={{ color: appTheme.text.primary }} title={hubspotOwnerName ? "HubSpot Owner" : "Assigned Salesman"}>
+                                      <span className="text-sm font-medium truncate" style={{ color: '#1f2937', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }} title={hubspotOwnerName ? "HubSpot Owner" : "Assigned Salesman"}>
                                         {displayName}
                                       </span>
                                       {displayEmail && displayEmail !== displayName && (
-                                        <span className="text-xs text-gray-500 truncate" title="Email">
+                                        <span className="text-xs truncate" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }} title="Email">
                                           {displayEmail}
                                         </span>
                                       )}
@@ -1764,27 +2645,143 @@ const Tasks = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-gray-400">—</span>
+                        {(() => {
+                          // Show last contact date from customer object or task
+                          const lastContact = (task.customer && typeof task.customer === 'object' ? task.customer.lastContact : null);
+                          if (lastContact) {
+                            return (
+                              <span className="text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+                                {new Date(lastContact).toLocaleDateString('en-GB', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                            );
+                          }
+                          return <span className="text-sm text-gray-400">—</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-gray-400">—</span>
+                        {(() => {
+                          // Show last engagement date from customer object or task
+                          const lastEngagement = (task.customer && typeof task.customer === 'object' ? task.customer.lastEngagement : null);
+                          if (lastEngagement) {
+                            return (
+                              <span className="text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+                                {new Date(lastEngagement).toLocaleDateString('en-GB', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                            );
+                          }
+                          return <span className="text-sm text-gray-400">—</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm font-medium" style={{ color: appTheme.text.secondary }}>
+                        <span className="text-sm font-medium" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                           {task.hs_task_type || task.type || '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         {task.dueDate ? (
-                          <div className="flex items-center gap-1.5 text-sm whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                          <div className="flex items-center gap-1.5 text-sm whitespace-nowrap" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                             <FaCalendarAlt className="w-3.5 h-3.5 text-gray-400" />
                             <span className="font-medium">{new Date(task.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs" style={{ color: '#9ca3af' }}>
                               {new Date(task.dueDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
                             </span>
                 </div>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {task.source !== 'hubspot' ? (
+                          <div className="relative flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setOpenApprovalDropdown(openApprovalDropdown === task._id ? null : task._id)
+                              }}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-all hover:opacity-90 bg-gray-200 text-gray-800"
+                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                            >
+                              <span>{task.approvalStatus || 'Pending'}</span>
+                              <FaChevronDown className="w-3 h-3" />
+                              <div className="ml-1 w-4 h-4 bg-white bg-opacity-30 rounded flex items-center justify-center">
+                                <FaCheckCircle className="w-3 h-3 text-white" />
+                              </div>
+                            </button>
+                            {openApprovalDropdown === task._id && (
+                              <div 
+                                className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[150px]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="py-1">
+                                  {task.approvalStatus !== 'Approved' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOpenApprovalDropdown(null)
+                                        handleApproveTask(task._id)
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                      style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                                    >
+                                      <FaCheckCircle className="w-3 h-3" />
+                                      Approve
+                                    </button>
+                                  )}
+                                  {task.approvalStatus !== 'Rejected' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOpenApprovalDropdown(null)
+                                        handleRejectTask(task._id)
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                      style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                                    >
+                                      <FaTimes className="w-3 h-3" />
+                                      Reject
+                                    </button>
+                                  )}
+                                  {task.approvalStatus === 'Approved' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setOpenApprovalDropdown(null)
+                                        const approvedDate = task.approvedAt 
+                                          ? new Date(task.approvedAt).toLocaleDateString('en-GB', { 
+                                              day: '2-digit', 
+                                              month: 'short', 
+                                              year: 'numeric' 
+                                            })
+                                          : null
+                                        Swal.fire({
+                                          icon: 'info',
+                                          title: 'Task Already Approved',
+                                          text: approvedDate 
+                                            ? `This task was approved on ${approvedDate}` 
+                                            : 'This task has been approved.',
+                                          confirmButtonColor: '#e9931c'
+                                        })
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    >
+                                      <FaCheckCircle className="w-3 h-3" />
+                                      View Details
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right sticky right-0 bg-white z-10" onClick={(e) => e.stopPropagation()}>
@@ -1829,13 +2826,22 @@ const Tasks = () => {
                                 e.stopPropagation()
                                 handlePushToHubSpot(task._id)
                               }}
-                              disabled={pushingToHubSpot}
-                              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-white transition-all hover:opacity-90 disabled:opacity-50"
-                              style={{ backgroundColor: appTheme.status.info.main }}
-                              title="Push to HubSpot"
+                                disabled={pushingToHubSpot || (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                  (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null)
+                                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed opacity-50'
+                                    : 'text-white hover:opacity-90 disabled:opacity-50'
+                                }`}
+                                style={!(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? { backgroundColor: appTheme.status.info.main } : {}}
+                                title={(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? "Already Pushed to HubSpot" : "Push to HubSpot"}
                             >
                               {pushingToHubSpot ? (
                                 <FaSpinner className="animate-spin" />
+                                ) : (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? (
+                                  <>
+                                    <FaCheckCircle />
+                                    Pushed
+                                  </>
                               ) : (
                                 <>
                                   <FaCloudUploadAlt />
@@ -1847,24 +2853,34 @@ const Tasks = () => {
                           {/* Show Imported badge for HubSpot imported tasks */}
                           {task.source === 'hubspot' && (
                             <span 
-                              className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700"
+                              className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800"
                               title="Imported from HubSpot"
                             >
                               Imported
                             </span>
                           )}
-                          {/* Show Delete button only for app-created tasks (not HubSpot imported) */}
-                          {task.source !== 'hubspot' && (
+                          {/* Show Start Task button for Today tasks that are not started */}
+                          {task.status === 'Today' && !task.startedAt && task.approvalStatus === 'Approved' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleDeleteTask(task._id)
+                                handleStartTask(task)
                               }}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Delete Task"
+                              className="px-3 py-1.5 rounded text-xs font-medium text-white hover:opacity-90 transition-all"
+                              style={{ backgroundColor: appTheme.status.success.main }}
+                              title="Start Task"
                             >
-                              <FaTrash className="w-4 h-4" />
+                              Start Task
                             </button>
+                          )}
+                          {/* Show Started badge if task is started */}
+                          {task.startedAt && (
+                            <span 
+                              className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800"
+                              title={`Started at ${new Date(task.startedAt).toLocaleString()}`}
+                            >
+                              Started
+                            </span>
                           )}
                           <button
                             onClick={(e) => {
@@ -1914,9 +2930,8 @@ const Tasks = () => {
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium ${
-                      currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
+                    className={`px-3 py-1.5 rounded text-sm font-medium ${currentPage === pageNum
+                        ? 'bg-gray-700 text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
@@ -2331,7 +3346,8 @@ const Tasks = () => {
                 <button
                   onClick={() => {
                     setShowTaskDetail(false)
-                    setSelectedTask(null)
+                    // Don't reset selectedTask - keep it for when modal reopens
+                    // setSelectedTask(null)
                   }}
                   className="text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
                 >
@@ -2366,25 +3382,16 @@ const Tasks = () => {
                 {selectedTask.status !== 'Completed' && (
                   <button
                     onClick={() => handleCompleteTask(selectedTask._id)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
                   >
                     Complete
-                  </button>
-                )}
-                {/* Show Delete button only for app-created tasks (not HubSpot imported) */}
-                {selectedTask.source !== 'hubspot' && (
-                  <button
-                    onClick={() => handleDeleteTask(selectedTask._id)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
-                  >
-                    <FaTrash className="w-4 h-4" />
-                    Delete
                   </button>
                 )}
               <button
                 onClick={() => {
                   setShowTaskDetail(false)
-                  setSelectedTask(null)
+                    // Don't reset selectedTask - keep it for when modal reopens
+                    // setSelectedTask(null)
                 }}
                   className="text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
               >
@@ -2398,8 +3405,20 @@ const Tasks = () => {
               {/* Left Panel - Contact Information */}
               <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
                 {(() => {
-                  const displayName = selectedTask.associatedContactName || selectedTask.customerName || '';
-                  const displayEmail = selectedTask.associatedContactEmail || selectedTask.customerEmail || '';
+                  // Prioritize customer's associated contact from customer creation
+                  // For HubSpot tasks, check task data directly
+                  const displayName = taskCustomerDetails?.associatedContactName ||
+                    selectedTask.associatedContactName ||
+                    taskCustomerDetails?.name ||
+                    selectedTask.customerName ||
+                    (selectedTask.source === 'hubspot' ? (selectedTask.customerName || selectedTask.associatedContactName) : '') ||
+                    '';
+                  const displayEmail = taskCustomerDetails?.associatedContactEmail ||
+                    selectedTask.associatedContactEmail ||
+                    taskCustomerDetails?.email ||
+                    selectedTask.customerEmail ||
+                    (selectedTask.source === 'hubspot' ? (selectedTask.customerEmail || selectedTask.associatedContactEmail) : '') ||
+                    '';
                   return displayName || displayEmail ? (
                     <>
                       {/* Contact Card */}
@@ -2420,25 +3439,235 @@ const Tasks = () => {
                       
                       {/* Action Buttons */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={() => {
+                              setModalActiveTab('activities')
+                              // Focus typing pad after a short delay to ensure tab is active
+                              setTimeout(() => {
+                                if (noteInputRef.current) {
+                                  noteInputRef.current.focus()
+                                }
+                              }, 100)
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
                           <FaStickyNote className="w-4 h-4" />
                           Note
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={async () => {
+                              // Prioritize associated contact email from customer creation
+                              // For HubSpot tasks, check task data directly
+                              const email = taskCustomerDetails?.associatedContactEmail ||
+                                taskCustomerDetails?.email ||
+                                displayEmail ||
+                                selectedTask.associatedContactEmail ||
+                                selectedTask.customerEmail ||
+                                (selectedTask.source === 'hubspot' && selectedTask.customerEmail) ||
+                                '';
+                              if (email) {
+                                window.location.href = `mailto:${email}`
+                                
+                                // Save email activity to backend
+                                try {
+                                  if (selectedTask && selectedTask._id) {
+                                    const currentNotes = selectedTask.notes || ''
+                                    const activityNote = `[${new Date().toLocaleString('en-GB')}] Email: Sent to ${email}`
+                                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                    
+                                    await updateFollowUp(selectedTask._id, {
+                                      notes: updatedNotes
+                                    })
+                                    
+                                    // Add to activities
+                                    const newActivity = {
+                                      type: 'Email',
+                                      content: `Email sent to ${email}`,
+                                      date: new Date().toISOString(),
+                                      createdAt: new Date().toISOString()
+                                    }
+                                    setTaskActivities([...taskActivities, newActivity])
+                                    
+                                    // Reload task to get updated push status
+                                    const updatedRes = await getFollowUp(selectedTask._id)
+                                    if (updatedRes.success) {
+                                      setSelectedTask(updatedRes.data)
+                                    } else {
+                                      // Fallback: Update selectedTask manually
+                                      const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                      setSelectedTask(updatedTask)
+                                    }
+                                    
+                                    // Reload tasks list to update push button status
+                                    await loadTasks()
+                                  }
+                                } catch (e) {
+                                  console.error('Error saving email activity:', e)
+                                }
+                              } else {
+                                Swal.fire({
+                                  icon: 'warning',
+                                  title: 'No Email',
+                                  text: 'No email address available for this contact',
+                                  confirmButtonColor: '#e9931c'
+                                })
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
                           <FaEnvelope className="w-4 h-4" />
                           Email
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={async () => {
+                              // Prioritize phone from customer details
+                              // For HubSpot tasks, check task data directly
+                              const phone = taskCustomerDetails?.phone ||
+                                selectedTask.customerPhone ||
+                                (selectedTask.source === 'hubspot' && selectedTask.customerPhone) ||
+                                '';
+                              if (phone) {
+                                // Show options: Call or WhatsApp
+                                Swal.fire({
+                                  title: 'Choose Action',
+                                  showDenyButton: true,
+                                  showCancelButton: true,
+                                  confirmButtonText: 'Call',
+                                  denyButtonText: 'WhatsApp',
+                                  cancelButtonText: 'Cancel',
+                                  confirmButtonColor: '#e9931c',
+                                  denyButtonColor: '#25D366',
+                                }).then(async (result) => {
+                                  if (result.isConfirmed) {
+                                    window.location.href = `tel:${phone}`
+                                    
+                                    // Save call activity to backend
+                                    try {
+                                      if (selectedTask && selectedTask._id) {
+                                        const currentNotes = selectedTask.notes || ''
+                                        const activityNote = `[${new Date().toLocaleString('en-GB')}] Call: Called ${phone}`
+                                        const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                        
+                                        await updateFollowUp(selectedTask._id, {
+                                          notes: updatedNotes
+                                        })
+                                        
+                                        // Add to activities
+                                        const newActivity = {
+                                          type: 'Call',
+                                          content: `Called ${phone}`,
+                                          date: new Date().toISOString(),
+                                          createdAt: new Date().toISOString()
+                                        }
+                                        setTaskActivities([...taskActivities, newActivity])
+                                        
+                                        // Reload task to get updated push status
+                                        const updatedRes = await getFollowUp(selectedTask._id)
+                                        if (updatedRes.success) {
+                                          setSelectedTask(updatedRes.data)
+                                        } else {
+                                          // Fallback: Update selectedTask manually
+                                          const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                          setSelectedTask(updatedTask)
+                                        }
+                                        
+                                        // Reload tasks list to update push button status
+                                        await loadTasks()
+                                      }
+                                    } catch (e) {
+                                      console.error('Error saving call activity:', e)
+                                    }
+                                  } else if (result.isDenied) {
+                                    // Open WhatsApp with phone number (remove any non-digit characters)
+                                    const cleanPhone = phone.replace(/\D/g, '')
+                                    window.open(`https://wa.me/${cleanPhone}`, '_blank')
+                                    
+                                    // Save WhatsApp activity to backend
+                                    try {
+                                      if (selectedTask && selectedTask._id) {
+                                        const currentNotes = selectedTask.notes || ''
+                                        const activityNote = `[${new Date().toLocaleString('en-GB')}] WhatsApp: Messaged ${phone}`
+                                        const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                        
+                                        await updateFollowUp(selectedTask._id, {
+                                          notes: updatedNotes
+                                        })
+                                        
+                                        // Add to activities
+                                        const newActivity = {
+                                          type: 'WhatsApp',
+                                          content: `WhatsApp message to ${phone}`,
+                                          date: new Date().toISOString(),
+                                          createdAt: new Date().toISOString()
+                                        }
+                                        setTaskActivities([...taskActivities, newActivity])
+                                        
+                                        // Reload task to get updated push status
+                                        const updatedRes = await getFollowUp(selectedTask._id)
+                                        if (updatedRes.success) {
+                                          setSelectedTask(updatedRes.data)
+                                        } else {
+                                          // Fallback: Update selectedTask manually
+                                          const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                          setSelectedTask(updatedTask)
+                                        }
+                                        
+                                        // Reload tasks list to update push button status
+                                        await loadTasks()
+                                      }
+                                    } catch (e) {
+                                      console.error('Error saving WhatsApp activity:', e)
+                                    }
+                                  }
+                                })
+                              } else {
+                                Swal.fire({
+                                  icon: 'warning',
+                                  title: 'No Phone',
+                                  text: 'No phone number available for this contact',
+                                  confirmButtonColor: '#e9931c'
+                                })
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
                           <FaPhone className="w-4 h-4" />
                           Call
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={() => {
+                              setModalActiveTab('activities')
+                              // Filter activities to show only tasks
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
                           <FaCalendarAlt className="w-4 h-4" />
                           Task
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                          <button 
+                            onClick={() => {
+                              setShowMeetingModal(true)
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
                           <FaCalendarAlt className="w-4 h-4" />
                           Meeting
+                        </button>
+                          <button 
+                            onClick={() => {
+                              setModalActiveTab('overview')
+                              // Scroll to sample tracking section
+                              setTimeout(() => {
+                                const sampleSection = document.getElementById('sample-tracking-section')
+                                if (sampleSection) {
+                                  sampleSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                }
+                              }, 100)
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                          <FaFlask className="w-4 h-4" />
+                          Sample Track
                         </button>
                         <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                           <FaEllipsisH className="w-4 h-4" />
@@ -2456,12 +3685,113 @@ const Tasks = () => {
                             <p className="text-sm text-gray-900">{displayEmail}</p>
                           </div>
                         )}
-                        {selectedTask.customerPhone && (
+                          {(selectedTask.customerPhone || taskCustomerDetails?.phone || (selectedTask.source === 'hubspot' && selectedTask.customerPhone)) && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Phone Number</p>
-                            <p className="text-sm text-gray-900">{selectedTask.customerPhone}</p>
+                              <p className="text-sm text-gray-900">
+                                {taskCustomerDetails?.phone || 
+                                 selectedTask.customerPhone || 
+                                 (selectedTask.source === 'hubspot' ? selectedTask.customerPhone : '') || 
+                                 '—'}
+                              </p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.company || selectedTask.customer?.company || selectedTask.associatedCompanyName) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Company</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.company || selectedTask.customer?.company || selectedTask.associatedCompanyName || '—'}</p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.address || selectedTask.customer?.address) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Address</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.address || selectedTask.customer?.address || '—'}</p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.city || selectedTask.customer?.city) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">City</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.city || selectedTask.customer?.city || '—'}</p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.state || selectedTask.customer?.state) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">State</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.state || selectedTask.customer?.state || '—'}</p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.postcode || taskCustomerDetails?.pincode || selectedTask.customer?.postcode || selectedTask.customer?.pincode) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Pincode</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.postcode || taskCustomerDetails?.pincode || selectedTask.customer?.postcode || selectedTask.customer?.pincode || '—'}</p>
                           </div>
                         )}
+                          {(() => {
+                            // Extract name from task description if it's a HubSpot task and name is not available
+                            let customerName = taskCustomerDetails?.name || selectedTask.customerName || displayName || ''
+                            
+                            // If name is missing or looks like a HubSpot Task ID, try to extract from description
+                            if ((!customerName || customerName.includes('HubSpot Task')) && selectedTask.description) {
+                              const desc = selectedTask.description
+                              const nameMatch = desc.match(/(?:follow up|call|email|meeting|visit|task).*?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                                              desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                                              desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
+                              if (nameMatch && nameMatch[1]) {
+                                customerName = nameMatch[1].trim()
+                              }
+                            }
+                            
+                            // Don't show if it's still a HubSpot Task ID
+                            if (!customerName || customerName.includes('HubSpot Task')) return null
+                            
+                            return (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Customer</p>
+                                <p className="text-sm text-gray-900">{customerName}</p>
+                              </div>
+                            )
+                          })()}
+                          {(taskCustomerDetails?.associatedCompanyName || selectedTask.associatedCompanyName) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Associated Company</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.associatedCompanyName || selectedTask.associatedCompanyName || '—'}</p>
+                            </div>
+                          )}
+                          {(() => {
+                            // Show Associated Contact from customer creation (if exists) - always show if available
+                            let associatedContactName = taskCustomerDetails?.associatedContactName ||
+                              selectedTask.associatedContactName ||
+                              (selectedTask.customer && typeof selectedTask.customer === 'object' ? selectedTask.customer.associatedContactName : '') ||
+                              '';
+                            const associatedContactEmail = taskCustomerDetails?.associatedContactEmail ||
+                              selectedTask.associatedContactEmail ||
+                              (selectedTask.customer && typeof selectedTask.customer === 'object' ? selectedTask.customer.associatedContactEmail : '') ||
+                              '';
+                            
+                            // If name is missing or looks like a HubSpot Task ID, try to extract from description
+                            if ((!associatedContactName || associatedContactName.includes('HubSpot Task')) && selectedTask.description) {
+                              const desc = selectedTask.description
+                              const nameMatch = desc.match(/(?:follow up|call|email|meeting|visit|task).*?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                                              desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                                              desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
+                              if (nameMatch && nameMatch[1]) {
+                                associatedContactName = nameMatch[1].trim()
+                              }
+                            }
+                            
+                            // Don't show if it's still a HubSpot Task ID or empty
+                            if ((!associatedContactName || associatedContactName.includes('HubSpot Task')) && !associatedContactEmail) return null;
+                            
+                            return (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Associated Contact</p>
+                                <p className="text-sm text-gray-900">{associatedContactName && !associatedContactName.includes('HubSpot Task') ? associatedContactName : '—'}</p>
+                                {associatedContactEmail && (
+                                  <p className="text-xs text-gray-500 mt-1">{associatedContactEmail}</p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         {(() => {
                           // Show assigned salesman - prioritize HubSpot owner name, then salesman name
                           const hubspotOwnerName = (selectedTask.hubspot_owner_name || '').trim();
@@ -2475,7 +3805,7 @@ const Tasks = () => {
                           return (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">
-                                {hubspotOwnerName ? 'HubSpot Owner' : 'Assigned Salesman'}
+                                  {hubspotOwnerName ? 'HubSpot Owner' : 'Contact Owner'}
                               </p>
                               <p className="text-sm text-gray-900">
                                 {displayName}
@@ -2486,43 +3816,52 @@ const Tasks = () => {
                             </div>
                           );
                         })()}
-                        {selectedTask.createdBy && (
+                          {(taskCustomerDetails?.lastContact || selectedTask.customer?.lastContact) && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Created By</p>
+                              <p className="text-xs text-gray-500 mb-1">Last Contact</p>
                             <p className="text-sm text-gray-900">
-                              {selectedTask.createdBy?.name || selectedTask.createdBy?.email || '—'}
-                              {selectedTask.createdBy?.role && (
-                                <span className="ml-2 text-xs text-gray-500">({selectedTask.createdBy.role})</span>
-                              )}
+                                {taskCustomerDetails?.lastContact 
+                                  ? new Date(taskCustomerDetails.lastContact).toLocaleDateString('en-GB', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })
+                                  : selectedTask.customer?.lastContact
+                                    ? new Date(selectedTask.customer.lastContact).toLocaleDateString('en-GB', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric'
+                                      })
+                                    : '—'}
                             </p>
                           </div>
                         )}
-                        {selectedTask.customer?.address && (
+                          {(taskCustomerDetails?.lastEngagement || selectedTask.customer?.lastEngagement) && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Address</p>
-                            <p className="text-sm text-gray-900">{selectedTask.customer.address}</p>
+                              <p className="text-xs text-gray-500 mb-1">Last Engagement</p>
+                              <p className="text-sm text-gray-900">
+                                {taskCustomerDetails?.lastEngagement
+                                  ? new Date(taskCustomerDetails.lastEngagement).toLocaleDateString('en-GB', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })
+                                  : selectedTask.customer?.lastEngagement
+                                    ? new Date(selectedTask.customer.lastEngagement).toLocaleDateString('en-GB', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric'
+                                      })
+                                    : '—'}
+                              </p>
                           </div>
                         )}
-                        {selectedTask.customer?.city && (
+                          {(taskCustomerDetails?.status || selectedTask.customer?.status) && (
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">City</p>
-                            <p className="text-sm text-gray-900">{selectedTask.customer.city}</p>
+                              <p className="text-xs text-gray-500 mb-1">Lead Status</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.status || selectedTask.customer?.status || '—'}</p>
                           </div>
                         )}
-                        {selectedTask.customer?.state && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">State</p>
-                            <p className="text-sm text-gray-900">{selectedTask.customer.state}</p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Last Contacted</p>
-                          <p className="text-sm text-gray-400">—</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Lead Status</p>
-                          <p className="text-sm text-gray-400">—</p>
-                        </div>
                       </div>
                     </div>
                   </>
@@ -2531,15 +3870,14 @@ const Tasks = () => {
               </div>
 
               {/* Center Panel - Task Details with Tabs */}
-              <div className="flex-1 bg-white overflow-y-auto">
+              <div className="flex-1 bg-white flex flex-col overflow-hidden">
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-6">
                   <div className="flex items-center gap-6">
                     <button
                       onClick={() => setModalActiveTab('overview')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        modalActiveTab === 'overview'
-                          ? 'border-blue-600 text-blue-600'
+                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'overview'
+                          ? 'border-gray-600 text-gray-800'
                           : 'border-transparent text-gray-500 hover:text-gray-700'
                       }`}
                     >
@@ -2547,29 +3885,18 @@ const Tasks = () => {
                     </button>
                     <button
                       onClick={() => setModalActiveTab('activities')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        modalActiveTab === 'activities'
-                          ? 'border-blue-600 text-blue-600'
+                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'activities'
+                          ? 'border-gray-600 text-gray-800'
                           : 'border-transparent text-gray-500 hover:text-gray-700'
                       }`}
                     >
                       Activities
                     </button>
-                    <button
-                      onClick={() => setModalActiveTab('intelligence')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        modalActiveTab === 'intelligence'
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      Intelligence
-                    </button>
                   </div>
                 </div>
 
                 {/* Tab Content */}
-                <div className="p-6">
+                <div className={modalActiveTab === 'activities' ? 'flex-1 flex flex-col overflow-hidden p-6' : 'flex-1 overflow-y-auto p-6'}>
                   {modalActiveTab === 'overview' && (
                     <div className="space-y-6">
                       {/* Task Details Section */}
@@ -2586,33 +3913,19 @@ const Tasks = () => {
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Priority</p>
-                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                              selectedTask.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
-                              selectedTask.priority === 'High' ? 'bg-orange-100 text-orange-700' :
-                              selectedTask.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
                               {selectedTask.priority || '—'}
                 </span>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Status</p>
-                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                              selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                              selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
-                              selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                              'bg-blue-100 text-blue-700'
-                            }`}>
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
                               {selectedTask.status || '—'}
                 </span>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Approval Status</p>
-                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                              selectedTask.approvalStatus === 'Approved' ? 'bg-green-100 text-green-700' :
-                              selectedTask.approvalStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-red-100 text-red-700'
-                            }`}>
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
                               {selectedTask.approvalStatus || '—'}
                             </span>
                           </div>
@@ -2729,17 +4042,123 @@ const Tasks = () => {
                         <div className="bg-white rounded-lg p-4 border border-gray-200">
                           <h3 className="text-sm font-semibold text-gray-900 mb-4">Description & Notes</h3>
                           {selectedTask.description && (
-                            <div className="mb-3">
+                            <div className="mb-4">
                               <p className="text-xs text-gray-500 mb-1">Description</p>
                               <p className="text-sm text-gray-900">{selectedTask.description}</p>
                   </div>
                           )}
-                          {selectedTask.notes && (
+                          {selectedTask.notes && (() => {
+                            // Parse notes to extract activities
+                            const notesLines = selectedTask.notes.split('\n').filter(line => line.trim())
+                            const parsedActivities = []
+                            
+                            notesLines.forEach(line => {
+                              // Match pattern: [DD/MM/YYYY, HH:MM:SS] Type: Content
+                              const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
+                              if (match) {
+                                const [, dateStr, timeStr, type, content] = match
+                                try {
+                                  // Parse date: DD/MM/YYYY -> YYYY-MM-DD
+                                  const [day, month, year] = dateStr.split('/')
+                                  const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
+                                  
+                                  // Handle Meeting type with link
+                                  if (type === 'Meeting' && content.includes('http')) {
+                                    const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
+                                    const link = linkMatch ? linkMatch[1] : ''
+                                    const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
+                                    parsedActivities.push({
+                                      type: 'Meeting',
+                                      content: meetingTitle || 'Meeting',
+                                      link: link,
+                                      date: dateTime,
+                                      dateStr: dateStr,
+                                      timeStr: timeStr
+                                    })
+                                  } else {
+                                    parsedActivities.push({
+                                      type: type,
+                                      content: content,
+                                      date: dateTime,
+                                      dateStr: dateStr,
+                                      timeStr: timeStr
+                                    })
+                                  }
+                                } catch (e) {
+                                  // If parsing fails, still add as activity
+                                  parsedActivities.push({
+                                    type: type,
+                                    content: content,
+                                    date: new Date(),
+                                    dateStr: dateStr,
+                                    timeStr: timeStr
+                                  })
+                                }
+                              }
+                            })
+                            
+                            // Sort by date (newest first)
+                            parsedActivities.sort((a, b) => {
+                              return b.date.getTime() - a.date.getTime()
+                            })
+                            
+                            return (
                             <div>
-                              <p className="text-xs text-gray-500 mb-1">Notes</p>
-                              <p className="text-sm text-gray-900 whitespace-pre-wrap">{selectedTask.notes}</p>
+                                <p className="text-xs text-gray-500 mb-3">Activity History</p>
+                                {parsedActivities.length > 0 ? (
+                                  <div className="space-y-3">
+                                    {parsedActivities.map((activity, idx) => (
+                                      <div 
+                                        key={idx}
+                                        className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                                activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
+                                                activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
+                                                activity.type === 'Email' ? 'bg-green-100 text-green-800' :
+                                                activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
+                                                activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                                'bg-gray-100 text-gray-800'
+                                              }`}>
+                                                {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
+                                                {activity.type === 'Meeting' && <FaCalendarAlt className="w-3 h-3 mr-1" />}
+                                                {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
+                                                {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
+                                                {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
+                                                {activity.type}
+                                              </span>
+                                              <span className="text-xs text-gray-500">
+                                                {activity.dateStr} {activity.timeStr}
+                                              </span>
                             </div>
-                          )}
+                                            <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                                              {activity.content}
+                                            </p>
+                                            {activity.link && (
+                                              <a 
+                                                href={activity.link} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                              >
+                                                <FaCalendarAlt className="w-3 h-3" />
+                                                Open Calendar Link
+                                              </a>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-gray-500 italic">No activities recorded yet</p>
+                                )}
+                              </div>
+                            )
+                          })()}
                 </div>
               )}
 
@@ -2784,6 +4203,72 @@ const Tasks = () => {
                 </div>
               )}
 
+                      {/* Sample Tracking Section */}
+                      <div id="sample-tracking-section" className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <FaFlask className="w-4 h-4" />
+                          Sample Tracking
+                        </h3>
+                        {taskSamples && taskSamples.length > 0 ? (
+                          <div className="space-y-3">
+                            {taskSamples.map((sample) => (
+                              <div 
+                                key={sample._id || sample.id} 
+                                className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="text-sm font-semibold text-gray-900">
+                                        {sample.sampleNumber || `Sample #${sample._id?.slice(-6) || 'N/A'}`}
+                                      </span>
+                                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                        sample.status === 'Converted' ? 'bg-green-100 text-green-800' :
+                                        sample.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        sample.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {sample.status || 'Pending'}
+                                      </span>
+                                    </div>
+                                    {sample.productName && (
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        Product: <span className="text-gray-900">{sample.productName}</span>
+                                      </p>
+                                    )}
+                                    {sample.customerName && (
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        Customer: <span className="text-gray-900">{sample.customerName}</span>
+                                      </p>
+                                    )}
+                                    {sample.createdAt && (
+                                      <p className="text-xs text-gray-500">
+                                        Created: {new Date(sample.createdAt).toLocaleDateString('en-GB', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric'
+                                        })} {new Date(sample.createdAt).toLocaleTimeString('en-GB', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          hour12: false
+                                        })}
+                                      </p>
+                                    )}
+                                    {sample.notes && (
+                                      <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
+                                        {sample.notes}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No samples found for this task/customer</p>
+                        )}
+                      </div>
+
                       {/* Approval Information */}
                       {selectedTask.approvalStatus && (
                         <div className="bg-white rounded-lg p-4 border border-gray-200">
@@ -2791,11 +4276,7 @@ const Tasks = () => {
                           <div className="space-y-2">
                 <div>
                               <p className="text-xs text-gray-500 mb-1">Approval Status</p>
-                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                selectedTask.approvalStatus === 'Approved' ? 'bg-green-100 text-green-700' :
-                                selectedTask.approvalStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>
+                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
                                 {selectedTask.approvalStatus}
                               </span>
                             </div>
@@ -2894,7 +4375,12 @@ const Tasks = () => {
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                            <input type="checkbox" className="rounded border-gray-300" />
+                            <input 
+                              type="checkbox" 
+                              className="rounded border-gray-300" 
+                              checked={selectedTask.status === 'Completed'}
+                              readOnly
+                            />
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-900">
@@ -2902,29 +4388,47 @@ const Tasks = () => {
                                 </span>
                                 <span className="text-sm text-gray-500">›</span>
                                 <span className="text-sm text-gray-600">
-                                  Task assigned to {selectedTask.salesman?.name || 'Salesman'}
+                                  {selectedTask.status === 'Completed' 
+                                    ? `Completed ${selectedTask.completedDate ? new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      }) + ' GMT+5' : ''}`
+                                    : `Task assigned to ${selectedTask.salesman?.name || 'Salesman'}`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs px-2 py-1 rounded ${
-                                  selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                <span className={`text-xs px-2 py-1 rounded ${selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
                                   selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
+                                  selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                   'bg-blue-100 text-blue-700'
                                 }`}>
                                   {selectedTask.status === 'Overdue' ? 'Overdue' : selectedTask.status}
                                 </span>
                                 <span className="text-sm text-gray-600">
-                                  {selectedTask.dueDate
-                                    ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
+                                  {selectedTask.status === 'Completed' && selectedTask.completedDate
+                                    ? `${new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
                                         day: '2-digit',
                                         month: 'short',
                                         year: 'numeric'
-                                      })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
+                                      })} ${new Date(selectedTask.completedDate).toLocaleTimeString('en-GB', {
                                         hour: '2-digit',
                                         minute: '2-digit',
                                         hour12: false
                                       })} GMT+5`
-                                    : '—'}
+                                    : selectedTask.dueDate
+                                      ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric'
+                                        })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          hour12: false
+                                        })} GMT+5`
+                                      : '—'}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-900 mt-1">
@@ -2938,16 +4442,548 @@ const Tasks = () => {
               )}
 
                   {modalActiveTab === 'activities' && (
-                    <div className="text-center py-12">
-                      <p className="text-gray-500">Activities tab content</p>
+                    <>
+                      {/* Fixed Header and Typing Box - No Scroll */}
+                      <div className="flex-shrink-0 space-y-4 pb-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-gray-900">Activities</h3>
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                              <input
+                                type="text"
+                                placeholder="Search activities"
+                                value={activitiesSearch}
+                                onChange={(e) => setActivitiesSearch(e.target.value)}
+                                className="pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
                 </div>
-              )}
-
-                  {modalActiveTab === 'intelligence' && (
-                    <div className="text-center py-12">
-                      <p className="text-gray-500">Intelligence tab content</p>
+                            <button 
+                              onClick={() => {
+                                // Focus typing pad
+                                setTimeout(() => {
+                                  if (noteInputRef.current) {
+                                    noteInputRef.current.focus()
+                                  }
+                                }, 100)
+                              }}
+                              className="px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              Create activities
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Typing Pad - Fixed at Top, No Scroll */}
+                        <div className="pb-4 border-b border-gray-200">
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <textarea
+                              ref={noteInputRef}
+                              value={noteInput}
+                              onChange={(e) => setNoteInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault()
+                                  if (noteInput.trim()) {
+                                    // Handle note save in separate async function
+                                    const handleSaveNote = async () => {
+                                      const noteContent = noteInput.trim()
+                                      const newActivity = {
+                                        type: 'Note',
+                                        content: noteContent,
+                                        date: new Date().toISOString(),
+                                        createdAt: new Date().toISOString()
+                                      }
+                                      const updatedActivities = [...taskActivities, newActivity]
+                                      setTaskActivities(updatedActivities)
+                                      setNoteInput('')
+                                      
+                                      // Save to backend
+                                      try {
+                                        if (selectedTask && selectedTask._id) {
+                                          const currentNotes = selectedTask.notes || ''
+                                          const activityNote = `[${new Date().toLocaleString('en-GB')}] Note: ${noteContent}`
+                                          const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                          
+                                          await updateFollowUp(selectedTask._id, {
+                                            notes: updatedNotes
+                                          })
+                                          
+                                          // Reload task to get updated push status and refresh activities
+                                          const updatedRes = await getFollowUp(selectedTask._id)
+                                          if (updatedRes.success) {
+                                            setSelectedTask(updatedRes.data)
+                                            // Re-parse activities from updated notes
+                                            if (updatedRes.data.notes) {
+                                              const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
+                                              const parsedActivities = []
+                                              notesLines.forEach(line => {
+                                                const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
+                                                if (match) {
+                                                  const [, dateStr, timeStr, type, content] = match
+                                                  try {
+                                                    const [day, month, year] = dateStr.split('/')
+                                                    const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
+                                                    if (type === 'Meeting' && content.includes('http')) {
+                                                      const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
+                                                      const link = linkMatch ? linkMatch[1] : ''
+                                                      const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
+                                                      parsedActivities.push({
+                                                        type: 'Meeting',
+                                                        content: meetingTitle || 'Meeting',
+                                                        link: link,
+                                                        date: dateTime.toISOString(),
+                                                        createdAt: dateTime.toISOString()
+                                                      })
+                                                    } else {
+                                                      parsedActivities.push({
+                                                        type: type,
+                                                        content: content,
+                                                        date: dateTime.toISOString(),
+                                                        createdAt: dateTime.toISOString()
+                                                      })
+                                                    }
+                                                  } catch (e) {
+                                                    parsedActivities.push({
+                                                      type: type,
+                                                      content: content,
+                                                      date: new Date().toISOString(),
+                                                      createdAt: new Date().toISOString()
+                                                    })
+                                                  }
+                                                }
+                                              })
+                                              parsedActivities.sort((a, b) => {
+                                                const dateA = new Date(a.date || a.createdAt || 0)
+                                                const dateB = new Date(b.date || b.createdAt || 0)
+                                                return dateB.getTime() - dateA.getTime()
+                                              })
+                                              setTaskActivities(parsedActivities)
+                                            }
+                                          } else {
+                                            // Fallback: Update selectedTask manually
+                                            const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                            setSelectedTask(updatedTask)
+                                          }
+                                          
+                                          // Reload tasks list to update push button status
+                                          await loadTasks()
+                                        }
+                                      } catch (e) {
+                                        console.error('Error saving note:', e)
+                                      }
+                                      
+                                      Swal.fire({
+                                        icon: 'success',
+                                        title: 'Note Added!',
+                                        text: 'Note has been added successfully',
+                                        confirmButtonColor: '#1f2937',
+                                        timer: 1500,
+                                        timerProgressBar: true
+                                      })
+                                    }
+                                    handleSaveNote()
+                                  }
+                                }
+                              }}
+                              placeholder="Type a note and press Enter to add..."
+                              rows={3}
+                              className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 resize-none"
+                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                            />
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (noteInput.trim()) {
+                                // Add note to activities
+                                const newActivity = {
+                                  type: 'Note',
+                                  content: noteInput.trim(),
+                                  date: new Date().toISOString(),
+                                  createdAt: new Date().toISOString()
+                                }
+                                const updatedActivities = [...taskActivities, newActivity]
+                                setTaskActivities(updatedActivities)
+                                const noteContent = noteInput.trim()
+                                setNoteInput('')
+                                
+                                // Save to backend
+                                try {
+                                  if (selectedTask && selectedTask._id) {
+                                    const currentNotes = selectedTask.notes || ''
+                                    const activityNote = `[${new Date().toLocaleString('en-GB')}] Note: ${noteContent}`
+                                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                    
+                                    await updateFollowUp(selectedTask._id, {
+                                      notes: updatedNotes
+                                    })
+                                    
+                                    // Reload task to get updated push status
+                                    const updatedRes = await getFollowUp(selectedTask._id)
+                                    if (updatedRes.success) {
+                                      setSelectedTask(updatedRes.data)
+                                    } else {
+                                      // Fallback: Update selectedTask manually
+                                      const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                      setSelectedTask(updatedTask)
+                                    }
+                                    
+                                    // Reload tasks list to update push button status
+                                    await loadTasks()
+                                  }
+                                } catch (e) {
+                                  console.error('Error saving note:', e)
+                                  Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error',
+                                    text: 'Failed to save note. Please try again.',
+                                    confirmButtonColor: '#e9931c'
+                                  })
+                                  return
+                                }
+                                
+                                Swal.fire({
+                                  icon: 'success',
+                                  title: 'Note Added!',
+                                  text: 'Note has been added successfully',
+                                  confirmButtonColor: '#1f2937',
+                                  timer: 1500,
+                                  timerProgressBar: true
+                                })
+                              }
+                            }}
+                            disabled={!noteInput.trim()}
+                            className="px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                            style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                          >
+                            <FaStickyNote className="w-4 h-4" />
+                            <span className="text-sm font-medium">Add</span>
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Press Enter to add note, or click Add button</p>
+                      </div>
+                      </div>
+                      
+                      {/* Activities List - Scrollable Only */}
+                      <div className="flex-1 overflow-y-auto pr-2 pt-4 min-h-0">
+                        <div className="space-y-4">
+                        {(() => {
+                          // Combine all activities into one array
+                          const allActivities = []
+                          
+                          // Add current task as activity
+                          if (selectedTask) {
+                            allActivities.push({
+                              type: 'Task',
+                              id: selectedTask._id,
+                              content: selectedTask.description || `Follow up with ${selectedTask.customerName || selectedTask.associatedContactName || 'Contact'}`,
+                              date: selectedTask.dueDate || selectedTask.createdAt || new Date(),
+                              task: selectedTask,
+                              isCurrentTask: true
+                            })
+                          }
+                          
+                          // Add related tasks as activities
+                          relatedTasks.forEach((relatedTask) => {
+                            allActivities.push({
+                              type: 'Task',
+                              id: relatedTask._id,
+                              content: relatedTask.description || relatedTask.hs_task_subject || `Follow up with ${relatedTask.customerName || relatedTask.associatedContactName || 'Contact'}`,
+                              date: relatedTask.dueDate || relatedTask.createdAt || new Date(),
+                              task: relatedTask,
+                              isRelatedTask: true
+                            })
+                          })
+                          
+                          // Add notes, meetings, calls, emails from taskActivities
+                          taskActivities.forEach((activity) => {
+                            allActivities.push({
+                              ...activity,
+                              date: activity.date || activity.createdAt || new Date()
+                            })
+                          })
+                          
+                          // Sort by date/time (newest first) - ensure proper date parsing
+                          allActivities.sort((a, b) => {
+                            let dateA = new Date(0)
+                            let dateB = new Date(0)
+                            
+                            // Parse dateA
+                            if (a.date) {
+                              dateA = new Date(a.date)
+                              if (isNaN(dateA.getTime())) {
+                                dateA = new Date(0)
+                              }
+                            } else if (a.createdAt) {
+                              dateA = new Date(a.createdAt)
+                              if (isNaN(dateA.getTime())) {
+                                dateA = new Date(0)
+                              }
+                            }
+                            
+                            // Parse dateB
+                            if (b.date) {
+                              dateB = new Date(b.date)
+                              if (isNaN(dateB.getTime())) {
+                                dateB = new Date(0)
+                              }
+                            } else if (b.createdAt) {
+                              dateB = new Date(b.createdAt)
+                              if (isNaN(dateB.getTime())) {
+                                dateB = new Date(0)
+                              }
+                            }
+                            
+                            // Sort: newest first (larger timestamp first)
+                            return dateB.getTime() - dateA.getTime()
+                          })
+                          
+                          // Apply search filter if search term exists
+                          let filteredActivities = allActivities
+                          if (activitiesSearch.trim()) {
+                            const searchTerm = activitiesSearch.trim().toLowerCase()
+                            filteredActivities = allActivities.filter(activity => {
+                              // Search in content
+                              const content = (activity.content || activity.note || activity.description || '').toLowerCase()
+                              // Search in type
+                              const type = (activity.type || '').toLowerCase()
+                              // Search in task description if it's a task
+                              const taskDesc = activity.task ? (activity.task.description || activity.task.hs_task_subject || '').toLowerCase() : ''
+                              // Search in date
+                              const dateStr = activity.date ? new Date(activity.date).toLocaleString('en-GB').toLowerCase() : ''
+                              
+                              return content.includes(searchTerm) || 
+                                     type.includes(searchTerm) || 
+                                     taskDesc.includes(searchTerm) ||
+                                     dateStr.includes(searchTerm)
+                            })
+                          }
+                          
+                          if (filteredActivities.length === 0) {
+                            return selectedTask ? (
+                              <div className="text-center py-8">
+                                <FaStickyNote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                <p className="text-gray-500 text-sm">
+                                  {activitiesSearch.trim() ? 'No activities found matching your search' : 'No activities yet'}
+                                </p>
+                                {!activitiesSearch.trim() && (
+                                  <button
+                                    onClick={() => {
+                                      if (noteInputRef.current) {
+                                        noteInputRef.current.focus()
+                                      }
+                                    }}
+                                    className="mt-3 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                  >
+                                    Add your first note
+                                  </button>
+                                )}
+                              </div>
+                            ) : null
+                          }
+                          
+                          return filteredActivities.map((activity, index) => {
+                            // Render Task type
+                            if (activity.type === 'Task') {
+                              const task = activity.task || selectedTask
+                              return (
+                                <div 
+                                  key={activity.id || `task-${index}`} 
+                                  className={`flex items-start gap-3 ${activity.isRelatedTask ? 'cursor-pointer' : ''}`}
+                                  onClick={activity.isRelatedTask ? async () => {
+                                    await handleTaskClick(task)
+                                  } : undefined}
+                                >
+                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <FaBriefcase className="w-4 h-4 text-gray-600" />
                     </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className={`bg-gray-100 rounded-lg p-3 ${activity.isRelatedTask ? 'hover:bg-gray-200 transition-colors' : ''}`}>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-medium text-gray-700">
+                                          {task?.type || task?.hs_task_type || 'Task'}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          {activity.date
+                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short'
+                                              })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}`
+                                            : '—'}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-900 mb-1">{activity.content}</p>
+                                      {activity.isRelatedTask && task && (
+                                        <div className="flex items-center gap-2 mt-2">
+                                          {task.status && (
+                                            <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
+                                              {task.status}
+                                            </span>
+                                          )}
+                                          {task.priority && (
+                                            <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
+                                              {task.priority}
+                                            </span>
                   )}
+                </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            }
+                            
+                            // Render Note type
+                            if (activity.type === 'Note') {
+                              return (
+                                <div key={`note-${index}`} className="flex items-start gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <FaStickyNote className="w-4 h-4 text-gray-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors cursor-pointer"
+                                      onClick={() => {
+                                        Swal.fire({
+                                          title: 'Note',
+                                          html: `
+                                            <div class="text-left">
+                                              <p class="text-sm text-gray-600 mb-2">
+                                                <strong>Date:</strong> ${activity.date ? new Date(activity.date).toLocaleString('en-GB') : 'N/A'}
+                                              </p>
+                                              <p class="text-sm text-gray-900">${activity.content || activity.note || '—'}</p>
+                                            </div>
+                                          `,
+                                          confirmButtonColor: '#e9931c'
+                                        })
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-medium text-gray-700">Note</span>
+                                        <span className="text-xs text-gray-500">
+                                          {activity.date
+                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short'
+                                              })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}`
+                                            : new Date().toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{activity.content || activity.note || '—'}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            }
+                            
+                            // Render Meeting type
+                            if (activity.type === 'Meeting') {
+                              return (
+                                <div key={`meeting-${index}`} className="flex items-start gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <FaCalendarAlt className="w-4 h-4 text-gray-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-medium text-gray-700">Meeting</span>
+                                        <span className="text-xs text-gray-500">
+                                          {activity.date
+                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short'
+                                              })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}`
+                                            : new Date().toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-900 mb-2">{activity.content || 'Meeting'}</p>
+                                      {activity.link && (
+                                        <a 
+                                          href={activity.link} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="text-xs text-gray-700 hover:text-gray-900 underline inline-flex items-center gap-1"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          Open Google Calendar
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            }
+                            
+                            // Render Email, Call, WhatsApp types
+                            if (activity.type === 'Email' || activity.type === 'Call' || activity.type === 'WhatsApp') {
+                              const iconMap = {
+                                Email: FaEnvelope,
+                                Call: FaPhone,
+                                WhatsApp: FaPhone
+                              }
+                              const Icon = iconMap[activity.type] || FaStickyNote
+                              
+                              return (
+                                <div key={`${activity.type}-${index}`} className="flex items-start gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <Icon className="w-4 h-4 text-gray-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="bg-gray-100 rounded-lg p-3">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-medium text-gray-700">{activity.type}</span>
+                                        <span className="text-xs text-gray-500">
+                                          {activity.date
+                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short'
+                                              })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}`
+                                            : new Date().toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-gray-900">{activity.content || activity.type}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            }
+                            
+                            return null
+                          })
+                        })()}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                 </div>
               </div>
 
@@ -2957,18 +4993,27 @@ const Tasks = () => {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">
                       Companies ({(() => {
-                        const companyName = selectedTask.associatedCompanyName || 
-                          (selectedTask.customer && selectedTask.customer.company ? selectedTask.customer.company.trim() : '');
-                        return companyName ? 1 : 0;
+                        // Check all possible sources for company name - prioritize customer's associatedCompanyName
+                        const companyName = taskCustomerDetails?.associatedCompanyName ||
+                          taskCustomerDetails?.company ||
+                          selectedTask.associatedCompanyName ||
+                          (selectedTask.customer && typeof selectedTask.customer === 'object' ? (selectedTask.customer.associatedCompanyName || selectedTask.customer.company) : '') ||
+                          '';
+                        return companyName && companyName.trim() ? 1 : 0;
                       })()})
                     </h3>
                   </div>
                   {(() => {
-                    const companyName = selectedTask.associatedCompanyName || 
-                      (selectedTask.customer && selectedTask.customer.company ? selectedTask.customer.company.trim() : '');
-                    const companyDomain = selectedTask.associatedCompanyDomain || '';
-                    
-                    if (!companyName) {
+                    // Get company name from all possible sources - prioritize customer's associatedCompanyName from customer creation
+                    const companyName = taskCustomerDetails?.associatedCompanyName ||
+                      taskCustomerDetails?.company ||
+                      selectedTask.associatedCompanyName ||
+                      (selectedTask.customer && typeof selectedTask.customer === 'object' ? (selectedTask.customer.associatedCompanyName || selectedTask.customer.company) : '') ||
+                      '';
+                    const companyDomain = selectedTask.associatedCompanyDomain || taskCustomerDetails?.associatedCompanyDomain || '';
+                    const companyPhone = taskCustomerDetails?.phone || selectedTask.customerPhone || '';
+
+                    if (!companyName || !companyName.trim()) {
                       return <p className="text-sm text-gray-500">No companies associated</p>;
                     }
                     
@@ -2978,33 +5023,37 @@ const Tasks = () => {
                           <div className="flex items-center gap-3 mb-3">
                             <div className="w-10 h-10 rounded bg-gray-200 flex items-center justify-center">
                               <span className="text-sm font-semibold text-gray-600">
-                                {companyName[0].toUpperCase()}
+                                {companyName.trim()[0].toUpperCase()}
                               </span>
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-gray-900">
-                                  {companyName}
+                                  {companyName.trim()}
                                 </span>
-                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">Primary</span>
+                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-800 rounded">Primary</span>
                               </div>
                             </div>
                           </div>
                           <div className="space-y-2 text-sm">
+                            {companyDomain && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Company Domain Name</p>
-                              <p className="text-gray-900">{companyDomain || '—'}</p>
+                                <p className="text-gray-900">{companyDomain}</p>
                             </div>
+                            )}
+                            {companyPhone && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Phone Number</p>
-                              <p className="text-gray-900">—</p>
+                                <p className="text-gray-900">{companyPhone}</p>
                             </div>
+                            )}
                           </div>
-                          <button className="mt-3 text-xs text-blue-600 hover:underline">
+                          <button className="mt-3 text-xs text-gray-700 hover:underline">
                             Add association label
                           </button>
                         </div>
-                        <button className="text-sm text-blue-600 hover:underline">
+                        <button className="text-sm text-gray-700 hover:underline">
                           View all associated Companies
                         </button>
                       </div>
@@ -3012,8 +5061,301 @@ const Tasks = () => {
                   })()}
 
                   <div className="mt-6 pt-6 border-t border-gray-200">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Deals (0)</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Deals ({taskQuotations.length + hubspotDeals.length})</h3>
+                    {(taskQuotations.length > 0 || hubspotDeals.length > 0) ? (
+                      <div className="space-y-3">
+                        {/* HubSpot Deals */}
+                        {hubspotDeals.map((deal) => (
+                          <div 
+                            key={deal.id || deal.dealId} 
+                            className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer bg-blue-50"
+                            onClick={() => {
+                              Swal.fire({
+                                title: deal.properties?.dealname || 'HubSpot Deal',
+                                html: `
+                                  <div class="text-left" style="font-family: Inter, system-ui, -apple-system, sans-serif;">
+                                    <div class="space-y-2 text-sm">
+                                      <div class="flex justify-between">
+                                        <span class="text-gray-600">Deal Name:</span>
+                                        <span class="text-gray-900 font-medium">${deal.properties?.dealname || '—'}</span>
+                                      </div>
+                                      ${deal.properties?.amount ? `
+                                        <div class="flex justify-between">
+                                          <span class="text-gray-600">Amount:</span>
+                                          <span class="text-gray-900 font-medium">£${parseFloat(deal.properties.amount || 0).toLocaleString()}</span>
+                                        </div>
+                                      ` : ''}
+                                      ${deal.properties?.dealstage ? `
+                                        <div class="flex justify-between">
+                                          <span class="text-gray-600">Stage:</span>
+                                          <span class="text-gray-900 font-medium">${deal.properties.dealstage}</span>
+                                        </div>
+                                      ` : ''}
+                                      ${deal.properties?.pipeline ? `
+                                        <div class="flex justify-between">
+                                          <span class="text-gray-600">Pipeline:</span>
+                                          <span class="text-gray-900 font-medium">${deal.properties.pipeline}</span>
+                                        </div>
+                                      ` : ''}
+                                      ${deal.properties?.closedate ? `
+                                        <div class="flex justify-between">
+                                          <span class="text-gray-600">Close Date:</span>
+                                          <span class="text-gray-900 font-medium">${new Date(deal.properties.closedate).toLocaleDateString('en-GB')}</span>
+                                        </div>
+                                      ` : ''}
+                                    </div>
+                                  </div>
+                                `,
+                                confirmButtonColor: '#e9931c',
+                                width: '500px'
+                              })
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">{deal.properties?.dealname || 'HubSpot Deal'}</p>
+                                {deal.properties?.amount && (
+                                  <p className="text-xs text-gray-500 mt-1">£{parseFloat(deal.properties.amount || 0).toLocaleString()}</p>
+                                )}
+                              </div>
+                              <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">HubSpot</span>
+                            </div>
+                          </div>
+                        ))}
+                        {/* Local Quotations */}
+                        {taskQuotations.map((quotation) => (
+                          <div 
+                            key={quotation._id || quotation.id} 
+                            className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={async () => {
+                              try {
+                                const quotationId = quotation._id || quotation.id
+                                const res = await getQuotation(quotationId)
+                                if (res.success && res.data) {
+                                  const quote = res.data
+                                  const itemsHtml = quote.items && quote.items.length > 0
+                                    ? quote.items.map((item, idx) => {
+                                        const itemQuantity = item.quantity || 1
+                                        const itemPrice = item.price || item.unitPrice || 0
+                                        const itemTotal = item.total || item.lineTotal || (itemQuantity * itemPrice)
+                                        const itemTotalFormatted = itemTotal.toLocaleString()
+                                        const itemPriceFormatted = itemPrice.toLocaleString()
+                                        const discountHtml = item.discount ? `<p class="text-gray-500">Discount: £${item.discount.toLocaleString()}</p>` : ''
+                                        
+                                        return `
+                                          <div class="text-xs text-gray-600 border-b border-gray-100 pb-2">
+                                            <div class="flex justify-between items-start">
+                                              <div class="flex-1">
+                                                <p class="font-medium text-gray-900">${item.productName || item.name || 'Product'}</p>
+                                                <p class="text-gray-500">Qty: ${itemQuantity} × £${itemPriceFormatted}</p>
+                                                ${discountHtml}
+                                              </div>
+                                              <p class="font-medium text-gray-900">£${itemTotalFormatted}</p>
+                                            </div>
+                                          </div>
+                                        `
+                                      }).join('')
+                                    : '<p class="text-xs text-gray-500 mt-2">No items</p>'
+                                  
+                                  const itemsSectionHtml = quote.items && quote.items.length > 0
+                                    ? `
+                                      <div class="mt-3 border-t border-gray-200 pt-3">
+                                        <p class="text-xs font-semibold text-gray-700 mb-2">Items:</p>
+                                        <div class="space-y-2">
+                                          ${itemsHtml}
+                                        </div>
+                                      </div>
+                                    `
+                                    : itemsHtml
+                                  
+                                  Swal.fire({
+                                    title: quote.quotationNumber || `Quote #${quotationId?.slice(-6)}`,
+                                    html: `
+                                      <div class="text-left" style="font-family: Inter, system-ui, -apple-system, sans-serif;">
+                                        <div class="space-y-2 text-sm">
+                                          <div class="flex justify-between">
+                                            <span class="text-gray-600">Customer:</span>
+                                            <span class="text-gray-900 font-medium">${quote.customerName || '—'}</span>
+                                          </div>
+                                          ${quote.customerEmail ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Email:</span>
+                                              <span class="text-gray-900">${quote.customerEmail}</span>
+                                            </div>
+                                          ` : ''}
+                                          ${quote.customerPhone ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Phone:</span>
+                                              <span class="text-gray-900">${quote.customerPhone}</span>
+                                            </div>
+                                          ` : ''}
+                                          ${quote.customerAddress ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Address:</span>
+                                              <span class="text-gray-900">${quote.customerAddress}</span>
+                                            </div>
+                                          ` : ''}
+                                          <div class="flex justify-between">
+                                            <span class="text-gray-600">Status:</span>
+                                            <span class="px-2 py-1 rounded bg-gray-100 text-gray-800 text-xs">${quote.status || 'Pending'}</span>
+                                          </div>
+                                          ${quote.validUntil ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Valid Until:</span>
+                                              <span class="text-gray-900">${new Date(quote.validUntil).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: 'numeric'
+                                              })}</span>
+                                            </div>
+                                          ` : ''}
+                                          ${quote.createdAt ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Created:</span>
+                                              <span class="text-gray-900">${new Date(quote.createdAt).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short',
+                                                year: 'numeric'
+                                              })}</span>
+                                            </div>
+                                          ` : ''}
+                                        </div>
+                                        ${itemsSectionHtml}
+                                        <div class="mt-4 pt-3 border-t border-gray-200 space-y-1 text-sm">
+                                          ${quote.subtotal ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Subtotal:</span>
+                                              <span class="text-gray-900">£${quote.subtotal.toLocaleString()}</span>
+                                            </div>
+                                          ` : ''}
+                                          ${quote.discount ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Discount:</span>
+                                              <span class="text-gray-900">£${quote.discount.toLocaleString()}</span>
+                                            </div>
+                                          ` : ''}
+                                          ${quote.tax ? `
+                                            <div class="flex justify-between">
+                                              <span class="text-gray-600">Tax:</span>
+                                              <span class="text-gray-900">£${quote.tax.toLocaleString()}</span>
+                                            </div>
+                                          ` : ''}
+                                          <div class="flex justify-between font-semibold pt-2 border-t border-gray-200">
+                                            <span class="text-gray-900">Total:</span>
+                                            <span class="text-gray-900">£${quote.total?.toLocaleString() || '0'}</span>
+                                          </div>
+                                        </div>
+                                        ${quote.notes ? `
+                                          <div class="mt-4 pt-3 border-t border-gray-200">
+                                            <p class="text-xs font-semibold text-gray-700 mb-1">Notes:</p>
+                                            <p class="text-sm text-gray-900">${quote.notes}</p>
+                                          </div>
+                                        ` : ''}
+                                      </div>
+                                    `,
+                                    width: '600px',
+                                    confirmButtonColor: '#1f2937',
+                                    confirmButtonText: 'Close'
+                                  })
+                                } else {
+                                  Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error',
+                                    text: res.message || 'Failed to load quotation details',
+                                    confirmButtonColor: '#e9931c'
+                                  })
+                                }
+                              } catch (e) {
+                                console.error('Error loading quotation:', e)
+                                Swal.fire({
+                                  icon: 'error',
+                                  title: 'Error',
+                                  text: 'Error loading quotation details',
+                                  confirmButtonColor: '#e9931c'
+                                })
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold text-gray-900">
+                                {quotation.quotationNumber || `Quote #${quotation._id?.slice(-6) || quotation.id?.slice(-6)}`}
+                              </span>
+                              <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">
+                                {quotation.status || 'Pending'}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <p>Total: £{quotation.total?.toLocaleString() || '0'}</p>
+                              {quotation.validUntil && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Valid until: {new Date(quotation.validUntil).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
                     <p className="text-sm text-gray-500">No deals associated</p>
+                    )}
+                  </div>
+
+                  {/* Sales Targets Section */}
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Targets ({salesTargets.length})</h3>
+                    {salesTargets.length > 0 ? (
+                      <div className="space-y-3">
+                        {salesTargets.map((target) => (
+                          <div 
+                            key={target._id || target.id} 
+                            className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-sm font-medium text-gray-900">{target.targetName || 'Target'}</p>
+                              <span className={`text-xs px-2 py-1 rounded ${
+                                target.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                target.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                                target.status === 'Failed' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {target.status || 'Active'}
+                              </span>
+                            </div>
+                            <div className="space-y-1 text-xs text-gray-600">
+                              <div className="flex justify-between">
+                                <span>Type:</span>
+                                <span className="font-medium">{target.targetType || '—'}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Progress:</span>
+                                <span className="font-medium">{target.currentProgress || 0} / {target.targetValue || 0}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Period:</span>
+                                <span className="font-medium">{target.period || '—'}</span>
+                              </div>
+                              {target.progressPercentage && (
+                                <div className="mt-2">
+                                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div 
+                                      className="bg-[#e9931c] h-1.5 rounded-full" 
+                                      style={{ width: `${Math.min(parseFloat(target.progressPercentage), 100)}%` }}
+                                    ></div>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-1">{parseFloat(target.progressPercentage)}% complete</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No targets assigned</p>
+                    )}
                   </div>
 
                   <div className="mt-6 pt-6 border-t border-gray-200">
@@ -3023,6 +5365,505 @@ const Tasks = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Note Creation Modal */}
+      {showNoteModal && (
+        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Create Note</h3>
+              <button
+                onClick={() => setShowNoteModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                const formData = new FormData(e.target)
+                const noteContent = formData.get('noteContent')
+                const noteDate = formData.get('noteDate')
+                const noteTime = formData.get('noteTime')
+                
+                if (!noteContent) {
+                  Swal.fire({
+                    icon: 'warning',
+                    title: 'Note Required',
+                    text: 'Please enter a note',
+                    confirmButtonColor: '#e9931c'
+                  })
+                  return
+                }
+                
+                const noteDateTime = noteDate && noteTime 
+                  ? new Date(`${noteDate}T${noteTime}`)
+                  : new Date()
+                
+                // Add note to activities
+                const newActivity = {
+                  type: 'Note',
+                  content: noteContent,
+                  date: noteDateTime.toISOString(),
+                  createdAt: new Date().toISOString()
+                }
+                const updatedActivities = [...taskActivities, newActivity]
+                setTaskActivities(updatedActivities)
+                setShowNoteModal(false)
+                
+                // Save to backend
+                try {
+                  if (selectedTask && selectedTask._id) {
+                    const currentNotes = selectedTask.notes || ''
+                    const activityNote = `[${noteDateTime.toLocaleString('en-GB')}] Note: ${noteContent}`
+                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                    
+                    await updateFollowUp(selectedTask._id, {
+                      notes: updatedNotes
+                    })
+                    
+                    // Reload task to get updated push status and refresh activities
+                    const updatedRes = await getFollowUp(selectedTask._id)
+                    if (updatedRes.success) {
+                      setSelectedTask(updatedRes.data)
+                      // Re-parse activities from updated notes
+                      if (updatedRes.data.notes) {
+                        const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
+                        const parsedActivities = []
+                        notesLines.forEach(line => {
+                          const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
+                          if (match) {
+                            const [, dateStr, timeStr, type, content] = match
+                            try {
+                              const [day, month, year] = dateStr.split('/')
+                              const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
+                              parsedActivities.push({
+                                type: type,
+                                content: content,
+                                date: dateTime.toISOString(),
+                                createdAt: dateTime.toISOString()
+                              })
+                            } catch (e) {
+                              parsedActivities.push({
+                                type: type,
+                                content: content,
+                                date: new Date().toISOString(),
+                                createdAt: new Date().toISOString()
+                              })
+                            }
+                          }
+                        })
+                        parsedActivities.sort((a, b) => {
+                          const dateA = new Date(a.date || a.createdAt || 0)
+                          const dateB = new Date(b.date || b.createdAt || 0)
+                          return dateB.getTime() - dateA.getTime()
+                        })
+                        setTaskActivities(parsedActivities)
+                      }
+                    } else {
+                      // Fallback: Update selectedTask manually
+                      const updatedTask = { ...selectedTask, notes: updatedNotes }
+                      setSelectedTask(updatedTask)
+                    }
+                    
+                    // Reload tasks list to update push button status
+                    await loadTasks()
+                  }
+                } catch (e) {
+                  console.error('Error saving note:', e)
+                  Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to save note. Please try again.',
+                    confirmButtonColor: '#e9931c'
+                  })
+                  return
+                }
+                
+                Swal.fire({
+                  icon: 'success',
+                  title: 'Note Created!',
+                  text: 'Note has been added successfully',
+                  confirmButtonColor: '#e9931c',
+                  timer: 2000,
+                  timerProgressBar: true
+                })
+              }}
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                  <input
+                    type="date"
+                    name="noteDate"
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                  <input
+                    type="time"
+                    name="noteTime"
+                    defaultValue={new Date().toTimeString().slice(0, 5)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
+                  <textarea
+                    name="noteContent"
+                    rows={5}
+                    placeholder="Enter your note here..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                  >
+                    Save Note
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNoteModal(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Meeting Creation Modal */}
+      {/* Start Task Modal with Meter Picture */}
+      {showStartTaskModal && taskToStart && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Start Task</h2>
+                <button
+                  onClick={() => {
+                    setShowStartTaskModal(false)
+                    setTaskToStart(null)
+                    setMeterPicture(null)
+                    setMeterReading('')
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <FaTimes className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Task:</strong> {taskToStart.description || taskToStart.customerName}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>Customer:</strong> {taskToStart.customerName}
+                </p>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  📷 Meter Picture <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={handleCaptureMeterPicture}
+                    className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Camera
+                  </button>
+                  <label
+                    htmlFor="meter-picture-upload"
+                    className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Upload
+                  </label>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleMeterPictureUpload}
+                  className="hidden"
+                  id="meter-picture-upload"
+                />
+                <div className="w-full h-48 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                  {meterPicture ? (
+                    <img
+                      src={meterPicture}
+                      alt="Meter picture"
+                      className="max-w-full max-h-full rounded-lg object-contain"
+                    />
+                  ) : (
+                    <div className="text-center p-4">
+                      <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-sm text-gray-600">No image selected</p>
+                      <p className="text-xs text-gray-500 mt-1">Use camera or upload button</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Meter Reading (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={meterReading}
+                  onChange={(e) => setMeterReading(e.target.value)}
+                  placeholder="Enter meter reading..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowStartTaskModal(false)
+                    setTaskToStart(null)
+                    setMeterPicture(null)
+                    setMeterReading('')
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmStartTask}
+                  disabled={!meterPicture}
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium ${
+                    meterPicture
+                      ? 'hover:opacity-90'
+                      : 'opacity-50 cursor-not-allowed'
+                  }`}
+                  style={meterPicture ? { backgroundColor: appTheme.status.success.main } : { backgroundColor: '#9ca3af' }}
+                >
+                  Start Task
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMeetingModal && (
+        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Create Google Meeting</h3>
+              <button
+                onClick={() => setShowMeetingModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                const formData = new FormData(e.target)
+                const meetingTitle = formData.get('meetingTitle')
+                const meetingDate = formData.get('meetingDate')
+                const meetingTime = formData.get('meetingTime')
+                const meetingDuration = formData.get('meetingDuration') || '60'
+                
+                if (!meetingTitle || !meetingDate || !meetingTime) {
+                  Swal.fire({
+                    icon: 'warning',
+                    title: 'Fields Required',
+                    text: 'Please fill in all required fields',
+                    confirmButtonColor: '#e9931c'
+                  })
+                  return
+                }
+                
+                const meetingDateTime = new Date(`${meetingDate}T${meetingTime}`)
+                const endDateTime = new Date(meetingDateTime.getTime() + parseInt(meetingDuration) * 60000)
+                
+                // Create Google Calendar link
+                const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meetingTitle)}&dates=${meetingDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(`Meeting with ${selectedTask.customerName || selectedTask.associatedContactName || 'Contact'}`)}`
+                
+                // Open Google Calendar
+                window.open(googleCalendarLink, '_blank')
+                
+                // Add meeting to activities
+                const newActivity = {
+                  type: 'Meeting',
+                  content: meetingTitle,
+                  date: meetingDateTime.toISOString(),
+                  link: googleCalendarLink,
+                  createdAt: new Date().toISOString()
+                }
+                const updatedActivities = [...taskActivities, newActivity]
+                setTaskActivities(updatedActivities)
+                setShowMeetingModal(false)
+                
+                // Save to backend
+                try {
+                  if (selectedTask && selectedTask._id) {
+                    const currentNotes = selectedTask.notes || ''
+                    const activityNote = `[${meetingDateTime.toLocaleString('en-GB')}] Meeting: ${meetingTitle} - ${googleCalendarLink}`
+                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                    
+                    await updateFollowUp(selectedTask._id, {
+                      notes: updatedNotes
+                    })
+                    
+                    // Reload task to get updated push status and refresh activities
+                    const updatedRes = await getFollowUp(selectedTask._id)
+                    if (updatedRes.success) {
+                      setSelectedTask(updatedRes.data)
+                      // Re-parse activities from updated notes
+                      if (updatedRes.data.notes) {
+                        const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
+                        const parsedActivities = []
+                        notesLines.forEach(line => {
+                          const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
+                          if (match) {
+                            const [, dateStr, timeStr, type, content] = match
+                            try {
+                              const [day, month, year] = dateStr.split('/')
+                              const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
+                              if (type === 'Meeting' && content.includes('http')) {
+                                const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
+                                const link = linkMatch ? linkMatch[1] : ''
+                                const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
+                                parsedActivities.push({
+                                  type: 'Meeting',
+                                  content: meetingTitle || 'Meeting',
+                                  link: link,
+                                  date: dateTime.toISOString(),
+                                  createdAt: dateTime.toISOString()
+                                })
+                              } else {
+                                parsedActivities.push({
+                                  type: type,
+                                  content: content,
+                                  date: dateTime.toISOString(),
+                                  createdAt: dateTime.toISOString()
+                                })
+                              }
+                            } catch (e) {
+                              parsedActivities.push({
+                                type: type,
+                                content: content,
+                                date: new Date().toISOString(),
+                                createdAt: new Date().toISOString()
+                              })
+                            }
+                          }
+                        })
+                        parsedActivities.sort((a, b) => {
+                          const dateA = new Date(a.date || a.createdAt || 0)
+                          const dateB = new Date(b.date || b.createdAt || 0)
+                          return dateB.getTime() - dateA.getTime()
+                        })
+                        setTaskActivities(parsedActivities)
+                      }
+                    } else {
+                      // Fallback: Update selectedTask manually
+                      const updatedTask = { ...selectedTask, notes: updatedNotes }
+                      setSelectedTask(updatedTask)
+                    }
+                    
+                    // Reload tasks list to update push button status
+                    await loadTasks()
+                  }
+                } catch (e) {
+                  console.error('Error saving meeting:', e)
+                }
+                
+                Swal.fire({
+                  icon: 'success',
+                  title: 'Meeting Created!',
+                  html: `Google Calendar link opened. Meeting added to activities.<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a>`,
+                  confirmButtonColor: '#e9931c'
+                })
+              }}
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title *</label>
+                  <input
+                    type="text"
+                    name="meetingTitle"
+                    placeholder="Enter meeting title"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                  <input
+                    type="date"
+                    name="meetingDate"
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
+                  <input
+                    type="time"
+                    name="meetingTime"
+                    defaultValue={new Date().toTimeString().slice(0, 5)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                  <select
+                    name="meetingDuration"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="30">30 minutes</option>
+                    <option value="60" selected>60 minutes</option>
+                    <option value="90">90 minutes</option>
+                    <option value="120">120 minutes</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                  >
+                    Create Meeting
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowMeetingModal(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

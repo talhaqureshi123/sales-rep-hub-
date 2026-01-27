@@ -11,7 +11,7 @@ const followUpRoutes = require("./routes/followUpRoutes");
 const productVideoRoutes = require("./routes/productVideoRoutes");
 const salesOrderRoutes = require("./routes/salesOrderRoutes");
 const salesTargetRoutes = require("./routes/salesTargetRoutes");
-const salesSubmissionRoutes = require("./routes/salesSubmissionRoutes");
+// Sales submission routes removed - using sales orders instead
 const shiftPhotoRoutes = require("./routes/shiftPhotoRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
 const locationRoutes = require("./routes/locationRoutes");
@@ -29,7 +29,7 @@ router.use("/follow-ups", followUpRoutes);
 router.use("/product-videos", productVideoRoutes);
 router.use("/sales-orders", salesOrderRoutes);
 router.use("/sales-targets", salesTargetRoutes);
-router.use("/sales-submissions", salesSubmissionRoutes);
+// Sales submission routes removed - using sales orders instead
 router.use("/shift-photos", shiftPhotoRoutes);
 router.use("/tracking", trackingRoutes);
 router.use("/locations", locationRoutes);

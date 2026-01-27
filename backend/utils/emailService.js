@@ -274,8 +274,163 @@ const sendOTPEmail = async (email, name, otp) => {
   }
 };
 
+// Send order approval notification to admin
+const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
+  try {
+    // Only send email if email is configured
+    if (!config.EMAIL_USER || !config.EMAIL_PASS) {
+      console.warn('⚠️ Email not configured. Skipping order approval email.');
+      return { success: false, message: 'Email not configured' };
+    }
+
+    const transporter = createTransporter();
+    const { soNumber, customerName, grandTotal, salesPerson, invoiceNumber } = orderDetails;
+
+    const mailOptions = {
+      from: `"Sales Rap Hub" <${config.EMAIL_USER}>`,
+      to: adminEmail,
+      subject: `Sales Order Approved: ${soNumber}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+            }
+            .container {
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              background-color: #f9f9f9;
+            }
+            .header {
+              background-color: #e9931c;
+              color: white;
+              padding: 20px;
+              text-align: center;
+              border-radius: 5px 5px 0 0;
+            }
+            .content {
+              background-color: white;
+              padding: 30px;
+              border-radius: 0 0 5px 5px;
+            }
+            .order-details {
+              background-color: #f0f0f0;
+              padding: 15px;
+              border-radius: 5px;
+              margin: 20px 0;
+            }
+            .detail-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 8px 0;
+              border-bottom: 1px solid #ddd;
+            }
+            .detail-row:last-child {
+              border-bottom: none;
+            }
+            .detail-label {
+              font-weight: bold;
+              color: #666;
+            }
+            .detail-value {
+              color: #333;
+            }
+            .footer {
+              text-align: center;
+              margin-top: 20px;
+              color: #666;
+              font-size: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Sales Order Approved</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${adminName},</p>
+              <p>A sales order has been approved and confirmed:</p>
+              
+              <div class="order-details">
+                <div class="detail-row">
+                  <span class="detail-label">Order Number:</span>
+                  <span class="detail-value">${soNumber || 'N/A'}</span>
+                </div>
+                ${invoiceNumber ? `
+                <div class="detail-row">
+                  <span class="detail-label">Invoice Number:</span>
+                  <span class="detail-value">${invoiceNumber}</span>
+                </div>
+                ` : ''}
+                <div class="detail-row">
+                  <span class="detail-label">Customer:</span>
+                  <span class="detail-value">${customerName || 'N/A'}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Sales Person:</span>
+                  <span class="detail-value">${salesPerson?.name || salesPerson?.email || 'N/A'}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Total Amount:</span>
+                  <span class="detail-value">£${(grandTotal || 0).toFixed(2)}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Approved Date:</span>
+                  <span class="detail-value">${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                </div>
+              </div>
+              
+              <p>The order has been added to the salesman's monthly sales targets.</p>
+              
+              <p>You can view the order details in the admin dashboard.</p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+        Sales Order Approved
+        
+        Hello ${adminName},
+        
+        A sales order has been approved and confirmed:
+        
+        Order Number: ${soNumber || 'N/A'}
+        ${invoiceNumber ? `Invoice Number: ${invoiceNumber}\n` : ''}Customer: ${customerName || 'N/A'}
+        Sales Person: ${salesPerson?.name || salesPerson?.email || 'N/A'}
+        Total Amount: £${(grandTotal || 0).toFixed(2)}
+        Approved Date: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+        
+        The order has been added to the salesman's monthly sales targets.
+        
+        You can view the order details in the admin dashboard.
+        
+        © ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Order approval email sent to admin: ${adminEmail}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending order approval email:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendPasswordSetupEmail,
   sendOTPEmail,
+  sendOrderApprovalEmail,
 };
 

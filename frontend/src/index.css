@@ -73,3 +73,21 @@
     transform: translateY(-10px);
   }
 }
+
+/* SweetAlert2 z-index fix - ensure it appears on top of all modals and overlays */
+.swal2-container {
+  z-index: 99999 !important;
+}
+
+.swal2-container.swal2-backdrop-show {
+  z-index: 99999 !important;
+}
+
+.swal2-popup {
+  z-index: 100000 !important;
+  position: relative;
+}
+
+.swal2-container.swal2-center {
+  z-index: 99999 !important;
+}

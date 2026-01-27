@@ -7,16 +7,37 @@ const Customer = require('../../database/models/Customer');
 
 // Helper function to calculate progress based on target type
 const calculateProgress = async (target) => {
+  // Normalize dates to ensure accurate comparison
   const startDate = new Date(target.startDate);
+  startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(target.endDate);
+  endDate.setHours(23, 59, 59, 999);
   
   switch (target.targetType) {
     case 'Revenue':
-      // Calculate from sales orders
+      // Calculate from confirmed sales orders (both approved and pending)
+      // Use approvedAt if available and in range, otherwise use orderDate
       const orders = await SalesOrder.find({
         salesPerson: target.salesman,
-        orderDate: { $gte: startDate, $lte: endDate },
-        orderStatus: { $ne: 'Draft' },
+        orderStatus: 'Confirmed',
+        $or: [
+          // Orders approved within date range
+          {
+            approvedAt: { $gte: startDate, $lte: endDate },
+            approvalStatus: 'Approved'
+          },
+          // Orders with orderDate in range (including pending approval orders)
+          {
+            orderDate: { $gte: startDate, $lte: endDate },
+            $or: [
+              { approvedAt: { $exists: false } },
+              { approvedAt: null },
+              // Also include orders approved outside the target range but orderDate is in range
+              { approvedAt: { $lt: startDate } },
+              { approvedAt: { $gt: endDate } }
+            ]
+          }
+        ]
       });
       return orders.reduce((sum, order) => sum + (order.grandTotal || 0), 0);
     
@@ -55,11 +76,31 @@ const calculateProgress = async (target) => {
       return convertedQuotes;
     
     case 'Orders':
-      // Calculate orders created
+      // Calculate confirmed orders (both approved and pending approval)
+      // Count all confirmed orders where either:
+      // 1. Order was approved within the target date range (use approvedAt)
+      // 2. Order date falls within target range (use orderDate) - for orders not yet approved or approved outside range
       const orderCount = await SalesOrder.countDocuments({
         salesPerson: target.salesman,
-        orderDate: { $gte: startDate, $lte: endDate },
-        orderStatus: { $ne: 'Draft' },
+        orderStatus: 'Confirmed',
+        $or: [
+          // Orders approved within date range
+          {
+            approvedAt: { $gte: startDate, $lte: endDate },
+            approvalStatus: 'Approved'
+          },
+          // Orders with orderDate in range (including pending approval orders)
+          {
+            orderDate: { $gte: startDate, $lte: endDate },
+            $or: [
+              { approvedAt: { $exists: false } },
+              { approvedAt: null },
+              // Also include orders approved outside the target range but orderDate is in range
+              { approvedAt: { $lt: startDate } },
+              { approvedAt: { $gt: endDate } }
+            ]
+          }
+        ]
       });
       return orderCount;
     
@@ -243,6 +284,9 @@ const createSalesTarget = async (req, res) => {
 
     const target = await SalesTarget.create({
       salesman,
+      approvalStatus: 'Approved', // Admin-created targets are approved by default
+      approvedAt: new Date(),
+      approvedBy: req.user._id,
       targetName,
       targetType,
       targetValue,
@@ -297,6 +341,33 @@ const updateSalesTarget = async (req, res) => {
     }
 
     // Update fields
+    // Approval flow (admin)
+    const { approvalStatus, rejectionReason } = req.body;
+    if (approvalStatus && approvalStatus !== target.approvalStatus) {
+      if (approvalStatus === 'Approved') {
+        target.approvalStatus = 'Approved';
+        target.approvedAt = new Date();
+        target.approvedBy = req.user._id;
+        target.rejectedAt = undefined;
+        target.rejectedBy = undefined;
+        target.rejectionReason = undefined;
+      } else if (approvalStatus === 'Rejected') {
+        target.approvalStatus = 'Rejected';
+        target.rejectedAt = new Date();
+        target.rejectedBy = req.user._id;
+        target.rejectionReason = rejectionReason || target.rejectionReason || '';
+        target.approvedAt = undefined;
+        target.approvedBy = undefined;
+      } else if (approvalStatus === 'Pending') {
+        target.approvalStatus = 'Pending';
+        target.approvedAt = undefined;
+        target.approvedBy = undefined;
+        target.rejectedAt = undefined;
+        target.rejectedBy = undefined;
+        target.rejectionReason = undefined;
+      }
+    }
+
     if (targetName) target.targetName = targetName;
     if (targetType) target.targetType = targetType;
     if (targetValue !== undefined) target.targetValue = targetValue;

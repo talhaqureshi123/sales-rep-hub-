@@ -14,6 +14,22 @@ const visitTargetSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Target name (for visit requests from salesman)
+    targetName: {
+      type: String,
+      trim: true,
+    },
+
+    // Customer information (for visit requests from salesman)
+    customerName: {
+      type: String,
+      trim: true,
+    },
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
+    },
+
     // ===== ASSIGNMENT =====
     salesman: {
       type: mongoose.Schema.Types.ObjectId,

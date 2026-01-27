@@ -46,6 +46,10 @@ const CustomerManagement = () => {
     status: 'Not Visited',
     notes: '',
     competitorInfo: '',
+    associatedContactName: '',
+    associatedCompanyName: '',
+    lastContact: '',
+    lastEngagement: '',
     view: 'admin_salesman', // View access: 'admin', 'salesman', 'admin_salesman'
   })
 
@@ -135,6 +139,10 @@ const CustomerManagement = () => {
         status: formData.status,
         notes: formData.notes,
         competitorInfo: formData.competitorInfo,
+        associatedContactName: formData.associatedContactName || '',
+        associatedCompanyName: formData.associatedCompanyName || '',
+        lastContact: formData.lastContact || undefined,
+        lastEngagement: formData.lastEngagement || undefined,
         assignedSalesman: formData.assignedSalesman || null,
         view: formData.view || 'admin_salesman',
       }
@@ -188,6 +196,10 @@ const CustomerManagement = () => {
       status: customer.status || 'Not Visited',
       notes: customer.notes || '',
       competitorInfo: customer.competitorInfo || '',
+      associatedContactName: customer.associatedContactName || '',
+      associatedCompanyName: customer.associatedCompanyName || '',
+      lastContact: customer.lastContact ? new Date(customer.lastContact).toISOString().split('T')[0] : '',
+      lastEngagement: customer.lastEngagement ? new Date(customer.lastEngagement).toISOString().split('T')[0] : '',
       view: customer.view || 'admin_salesman',
     })
     setShowAddForm(true)
@@ -211,6 +223,10 @@ const CustomerManagement = () => {
         status: formData.status,
         notes: formData.notes,
         competitorInfo: formData.competitorInfo,
+        associatedContactName: formData.associatedContactName || '',
+        associatedCompanyName: formData.associatedCompanyName || '',
+        lastContact: formData.lastContact || undefined,
+        lastEngagement: formData.lastEngagement || undefined,
         assignedSalesman: formData.assignedSalesman || null,
         view: formData.view || 'admin_salesman',
       }
@@ -451,6 +467,10 @@ const CustomerManagement = () => {
       status: 'Not Visited',
       notes: '',
       competitorInfo: '',
+      associatedContactName: '',
+      associatedCompanyName: '',
+      lastContact: '',
+      lastEngagement: '',
       view: 'admin_salesman',
     })
     setShowAddForm(false)
@@ -792,6 +812,56 @@ const CustomerManagement = () => {
                   disabled={loading}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="Competitor prices, delivery schedules, weak points....."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Associated Contact</label>
+                <input
+                  type="text"
+                  name="associatedContactName"
+                  value={formData.associatedContactName}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="Enter associated contact name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Associated Company</label>
+                <input
+                  type="text"
+                  name="associatedCompanyName"
+                  value={formData.associatedCompanyName}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  placeholder="Enter associated company name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Last Contact</label>
+                <input
+                  type="date"
+                  name="lastContact"
+                  value={formData.lastContact}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Last Engagement</label>
+                <input
+                  type="date"
+                  name="lastEngagement"
+                  value={formData.lastEngagement}
+                  onChange={handleInputChange}
+                  disabled={loading}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
 

@@ -16,7 +16,7 @@ const connectDB = require('../database/connection');
 const VisitTarget = require('../database/models/VisitTarget');
 const Tracking = require('../database/models/Tracking');
 const Quotation = require('../database/models/Quotation');
-const SalesSubmission = require('../database/models/SalesSubmission');
+// SalesSubmission removed - using SalesOrder instead
 const User = require('../database/models/User');
 const Customer = require('../database/models/Customer');
 const Product = require('../database/models/Product');
@@ -342,8 +342,11 @@ async function main() {
 
     // Step 4: Create Sales Submissions (Uploads)
     logStep('Step 4: Creating Sales Submissions (Uploads)');
+    // Sales submission removed - using sales orders instead
     const createdSubmissions = [];
 
+    // Commented out - Sales submission functionality removed
+    /*
     for (let i = 0; i < createdVisits.length; i++) {
       const visit = createdVisits[i];
       const salesAmount = testProduct.price * (i + 1) * 1.1; // 10% more than quotation
@@ -372,21 +375,22 @@ async function main() {
       createdSubmissions.push(submission);
       logSuccess(`Created submission: ${submission.submissionNumber} (Amount: £${submission.salesAmount})`);
     }
+    */
 
-    logSuccess(`\nTotal sales submissions: ${createdSubmissions.length}\n`);
+    logSuccess(`\nTotal sales submissions: ${createdSubmissions.length} (REMOVED - using Sales Orders)\n`);
 
     // Final Summary
     logStep('Test Summary');
     logSuccess(`✅ Visits created: ${createdVisits.length}`);
     logSuccess(`✅ Tracking sessions: ${trackingSessions.length}`);
     logSuccess(`✅ Quotations created: ${createdQuotations.length}`);
-    logSuccess(`✅ Sales submissions: ${createdSubmissions.length}`);
+    logSuccess(`✅ Sales submissions: ${createdSubmissions.length} (REMOVED - using Sales Orders)`);
     
     const totalDistance = trackingSessions.reduce((sum, t) => sum + (t.totalDistance || 0), 0);
-    const totalSales = createdSubmissions.reduce((sum, s) => sum + (s.salesAmount || 0), 0);
+    const totalSales = 0; // createdSubmissions.reduce((sum, s) => sum + (s.salesAmount || 0), 0); // REMOVED
     
     logInfo(`\nTotal distance traveled: ${totalDistance.toFixed(2)} km`);
-    logInfo(`Total sales amount: £${totalSales.toFixed(2)}`);
+    logInfo(`Total sales amount: £${totalSales.toFixed(2)} (Use Sales Orders instead)`);
     logInfo(`Visit date: ${today.toLocaleDateString()}`);
     logInfo(`All visits are in Karachi, Sindh`);
 
@@ -397,7 +401,7 @@ async function main() {
     logInfo('  - Visits for today in Karachi');
     logInfo('  - Kilometer tracking sessions (started and ended)');
     logInfo('  - Quotations created');
-    logInfo('  - Sales submissions (uploads)');
+    logInfo('  - Sales Orders (replaces Sales Submissions)');
     log('');
 
     process.exit(0);

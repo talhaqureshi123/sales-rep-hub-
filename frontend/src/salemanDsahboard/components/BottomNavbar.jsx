@@ -6,9 +6,10 @@ import {
   FaTrophy,
   FaTasks,
   FaBullseye,
-  FaUpload,
+  FaShoppingCart,
   FaVideo,
-  FaBell
+  FaBell,
+  FaFlask
 } from 'react-icons/fa'
 import { useNotificationCount } from '../hooks/useNotificationCount'
 
@@ -22,8 +23,9 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },
     { id: 'customers', label: 'Customers', icon: FaUsers },
     { id: 'tasks', label: 'Tasks', icon: FaTasks },
+    { id: 'sample-tracker', label: 'Samples', icon: FaFlask },
     { id: 'sales-targets', label: 'Targets', icon: FaBullseye },
-    { id: 'sales-submissions', label: 'Upload', icon: FaUpload },
+    { id: 'sales-orders', label: 'Orders', icon: FaShoppingCart },
     { id: 'product-videos', label: 'Videos', icon: FaVideo },
     { id: 'achievements', label: 'Achievements', icon: FaTrophy },
   ]

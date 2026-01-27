@@ -139,10 +139,61 @@ export const deleteSalesOrder = async (orderId) => {
   }
 }
 
+// Approve sales order
+export const approveSalesOrder = async (orderId) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${orderId}/approve`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error approving sales order:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
+// Reject sales order
+export const rejectSalesOrder = async (orderId, rejectionReason = '') => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${orderId}/reject`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ rejectionReason }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error rejecting sales order:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 export default {
   getSalesOrders,
   getSalesOrder,
   createSalesOrder,
   updateSalesOrder,
   deleteSalesOrder,
+  approveSalesOrder,
+  rejectSalesOrder,
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getVisitTargets, createVisitTarget, updateVisitTarget, deleteVisitTarget } from '../../services/adminservices/visitTargetService'
 import { getUsers } from '../../services/adminservices/userService'
-import { FaEdit, FaTrash } from 'react-icons/fa'
+import { FaEdit, FaTrash, FaCheckCircle } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const VisitTargetManagement = () => {
@@ -428,6 +428,38 @@ const VisitTargetManagement = () => {
     }
   }
 
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      const result = await updateVisitTarget(id, { status: newStatus })
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Status Updated!',
+          text: `Visit status updated to ${newStatus}`,
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
+        loadVisitTargets()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to update status',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error updating status:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating status',
+        confirmButtonColor: '#e9931c'
+      })
+    }
+  }
+
   const handleDeleteTarget = async (id) => {
     const confirmResult = await Swal.fire({
       icon: 'warning',
@@ -570,12 +602,12 @@ const VisitTargetManagement = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Completed':
+      case 'Approved':
         return 'bg-green-100 text-green-800'
-      case 'In Progress':
-        return 'bg-blue-100 text-blue-800'
-      case 'Cancelled':
+      case 'Reject':
         return 'bg-red-100 text-red-800'
+      case 'In Screening':
+        return 'bg-blue-100 text-blue-800'
       default:
         return 'bg-yellow-100 text-yellow-800'
     }
@@ -663,10 +695,9 @@ const VisitTargetManagement = () => {
               className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
             >
               <option value="">All Status</option>
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              <option value="Approved">Approved</option>
+              <option value="Reject">Reject</option>
+              <option value="In Screening">In Screening</option>
             </select>
           </div>
           <div>
@@ -1011,6 +1042,12 @@ const VisitTargetManagement = () => {
                     <tr key={target._id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
                       <td className="py-4 px-4">
                         <div className="font-semibold text-gray-800">{target.name}</div>
+                        {target.targetName && target.targetName !== target.name && (
+                          <div className="text-sm text-purple-600 font-medium">Target: {target.targetName}</div>
+                        )}
+                        {target.customerName && target.customerName !== target.name && (
+                          <div className="text-sm text-blue-600 font-medium">Customer: {target.customerName}</div>
+                        )}
                         {target.description && (
                           <div className="text-sm text-gray-500">{target.description}</div>
                         )}
@@ -1036,22 +1073,56 @@ const VisitTargetManagement = () => {
                         </span>
                       </td>
                       <td className="py-4 px-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(target.status)}`}>
-                          {target.status}
-                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // Cycle through: Approved -> Reject -> In Screening -> Approved
+                            const statusOrder = ['Approved', 'Reject', 'In Screening']
+                            const currentStatus = target.status || 'Approved'
+                            const currentIndex = statusOrder.indexOf(currentStatus) >= 0 ? statusOrder.indexOf(currentStatus) : 0
+                            const nextIndex = (currentIndex + 1) % statusOrder.length
+                            const newStatus = statusOrder[nextIndex]
+                            
+                            handleUpdateStatus(target._id, newStatus)
+                          }}
+                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all hover:opacity-80 ${
+                            target.status === 'Approved' ? 'bg-green-100 text-green-800' :
+                            target.status === 'Reject' ? 'bg-red-100 text-red-800' :
+                            target.status === 'In Screening' ? 'bg-blue-100 text-blue-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}
+                          title={`Current status: ${target.status || 'Approved'}. Click to change.`}
+                        >
+                          {target.status === 'Approved' && '✓ '}
+                          {target.status || 'Approved'}
+                        </button>
                       </td>
                       <td className="py-4 px-4">
-                        <span
-                          className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (target.approvalStatus !== 'Approved') {
+                              handleApprove(target)
+                            } else {
+                              Swal.fire({
+                                icon: 'info',
+                                title: 'Already Approved',
+                                text: `This visit was approved on ${target.approvedAt ? new Date(target.approvedAt).toLocaleDateString() : 'N/A'}`,
+                                confirmButtonColor: '#e9931c'
+                              })
+                            }
+                          }}
+                          className={`p-1.5 rounded transition-colors ${
                             target.approvalStatus === 'Approved'
-                              ? 'bg-green-100 text-green-800'
+                              ? 'text-green-600 hover:bg-green-50 bg-green-50'
                               : target.approvalStatus === 'Rejected'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
+                                ? 'text-red-600 hover:bg-red-50 bg-red-50'
+                                : 'text-gray-400 hover:bg-gray-50 hover:text-green-600'
                           }`}
+                          title={target.approvalStatus === 'Approved' ? 'Approved - Click to view details' : 'Click to Approve'}
                         >
-                          {target.approvalStatus || 'Approved'}
-                        </span>
+                          <FaCheckCircle className={`w-4 h-4 ${target.approvalStatus === 'Approved' ? '' : 'opacity-50'}`} />
+                        </button>
                         {target.approvalStatus === 'Rejected' && target.rejectionReason && (
                           <div className="text-xs text-gray-500 mt-1">Reason: {target.rejectionReason}</div>
                         )}
@@ -1061,24 +1132,6 @@ const VisitTargetManagement = () => {
                       </td>
                       <td className="py-4 px-4">
                         <div className="flex gap-2">
-                          {target.approvalStatus === 'Pending' && (
-                            <>
-                              <button
-                                onClick={() => handleApprove(target)}
-                                className="px-3 py-1 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors text-sm font-semibold"
-                                title="Approve"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => handleReject(target)}
-                                className="px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm font-semibold"
-                                title="Reject"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
                           <button
                             onClick={() => handleEditTarget(target)}
                             className="p-2 rounded-lg hover:bg-blue-50 transition-colors"

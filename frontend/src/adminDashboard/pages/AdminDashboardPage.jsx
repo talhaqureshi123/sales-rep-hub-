@@ -250,7 +250,7 @@ const AdminDashboardPage = () => {
   }
 
   const handleViewVisits = () => {
-    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'assign-target' }))
+    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'visited-targets' }))
   }
 
   const handleViewSalesTargets = () => {

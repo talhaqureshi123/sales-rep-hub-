@@ -40,3 +40,16 @@
 .read-the-docs {
   color: #888;
 }
+
+/* SweetAlert2 z-index fix - ensure it appears on top of all modals */
+.swal2-container {
+  z-index: 99999 !important;
+}
+
+.swal2-container.swal2-backdrop-show {
+  z-index: 99999 !important;
+}
+
+.swal2-popup {
+  z-index: 100000 !important;
+}

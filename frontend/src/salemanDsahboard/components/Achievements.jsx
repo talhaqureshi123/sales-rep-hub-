@@ -76,41 +76,41 @@ const Achievements = () => {
   }
 
   return (
-    <div className="">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6">Achievements & Conversion Tracking</h2>
+    <div className="space-y-3 sm:space-y-4">
+        <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-2 sm:mb-3">Achievements & Conversion Tracking</h2>
 
         {/* GRPA Card */}
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 sm:p-6 border-2 border-purple-200 mb-4 sm:mb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 sm:p-4 border border-purple-200 mb-3 sm:mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex-1">
-              <h3 className="text-base sm:text-lg font-bold text-purple-800 mb-1">GRPA (Group Real Performance Award)</h3>
-              <p className="text-xs sm:text-sm text-purple-600">Your performance ranking in the group</p>
+              <h3 className="text-sm sm:text-base font-bold text-purple-800 mb-0.5">GRPA (Group Real Performance Award)</h3>
+              <p className="text-xs text-purple-600">Your performance ranking in the group</p>
             </div>
             <div className="text-left sm:text-right w-full sm:w-auto">
-              <div className="text-2xl sm:text-3xl font-bold text-purple-700">
+              <div className="text-xl sm:text-2xl font-bold text-purple-700">
                 #{grpa.rank || 'N/A'}
               </div>
-              <p className="text-xs text-purple-600 mt-1">
+              <p className="text-xs text-purple-600 mt-0.5">
                 Rank out of {grpa.totalSalesmen || 0}
               </p>
-              <div className="mt-2">
-                <div className="bg-purple-200 rounded-full h-2 w-full sm:w-32">
+              <div className="mt-1.5">
+                <div className="bg-purple-200 rounded-full h-1.5 w-full sm:w-32">
                   <div
-                    className="bg-purple-600 h-2 rounded-full"
+                    className="bg-purple-600 h-1.5 rounded-full"
                     style={{ width: `${Math.min(grpa.percentage || 0, 100)}%` }}
                   ></div>
                 </div>
-                <p className="text-xs text-purple-600 mt-1">{grpa.percentage || 0}% Performance</p>
+                <p className="text-xs text-purple-600 mt-0.5">{grpa.percentage || 0}% Performance</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-3 sm:mb-4">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
             <p className="text-xs sm:text-sm text-gray-600 mb-1">Monthly Sales</p>
-            <p className="text-xl sm:text-2xl font-bold text-blue-700">₹{stats.monthlySales.toLocaleString()}</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-700">£{stats.monthlySales.toLocaleString()}</p>
             <div className="mt-2">
               <div className="w-full bg-blue-200 rounded-full h-2">
                 <div
@@ -119,7 +119,7 @@ const Achievements = () => {
                 ></div>
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                {salesProgress.toFixed(1)}% of ₹{stats.monthlyTarget.toLocaleString()} target
+                {salesProgress.toFixed(1)}% of £{stats.monthlyTarget.toLocaleString()} target
               </p>
             </div>
           </div>
@@ -149,7 +149,7 @@ const Achievements = () => {
 
         {/* Achievements List */}
         <div>
-          <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-3 sm:mb-4">Recent Achievements</h3>
+          <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-2 sm:mb-3">Recent Achievements</h3>
           {achievements.length === 0 ? (
             <div className="bg-white rounded-lg p-8 border border-gray-200 text-center">
               <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,23 +159,24 @@ const Achievements = () => {
               <p className="text-sm text-gray-500 mt-2">Complete visit targets and get quotations approved to see achievements here</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {achievements.map((achievement) => (
               <div
                 key={achievement.id}
-                className="bg-white rounded-lg p-4 border-l-4 border-[#e9931c] border-r border-t border-b border-gray-200"
+                className="bg-white rounded-lg p-3 border border-gray-200 border-l-4"
+                style={{ borderLeftColor: '#e9931c' }}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-800">{achievement.title}</h4>
-                    <p className="text-sm text-gray-600 mt-1">{achievement.description}</p>
-                    <p className="text-xs text-gray-500 mt-2">Date: {achievement.date}</p>
+                    <h4 className="font-semibold text-sm text-gray-800">{achievement.title}</h4>
+                    <p className="text-xs text-gray-600 mt-0.5">{achievement.description}</p>
+                    <p className="text-xs text-gray-500 mt-1.5">Date: {achievement.date}</p>
                   </div>
                   <div className="text-right">
-                    <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    <div className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-semibold">
                       {achievement.conversion}
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Conversion</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Conversion</p>
                   </div>
                 </div>
               </div>
@@ -185,15 +186,15 @@ const Achievements = () => {
         </div>
 
         {/* Performance Chart Placeholder */}
-        <div className="mt-4 sm:mt-6 bg-white rounded-lg p-4 sm:p-6 border border-gray-200">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-3 sm:mb-4">Performance Chart</h3>
-          <div className="h-64 bg-white rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+        <div className="mt-3 sm:mt-4 bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
+          <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-2 sm:mb-3">Performance Chart</h3>
+          <div className="h-48 bg-white rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
             <div className="text-center">
-              <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
-              <p className="text-gray-600">Conversion & Sales Chart</p>
-              <p className="text-sm text-gray-500">Visual representation of performance</p>
+              <p className="text-sm text-gray-600">Conversion & Sales Chart</p>
+              <p className="text-xs text-gray-500">Visual representation of performance</p>
             </div>
           </div>
         </div>

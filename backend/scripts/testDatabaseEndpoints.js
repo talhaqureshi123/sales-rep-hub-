@@ -18,7 +18,7 @@ const Product = require('../database/models/Product');
 const FollowUp = require('../database/models/FollowUp');
 const SalesTarget = require('../database/models/SalesTarget');
 const SalesOrder = require('../database/models/SalesOrder');
-const SalesSubmission = require('../database/models/SalesSubmission');
+// SalesSubmission removed - using SalesOrder instead
 const Quotation = require('../database/models/Quotation');
 const Sample = require('../database/models/Sample');
 const VisitTarget = require('../database/models/VisitTarget');

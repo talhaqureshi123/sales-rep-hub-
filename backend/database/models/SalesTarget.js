@@ -45,6 +45,31 @@ const salesTargetSchema = new mongoose.Schema(
       enum: ['Active', 'Completed', 'Failed', 'Cancelled'],
       default: 'Active',
     },
+    // ===== APPROVAL (ADMIN) =====
+    // Admin-created targets are approved by default
+    approvalStatus: {
+      type: String,
+      enum: ['Pending', 'Approved', 'Rejected'],
+      default: 'Approved',
+    },
+    approvedAt: {
+      type: Date,
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    rejectedAt: {
+      type: Date,
+    },
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+    },
     completedAt: {
       type: Date,
     },

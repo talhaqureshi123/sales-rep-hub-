@@ -37,7 +37,6 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
     { id: 'user-management', icon: FaUsers, label: 'Salesman Management' },
     { id: 'customer-management', icon: FaUser, label: 'Customer Management' },
     { id: 'customer-allotment', icon: FaLink, label: 'Customer Allotment' },
-    { id: 'assign-target', icon: FaMapMarkerAlt, label: 'Assign Target' },
     { id: 'visited-targets', icon: FaCheckCircle, label: 'Visited Targets' },
     { id: 'conversions-tracking', icon: FaChartLine, label: 'Conversions & Tracking' },
     { id: 'shift-photos', icon: FaCamera, label: 'Shift Photos' },

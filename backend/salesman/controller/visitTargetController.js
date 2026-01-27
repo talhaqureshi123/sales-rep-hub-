@@ -22,6 +22,7 @@ const createVisitRequest = async (req, res) => {
   try {
     const {
       name,
+      targetName,
       description,
       latitude,
       longitude,
@@ -32,6 +33,8 @@ const createVisitRequest = async (req, res) => {
       priority,
       visitDate,
       notes,
+      customerName,
+      customerId,
     } = req.body;
 
     if (!name) {
@@ -61,6 +64,7 @@ const createVisitRequest = async (req, res) => {
 
     const vt = await VisitTarget.create({
       name,
+      targetName: targetName || name, // Store target name if provided
       description,
       salesman: req.user._id,
       createdBy: req.user._id,
@@ -75,6 +79,8 @@ const createVisitRequest = async (req, res) => {
       notes,
       status: "Pending",
       approvalStatus: "Pending",
+      customerName: customerName || name, // Store customer name for admin display
+      customerId: customerId || undefined, // Store customer ID if provided
     });
 
     const populated = await VisitTarget.findById(vt._id)

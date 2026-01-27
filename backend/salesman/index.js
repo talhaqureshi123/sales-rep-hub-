@@ -12,7 +12,7 @@ const trackingRoutes = require("./routes/trackingRoutes");
 const sampleRoutes = require("./routes/sampleRoutes");
 const followUpRoutes = require("./routes/followUpRoutes");
 const salesTargetRoutes = require("./routes/salesTargetRoutes");
-const salesSubmissionRoutes = require("./routes/salesSubmissionRoutes");
+// Sales submission routes removed - using sales orders instead
 const productVideoRoutes = require("./routes/productVideoRoutes");
 
 // Mount routes
@@ -28,7 +28,7 @@ router.use("/tracking", trackingRoutes);
 router.use("/samples", sampleRoutes);
 router.use("/follow-ups", followUpRoutes);
 router.use("/sales-targets", salesTargetRoutes);
-router.use("/sales-submissions", salesSubmissionRoutes);
+// Sales submission routes removed - using sales orders instead
 router.use("/product-videos", productVideoRoutes);
 
 module.exports = router;

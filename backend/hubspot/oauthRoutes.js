@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config');
 const hubspotOAuthService = require('../services/hubspotOAuthService');
+const hubspotService = require('../services/hubspotService');
 
 // GET /api/hubspot/authorize
 // Redirects user to HubSpot authorize URL (OAuth)
@@ -80,6 +81,83 @@ router.get('/status', async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// GET /api/hubspot/deals?contactEmail=...
+// Fetch deals associated with a contact by email
+router.get('/deals', async (req, res) => {
+  try {
+    const { contactEmail } = req.query;
+    
+    if (!contactEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'contactEmail query parameter is required',
+      });
+    }
+
+    // Find contact by email
+    const contactId = await hubspotService.findContactByEmail(contactEmail);
+    
+    if (!contactId) {
+      return res.status(200).json({
+        success: true,
+        deals: [],
+        message: 'Contact not found in HubSpot',
+      });
+    }
+
+    // Fetch deals associated with this contact
+    const headers = await hubspotService.getHeaders();
+    if (!headers) {
+      return res.status(500).json({
+        success: false,
+        message: 'HubSpot authentication not configured',
+      });
+    }
+
+    const axios = require('axios');
+    const HUBSPOT_API_BASE = 'https://api.hubapi.com';
+
+    // Get associations: deals associated with this contact
+    const associationsRes = await axios.get(
+      `${HUBSPOT_API_BASE}/crm/v4/objects/contacts/${contactId}/associations/deals`,
+      { headers }
+    );
+
+    const dealIds = associationsRes.data?.results?.map(r => r.toObjectId) || [];
+
+    if (dealIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        deals: [],
+        message: 'No deals found for this contact',
+      });
+    }
+
+    // Fetch deal details
+    const dealsRes = await axios.post(
+      `${HUBSPOT_API_BASE}/crm/v3/objects/deals/batch/read`,
+      {
+        inputs: dealIds.map(id => ({ id })),
+        properties: ['dealname', 'amount', 'dealstage', 'pipeline', 'closedate', 'hs_createdate'],
+      },
+      { headers }
+    );
+
+    const deals = dealsRes.data?.results || [];
+
+    res.status(200).json({
+      success: true,
+      deals: deals,
+    });
+  } catch (e) {
+    console.error('Error fetching HubSpot deals:', e);
+    res.status(500).json({
+      success: false,
+      message: e.message || 'Error fetching deals from HubSpot',
+    });
   }
 });
 

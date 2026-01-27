@@ -14,13 +14,8 @@ import {
   FaFile,
   FaImage
 } from 'react-icons/fa'
-import { 
-  getSalesSubmissions, 
-  getSalesSubmission,
-  approveSalesSubmission,
-  rejectSalesSubmission,
-  getSalesSubmissionStats
-} from '../../services/adminservices/salesSubmissionService'
+// Sales submission service removed - using sales orders instead
+import { getSalesOrders, approveSalesOrder, rejectSalesOrder } from '../../services/adminservices/salesOrderService'
 import { getUsers } from '../../services/adminservices/userService'
 import Swal from 'sweetalert2'
 
@@ -56,37 +51,39 @@ const SalesSubmissions = () => {
     try {
       setLoading(true)
       const filterParams = {}
-      if (filters.salesman !== 'All') filterParams.salesman = filters.salesman
+      if (filters.salesman !== 'All') filterParams.salesPerson = filters.salesman
       if (filters.status !== 'All') filterParams.status = filters.status
       if (filters.fromDate) filterParams.fromDate = filters.fromDate
       if (filters.toDate) filterParams.toDate = filters.toDate
       if (filters.search) filterParams.search = filters.search
 
-      const result = await getSalesSubmissions(filterParams)
+      const result = await getSalesOrders(filterParams)
       if (result.success && result.data) {
-        let sorted = [...(result.data || [])]
+        // Map sales orders to match submission format for compatibility
+        const orders = result.data || []
+        let sorted = [...orders]
         sorted.sort((a, b) => {
           let aVal, bVal
           switch (sortField) {
             case 'submissionNumber':
-              aVal = a.submissionNumber || ''
-              bVal = b.submissionNumber || ''
+              aVal = a.soNumber || a.invoiceNumber || ''
+              bVal = b.soNumber || b.invoiceNumber || ''
               break
             case 'customerName':
               aVal = a.customerName || ''
               bVal = b.customerName || ''
               break
             case 'salesDate':
-              aVal = new Date(a.salesDate).getTime()
-              bVal = new Date(b.salesDate).getTime()
+              aVal = new Date(a.orderDate || a.createdAt).getTime()
+              bVal = new Date(b.orderDate || b.createdAt).getTime()
               break
             case 'salesAmount':
-              aVal = a.salesAmount || 0
-              bVal = b.salesAmount || 0
+              aVal = a.grandTotal || 0
+              bVal = b.grandTotal || 0
               break
             case 'approvalStatus':
-              aVal = a.approvalStatus || ''
-              bVal = b.approvalStatus || ''
+              aVal = a.orderStatus || ''
+              bVal = b.orderStatus || ''
               break
             default:
               aVal = new Date(a.createdAt).getTime()
@@ -109,9 +106,23 @@ const SalesSubmissions = () => {
 
   const loadStats = async () => {
     try {
-      const result = await getSalesSubmissionStats()
+      const result = await getSalesOrders()
       if (result.success && result.data) {
-        setStats(result.data)
+        const orders = result.data || []
+        // Calculate stats from sales orders
+        const totalOrders = orders.length
+        const confirmedOrders = orders.filter(o => o.orderStatus === 'Confirmed').length
+        const pendingOrders = orders.filter(o => o.orderStatus === 'Pending' || o.orderStatus === 'Draft').length
+        const totalAmount = orders
+          .filter(o => o.orderStatus === 'Confirmed')
+          .reduce((sum, o) => sum + (o.grandTotal || 0), 0)
+        
+        setStats({
+          total: totalOrders,
+          approved: confirmedOrders,
+          pending: pendingOrders,
+          totalAmount: totalAmount
+        })
       }
     } catch (error) {
       console.error('Error loading stats:', error)
@@ -159,7 +170,7 @@ const SalesSubmissions = () => {
 
     try {
       setLoading(true)
-      const result = await approveSalesSubmission(selectedSubmission._id, adminNotes)
+      const result = await approveSalesOrder(selectedSubmission._id)
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -206,7 +217,7 @@ const SalesSubmissions = () => {
 
     try {
       setLoading(true)
-      const result = await rejectSalesSubmission(selectedSubmission._id, rejectionReason, adminNotes)
+      const result = await rejectSalesOrder(selectedSubmission._id, rejectionReason)
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -288,7 +299,7 @@ const SalesSubmissions = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">Sales Submissions</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-1">Sales Orders</h2>
           <p className="text-sm text-gray-600">
             {loading ? 'Loading...' : `${submissions.length} records`}
           </p>
@@ -300,7 +311,7 @@ const SalesSubmissions = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Total Submissions</p>
+              <p className="text-sm text-gray-600">Total Orders</p>
               <FaFileInvoice className="w-5 h-5 text-blue-600" />
             </div>
             <p className="text-2xl font-bold text-blue-700">{stats.total || 0}</p>
@@ -314,7 +325,7 @@ const SalesSubmissions = () => {
           </div>
           <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Approved</p>
+              <p className="text-sm text-gray-600">Confirmed</p>
               <FaCheckCircle className="w-5 h-5 text-green-600" />
             </div>
             <p className="text-2xl font-bold text-green-700">{stats.approved || 0}</p>
@@ -324,7 +335,7 @@ const SalesSubmissions = () => {
               <p className="text-sm text-gray-600">Total Amount</p>
               <FaDollarSign className="w-5 h-5 text-orange-600" />
             </div>
-            <p className="text-2xl font-bold text-orange-700">£{stats.approvedAmount?.toLocaleString() || 0}</p>
+            <p className="text-2xl font-bold text-orange-700">£{stats.totalAmount?.toLocaleString() || 0}</p>
           </div>
         </div>
       )}
@@ -340,7 +351,7 @@ const SalesSubmissions = () => {
                 value={filters.search}
                 onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c] focus:border-transparent"
-                placeholder="Search submission number, customer name, email..."
+                placeholder="Search order number, customer name, email, invoice..."
               />
             </div>
           </div>
@@ -486,31 +497,39 @@ const SalesSubmissions = () => {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(submission.approvalStatus)}`}>
-                        {getStatusIcon(submission.approvalStatus)}
-                        {submission.approvalStatus}
-                      </span>
+                      {/* Show approval status if available, otherwise show order status */}
+                      {submission.approvalStatus ? (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(submission.approvalStatus)}`}>
+                          {getStatusIcon(submission.approvalStatus)}
+                          {submission.approvalStatus}
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(submission.orderStatus || 'Pending')}`}>
+                          {getStatusIcon(submission.orderStatus || 'Pending')}
+                          {submission.orderStatus || 'Pending'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm font-medium text-blue-600 hover:underline cursor-pointer">
-                        {submission.submissionNumber}
+                        {submission.soNumber || submission.invoiceNumber || 'N/A'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900">{submission.customerName}</p>
-                        {submission.customerEmail && (
-                          <p className="text-xs text-gray-500">{submission.customerEmail}</p>
+                        {submission.emailAddress && (
+                          <p className="text-xs text-gray-500">{submission.emailAddress}</p>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {submission.salesman && typeof submission.salesman === 'object' ? (
+                      {submission.salesPerson && typeof submission.salesPerson === 'object' ? (
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
                             <FaUser className="w-3 h-3 text-gray-600" />
                           </div>
-                          <span className="text-sm text-gray-900">{submission.salesman.name}</span>
+                          <span className="text-sm text-gray-900">{submission.salesPerson.name || submission.salesPerson}</span>
                         </div>
                       ) : (
                         <span className="text-sm text-gray-500">—</span>
@@ -519,12 +538,12 @@ const SalesSubmissions = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 text-sm text-gray-900">
                         <FaCalendarAlt className="w-3 h-3 text-gray-400" />
-                        {new Date(submission.salesDate).toLocaleDateString()}
+                        {submission.orderDate ? new Date(submission.orderDate).toLocaleDateString() : 'N/A'}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm font-semibold text-[#e9931c]">
-                        £{submission.salesAmount?.toLocaleString() || 0}
+                        £{submission.grandTotal?.toLocaleString() || 0}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -542,7 +561,8 @@ const SalesSubmissions = () => {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {submission.approvalStatus === 'Pending' && (
+                      {/* Show approve/reject buttons for pending orders */}
+                      {(submission.approvalStatus === 'Pending' || (!submission.approvalStatus && (submission.orderStatus === 'Pending' || submission.orderStatus === 'Draft'))) && (
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => openApproveModal(submission)}
@@ -558,9 +578,15 @@ const SalesSubmissions = () => {
                           </button>
                         </div>
                       )}
-                      {submission.approvalStatus !== 'Pending' && (
+                      {submission.approvalStatus === 'Approved' && (
+                        <span className="text-xs text-green-600 font-medium">Approved</span>
+                      )}
+                      {submission.approvalStatus === 'Rejected' && (
+                        <span className="text-xs text-red-600 font-medium">Rejected</span>
+                      )}
+                      {submission.approvalStatus !== 'Pending' && submission.approvalStatus !== 'Approved' && submission.approvalStatus !== 'Rejected' && (
                         <span className="text-xs text-gray-500">
-                          {submission.approvalStatus === 'Approved' ? 'Approved' : 'Rejected'}
+                          {submission.orderStatus === 'Confirmed' ? 'Confirmed' : submission.orderStatus || 'Draft'}
                         </span>
                       )}
                     </td>
@@ -576,16 +602,16 @@ const SalesSubmissions = () => {
       {showApproveModal && selectedSubmission && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Approve Sales Submission</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Approve Sales Order</h3>
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">
-                <strong>Submission:</strong> {selectedSubmission.submissionNumber}
+                <strong>Order Number:</strong> {selectedSubmission.soNumber || selectedSubmission.invoiceNumber || 'N/A'}
               </p>
               <p className="text-sm text-gray-600 mb-2">
                 <strong>Customer:</strong> {selectedSubmission.customerName}
               </p>
               <p className="text-sm text-gray-600 mb-2">
-                <strong>Amount:</strong> £{selectedSubmission.salesAmount?.toLocaleString() || 0}
+                <strong>Amount:</strong> £{selectedSubmission.grandTotal?.toLocaleString() || 0}
               </p>
             </div>
             <div className="mb-4">
@@ -637,16 +663,16 @@ const SalesSubmissions = () => {
       {showRejectModal && selectedSubmission && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Reject Sales Submission</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Reject Sales Order</h3>
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">
-                <strong>Submission:</strong> {selectedSubmission.submissionNumber}
+                <strong>Order Number:</strong> {selectedSubmission.soNumber || selectedSubmission.invoiceNumber || 'N/A'}
               </p>
               <p className="text-sm text-gray-600 mb-2">
                 <strong>Customer:</strong> {selectedSubmission.customerName}
               </p>
               <p className="text-sm text-gray-600 mb-2">
-                <strong>Amount:</strong> £{selectedSubmission.salesAmount?.toLocaleString() || 0}
+                <strong>Amount:</strong> £{selectedSubmission.grandTotal?.toLocaleString() || 0}
               </p>
             </div>
             <div className="mb-4">

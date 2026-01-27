@@ -69,7 +69,7 @@ const getFollowUps = async (req, res) => {
 
     const followUps = await FollowUp.find(filter)
       .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company')
+      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
       .populate('relatedQuotation', 'quotationNumber total')
       .populate('relatedSample', 'sampleNumber productName')
       .populate('visitTarget', 'name address')
@@ -97,7 +97,7 @@ const getFollowUp = async (req, res) => {
   try {
     const followUp = await FollowUp.findById(req.params.id)
       .populate('salesman', 'name email phone')
-      .populate('customer', 'name email phone address company city state')
+      .populate('customer', 'name email phone address company city state associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
       .populate('relatedQuotation', 'quotationNumber total status')
       .populate('relatedSample', 'sampleNumber productName status')
       .populate('visitTarget', 'name address city')
@@ -225,7 +225,7 @@ const createFollowUp = async (req, res) => {
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
       .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company')
+      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
       .populate('relatedQuotation', 'quotationNumber total')
       .populate('relatedSample', 'sampleNumber productName');
 
@@ -256,6 +256,9 @@ const updateFollowUp = async (req, res) => {
       description,
       notes,
       completedDate,
+      startedAt,
+      meterPicture,
+      meterReading,
     } = req.body;
 
     const followUp = await FollowUp.findById(req.params.id);
@@ -278,12 +281,96 @@ const updateFollowUp = async (req, res) => {
     if (dueDate) followUp.dueDate = dueDate;
     if (description !== undefined) followUp.description = description;
     if (notes !== undefined) followUp.notes = notes;
+    if (startedAt !== undefined) followUp.startedAt = startedAt ? new Date(startedAt) : null;
+    if (meterPicture !== undefined) followUp.meterPicture = meterPicture;
+    if (meterReading !== undefined) followUp.meterReading = meterReading;
 
     await followUp.save();
 
+    // Sync to HubSpot if task has hubspotTaskId (imported from HubSpot or already pushed)
+    if (followUp.hubspotTaskId && followUp.hubspotTaskId !== '' && followUp.hubspotTaskId !== null) {
+      try {
+        // Update task status in HubSpot when completed
+        if (status === 'Completed') {
+          await hubspotService.updateTaskObjectInHubSpot(followUp.hubspotTaskId, {
+            subject: followUp.description || `Follow-up: ${followUp.customerName}`,
+            body: followUp.notes || '',
+            status: 'COMPLETED', // HubSpot status for completed tasks
+            priority: followUp.priority || 'NONE',
+            type: followUp.hs_task_type || followUp.type || 'TODO',
+            dueDate: followUp.dueDate,
+          });
+          console.log(`✅ Task ${followUp.followUpNumber} marked as completed in HubSpot`);
+        } else {
+          // Update other status changes
+          await hubspotService.updateTaskObjectInHubSpot(followUp.hubspotTaskId, {
+            subject: followUp.description || `Follow-up: ${followUp.customerName}`,
+            body: followUp.notes || '',
+            status: 'NOT_STARTED',
+            priority: followUp.priority || 'NONE',
+            type: followUp.hs_task_type || followUp.type || 'TODO',
+            dueDate: followUp.dueDate,
+          });
+        }
+      } catch (e) {
+        console.error('Error syncing task update to HubSpot:', e);
+        // Don't fail the request if HubSpot sync fails
+      }
+    }
+
+    // Sync activities (notes with Email/Call/Meeting) to HubSpot if task is linked
+    if (notes && followUp.hubspotTaskId && followUp.hubspotTaskId !== '' && followUp.hubspotTaskId !== null) {
+      try {
+        // Extract latest activity from notes
+        const notesLines = notes.split('\n').filter(line => line.trim());
+        if (notesLines.length > 0) {
+          const latestNote = notesLines[notesLines.length - 1];
+          
+          // Check if it's an activity (Email, Call, Meeting, Note)
+          if (latestNote.includes('Email:') || latestNote.includes('Call:') || latestNote.includes('Meeting:') || latestNote.includes('Note:')) {
+            // Get customer email to find HubSpot contact
+            const customerEmail = followUp.customerEmail || 
+                                 (followUp.customer && typeof followUp.customer === 'object' ? followUp.customer.email : '') ||
+                                 followUp.associatedContactEmail;
+            
+            if (customerEmail) {
+              // Find HubSpot contact ID
+              const contactId = await hubspotService.findContactByEmail(customerEmail);
+              
+              if (contactId) {
+                // Determine activity type
+                let activityType = 'NOTE';
+                if (latestNote.includes('Email:')) activityType = 'EMAIL';
+                else if (latestNote.includes('Call:')) activityType = 'CALL';
+                else if (latestNote.includes('Meeting:')) activityType = 'MEETING';
+                
+                // Create timeline event in HubSpot
+                if (activityType === 'EMAIL' || activityType === 'CALL') {
+                  await hubspotService.createTimelineEvent(
+                    contactId,
+                    activityType,
+                    latestNote.includes('Email:') ? 'Email Sent' : 'Call Made',
+                    latestNote,
+                    {}
+                  );
+                  console.log(`✅ ${activityType} activity synced to HubSpot for contact: ${contactId}`);
+                } else if (activityType === 'NOTE') {
+                  await hubspotService.createNote(contactId, latestNote, 'GENERAL');
+                  console.log(`✅ Note synced to HubSpot for contact: ${contactId}`);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error syncing activity to HubSpot:', e);
+        // Don't fail the request if HubSpot sync fails
+      }
+    }
+
     const populatedFollowUp = await FollowUp.findById(followUp._id)
       .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company')
+      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
       .populate('relatedQuotation', 'quotationNumber total')
       .populate('relatedSample', 'sampleNumber productName');
 
@@ -393,7 +480,7 @@ const approveFollowUp = async (req, res) => {
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
       .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company')
+      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
       .populate('approvedBy', 'name email')
       .populate('createdBy', 'name email role');
 
@@ -505,6 +592,9 @@ const pushToHubSpot = async (req, res) => {
 
     let hubspotTaskId = followUp.hubspotTaskId;
     
+    // Get task type from followUp (will be mapped to HubSpot format in hubspotService)
+    const taskType = followUp.hs_task_type || followUp.type || 'TODO';
+    
     // If task already exists in HubSpot (admin-created task with hubspotTaskId), update it
     if (hubspotTaskId && isAdminCreated) {
       const updated = await hubspotService.updateTaskObjectInHubSpot(hubspotTaskId, {
@@ -512,7 +602,7 @@ const pushToHubSpot = async (req, res) => {
         body,
         status: 'NOT_STARTED',
         priority: hsPriority,
-        type: 'TODO',
+        type: taskType, // Use actual task type (will be mapped to HubSpot format)
         dueDate: followUp.dueDate,
       });
       
@@ -531,7 +621,7 @@ const pushToHubSpot = async (req, res) => {
         body,
         status: 'NOT_STARTED',
         priority: hsPriority,
-        type: 'TODO',
+        type: taskType, // Use actual task type (will be mapped to HubSpot format)
         dueDate: followUp.dueDate,
       });
 
@@ -552,7 +642,7 @@ const pushToHubSpot = async (req, res) => {
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
       .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company');
+      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement');
 
     res.status(200).json({
       success: true,
@@ -598,7 +688,7 @@ const rejectFollowUp = async (req, res) => {
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
       .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company')
+      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
       .populate('approvedBy', 'name email');
 
     res.status(200).json({

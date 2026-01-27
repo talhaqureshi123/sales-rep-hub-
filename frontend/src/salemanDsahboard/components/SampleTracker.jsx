@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
-import { FaFlask, FaSearch, FaEdit, FaTrash, FaEye, FaCheckCircle, FaClock, FaBox, FaPlus } from 'react-icons/fa'
-import { getSamples, getSample, createSample, updateSample, deleteSample } from '../../services/adminservices/sampleService'
-import { getUsers } from '../../services/adminservices/userService'
-import { getCustomers } from '../../services/adminservices/customerService'
-import { getProducts } from '../../services/adminservices/productService'
+import { FaFlask, FaSearch, FaEdit, FaEye, FaCheckCircle, FaClock, FaBox, FaPlus } from 'react-icons/fa'
+import { getMySamples, getSample, createSample, updateSample } from '../../services/salemanservices/sampleService'
+import { getMyCustomers } from '../../services/salemanservices/customerService'
+import { getMyProducts } from '../../services/salemanservices/productService'
 import Swal from 'sweetalert2'
 
 const SampleTracker = () => {
@@ -14,7 +13,6 @@ const SampleTracker = () => {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedSample, setSelectedSample] = useState(null)
-  const [salesmen, setSalesmen] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
 
@@ -32,7 +30,6 @@ const SampleTracker = () => {
   })
 
   const [createFormData, setCreateFormData] = useState({
-    salesman: '',
     customer: '',
     customerName: '',
     customerEmail: '',
@@ -41,7 +38,6 @@ const SampleTracker = () => {
     productName: '',
     productCode: '',
     quantity: 1,
-    visitTarget: '',
     visitDate: new Date().toISOString().split('T')[0],
     expectedDate: '',
     notes: '',
@@ -49,7 +45,6 @@ const SampleTracker = () => {
 
   useEffect(() => {
     loadSamples()
-    loadSalesmen()
     loadCustomers()
     loadProducts()
   }, [selectedStatus])
@@ -61,20 +56,9 @@ const SampleTracker = () => {
     return () => clearTimeout(timeoutId)
   }, [searchTerm])
 
-  const loadSalesmen = async () => {
-    try {
-      const result = await getUsers({ role: 'salesman' })
-      if (result.success && result.data) {
-        setSalesmen(result.data)
-      }
-    } catch (error) {
-      console.error('Error loading salesmen:', error)
-    }
-  }
-
   const loadCustomers = async () => {
     try {
-      const result = await getCustomers()
+      const result = await getMyCustomers()
       if (result.success && result.data) {
         setCustomers(result.data)
       }
@@ -85,7 +69,7 @@ const SampleTracker = () => {
 
   const loadProducts = async () => {
     try {
-      const result = await getProducts()
+      const result = await getMyProducts()
       if (result.success && result.data) {
         setProducts(result.data)
       }
@@ -97,7 +81,7 @@ const SampleTracker = () => {
   const loadSamples = async () => {
     setLoading(true)
     try {
-      const result = await getSamples({
+      const result = await getMySamples({
         status: selectedStatus !== 'All' ? selectedStatus : undefined,
         search: searchTerm || undefined,
       })
@@ -106,7 +90,6 @@ const SampleTracker = () => {
       } else {
         console.error('Error loading samples:', result.message)
         setSamples([])
-        // Show error alert only if it's not a "no data" case
         if (result.message && !result.message.toLowerCase().includes('not found')) {
           Swal.fire({
             icon: 'error',
@@ -175,11 +158,11 @@ const SampleTracker = () => {
 
   const handleCreateSample = async (e) => {
     e.preventDefault()
-    if (!createFormData.salesman || !createFormData.customerName || !createFormData.productName) {
+    if (!createFormData.customerName || !createFormData.productName) {
       Swal.fire({
         icon: 'warning',
         title: 'Required Fields Missing',
-        text: 'Please fill in all required fields (Salesman, Customer Name, Product Name)',
+        text: 'Please fill in all required fields (Customer Name, Product Name)',
         confirmButtonColor: '#e9931c',
       })
       return
@@ -221,7 +204,6 @@ const SampleTracker = () => {
 
   const resetCreateForm = () => {
     setCreateFormData({
-      salesman: '',
       customer: '',
       customerName: '',
       customerEmail: '',
@@ -230,7 +212,6 @@ const SampleTracker = () => {
       productName: '',
       productCode: '',
       quantity: 1,
-      visitTarget: '',
       visitDate: new Date().toISOString().split('T')[0],
       expectedDate: '',
       notes: '',
@@ -311,54 +292,6 @@ const SampleTracker = () => {
     }
   }
 
-  const handleDeleteSample = async (sampleId) => {
-    const confirmResult = await Swal.fire({
-      icon: 'warning',
-      title: 'Delete Sample?',
-      text: 'Are you sure you want to delete this sample? This action cannot be undone.',
-      showCancelButton: true,
-      confirmButtonText: 'Yes, Delete',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#6b7280',
-    })
-
-    if (!confirmResult.isConfirmed) {
-      return
-    }
-
-    setLoading(true)
-    try {
-      const result = await deleteSample(sampleId)
-      if (result.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Deleted!',
-          text: 'Sample deleted successfully!',
-          confirmButtonColor: '#e9931c',
-        })
-        loadSamples()
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Failed',
-          text: result.message || 'Error deleting sample',
-          confirmButtonColor: '#e9931c',
-        })
-      }
-    } catch (error) {
-      console.error('Error deleting sample:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error deleting sample',
-        confirmButtonColor: '#e9931c',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleViewSample = async (sampleId) => {
     try {
       const result = await getSample(sampleId)
@@ -400,7 +333,6 @@ const SampleTracker = () => {
   }
 
   const getStatusColor = (sample) => {
-    // Check if sample is overdue
     const isOverdue = checkIfOverdue(sample)
     if (isOverdue) {
       return 'bg-red-100 text-red-800'
@@ -420,7 +352,6 @@ const SampleTracker = () => {
 
   const checkIfOverdue = (sample) => {
     if (!sample.expectedDate && !sample.receivedDate) {
-      // If no expected date, check if visitDate is more than 7 days old and status is still Pending
       if (sample.status === 'Pending' && sample.visitDate) {
         const visitDate = new Date(sample.visitDate)
         const daysSinceVisit = (new Date() - visitDate) / (1000 * 60 * 60 * 24)
@@ -432,7 +363,6 @@ const SampleTracker = () => {
     const expectedDate = sample.expectedDate ? new Date(sample.expectedDate) : (sample.receivedDate ? new Date(sample.receivedDate) : null)
     if (!expectedDate) return false
     
-    // If status is still Pending and expected date has passed
     if (sample.status === 'Pending' && expectedDate < new Date()) {
       return true
     }
@@ -470,7 +400,7 @@ const SampleTracker = () => {
           <FaFlask className="w-8 h-8 text-[#e9931c]" />
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Sample Tracker</h1>
-            <p className="text-gray-600">Track samples and customer feedback.</p>
+            <p className="text-gray-600">Track your samples and customer feedback.</p>
           </div>
         </div>
         <button
@@ -523,7 +453,7 @@ const SampleTracker = () => {
         <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
           <FaFlask className="w-24 h-24 text-gray-300 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-800 mb-2">No samples found</h3>
-          <p className="text-gray-600">Samples will appear here when you log visits with samples.</p>
+          <p className="text-gray-600">Create your first sample to get started</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -536,7 +466,7 @@ const SampleTracker = () => {
             return (
               <div
                 key={sample._id || sample.id}
-                className="bg-white border-l-4 border-red-500 rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden"
+                className={`bg-white border-l-4 ${isOverdue ? 'border-red-500' : 'border-[#e9931c]'} rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden`}
               >
                 <div className="p-5">
                   {/* Customer Name as Heading */}
@@ -582,13 +512,23 @@ const SampleTracker = () => {
                     </div>
                   )}
                   
-                  {/* Delete Button */}
-                  <button
-                    onClick={() => handleDeleteSample(sample._id || sample.id)}
-                    className="w-full mt-4 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
-                  >
-                    Delete Sample
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => handleViewSample(sample._id || sample.id)}
+                      className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors text-sm flex items-center justify-center gap-1"
+                    >
+                      <FaEye className="w-3 h-3" />
+                      View
+                    </button>
+                    <button
+                      onClick={() => handleEditSample(sample._id || sample.id)}
+                      className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors text-sm flex items-center justify-center gap-1"
+                    >
+                      <FaEdit className="w-3 h-3" />
+                      Edit
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -722,23 +662,6 @@ const SampleTracker = () => {
             </div>
             <form onSubmit={handleCreateSample} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Salesman *</label>
-                  <select
-                    name="salesman"
-                    value={createFormData.salesman}
-                    onChange={handleCreateInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  >
-                    <option value="">Select Salesman</option>
-                    {salesmen.map((salesman) => (
-                      <option key={salesman._id} value={salesman._id}>
-                        {salesman.name || salesman.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
                   <select

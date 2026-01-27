@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { getVisitTargets, createVisitTarget, updateVisitTarget, deleteVisitTarget } from '../../services/adminservices/visitTargetService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getCustomers } from '../../services/adminservices/customerService'
-import { FaEdit, FaTrash } from 'react-icons/fa'
+import { FaEdit, FaTrash, FaCheckCircle, FaSpinner, FaCalendarAlt, FaChevronDown } from 'react-icons/fa'
+import Swal from 'sweetalert2'
+import appTheme from '../../apptheme/apptheme'
 
 const AssignTarget = () => {
   const [visitTargets, setVisitTargets] = useState([])
@@ -76,8 +78,14 @@ const AssignTarget = () => {
       const result = await getVisitTargets(params)
       console.log('AssignTarget - Load result:', result)
       if (result.success && result.data) {
-        console.log('AssignTarget - Setting visit targets:', result.data.length, result.data)
-        setVisitTargets(result.data)
+        // Filter out admin-created visit targets (only show salesman-created visit targets)
+        const filteredTargets = result.data.filter(target => {
+          // Exclude visit targets created by admin
+          const createdByRole = target.createdBy?.role
+          return createdByRole !== 'admin'
+        })
+        console.log('AssignTarget - Filtered visit targets (excluding admin-created):', filteredTargets.length, filteredTargets)
+        setVisitTargets(filteredTargets)
       } else {
         console.error('Failed to load visit targets:', result.message)
         setError(result.message || 'Failed to load visit targets')
@@ -568,6 +576,93 @@ const AssignTarget = () => {
     }
   }
 
+  const handleApprove = async (target) => {
+    if (!target?._id) return
+    setLoading(true)
+    try {
+      const result = await updateVisitTarget(target._id, { approvalStatus: 'Approved' })
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Approved!',
+          text: 'Visit target has been approved.',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
+        loadVisitTargets()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to approve visit target',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Approve error:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error approving visit target',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleReject = async (target) => {
+    if (!target?._id) return
+    
+    const { value: reason, isConfirmed } = await Swal.fire({
+      title: 'Reject Visit Request',
+      text: 'Enter rejection reason (optional):',
+      input: 'text',
+      inputPlaceholder: 'Enter reason...',
+      showCancelButton: true,
+      confirmButtonText: 'Reject',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+
+    if (!isConfirmed) return
+
+    setLoading(true)
+    try {
+      const result = await updateVisitTarget(target._id, { approvalStatus: 'Rejected', rejectionReason: reason })
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Rejected!',
+          text: 'Visit target has been rejected.',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
+        loadVisitTargets()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to reject visit target',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Reject error:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error rejecting visit target',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const resetForm = () => {
     setEditingTarget(null)
     setSelectedCustomer(null)
@@ -592,14 +687,49 @@ const AssignTarget = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Completed':
+      case 'Approved':
         return 'bg-green-100 text-green-800'
-      case 'In Progress':
-        return 'bg-blue-100 text-blue-800'
-      case 'Cancelled':
+      case 'Reject':
         return 'bg-red-100 text-red-800'
+      case 'In Screening':
+        return 'bg-blue-100 text-blue-800'
       default:
         return 'bg-yellow-100 text-yellow-800'
+    }
+  }
+
+  const handleUpdateStatus = async (id, newStatus) => {
+    setLoading(true)
+    try {
+      const result = await updateVisitTarget(id, { status: newStatus })
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Status Updated!',
+          text: `Visit status updated to ${newStatus}`,
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
+        loadVisitTargets()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to update status',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error updating status:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating status',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -620,27 +750,14 @@ const AssignTarget = () => {
   }, [])
 
   return (
-    <div className="w-full">
-      <div className="rounded-lg p-6">
+    <div className="w-full" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+      <div className="rounded-lg p-6" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">Assign Target</h2>
-            <p className="text-gray-600 mt-1">Assign visit targets to salesmen</p>
+            <p className="text-gray-600 mt-1">Manage visit targets assigned to salesmen. Create visit targets from Tasks page by creating a "Visit" type task.</p>
           </div>
-          <button
-            onClick={() => {
-              resetForm()
-              setShowAddForm(true)
-            }}
-            className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-2"
-            title="Add Visit Target"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Add Target</span>
-          </button>
         </div>
 
         {/* Filters */}
@@ -685,10 +802,9 @@ const AssignTarget = () => {
               className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
             >
               <option value="">All Status</option>
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              <option value="Approved">Approved</option>
+              <option value="Reject">Reject</option>
+              <option value="In Screening">In Screening</option>
             </select>
           </div>
           <div>
@@ -723,8 +839,8 @@ const AssignTarget = () => {
           </div>
         </div>
 
-        {/* Add/Edit Form */}
-        {showAddForm && (
+        {/* Add/Edit Form - Hidden: Visit targets should be created from Tasks page */}
+        {false && showAddForm && (
           <div className="bg-white rounded-lg p-6 mb-6 border-2 border-[#e9931c]">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
               {editingTarget ? 'Edit Visit Target' : 'Add New Visit Target'}
@@ -1033,89 +1149,185 @@ const AssignTarget = () => {
             </div>
           )}
 
-          {loading && visitTargets.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border-2 border-gray-200">
-              <p className="text-gray-600">Loading visit targets...</p>
-            </div>
-          ) : visitTargets.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border-2 border-gray-200">
-              <p className="text-gray-600">No visit targets found. Add your first visit target!</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-full">
-                <thead>
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Name</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Salesman</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Location</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Priority</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Visit Date</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visitTargets.map((target) => (
-                    <tr key={target._id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
-                      <td className="py-4 px-4">
-                        <div className="font-semibold text-gray-800">{target.name}</div>
-                        {target.description && (
-                          <div className="text-sm text-gray-500">{target.description}</div>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="font-medium text-gray-800">
-                          {target.salesman?.name || 'N/A'}
-                        </div>
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="text-sm text-gray-800">
-                          {target.address || `${target.latitude}, ${target.longitude}`}
-                        </div>
-                        {(target.city || target.state) && (
-                          <div className="text-xs text-gray-500">
-                            {[target.city, target.state].filter(Boolean).join(', ')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getPriorityColor(target.priority)}`}>
-                          {target.priority}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(target.status)}`}>
-                          {target.status}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-sm text-gray-700">
-                        {target.visitDate ? new Date(target.visitDate).toLocaleDateString() : 'N/A'}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditTarget(target)}
-                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                            title="Edit"
-                          >
-                              <FaEdit className="w-5 h-5 text-blue-600" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTarget(target._id)}
-                            className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                            title="Delete"
-                          >
-                              <FaTrash className="w-5 h-5 text-red-600" />
-                          </button>
-                        </div>
-                      </td>
+          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: appTheme.background.white, boxShadow: appTheme.shadow.md }}>
+            {loading && visitTargets.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <FaSpinner className="animate-spin" style={{ color: appTheme.primary.main }} size={32} />
+              </div>
+            ) : visitTargets.length === 0 ? (
+              <div className="text-center py-12">
+                <FaCalendarAlt className="mx-auto mb-4" style={{ color: appTheme.text.light }} size={48} />
+                <p className="font-medium" style={{ color: appTheme.text.secondary }}>No visit targets found</p>
+                <p className="text-sm mt-2" style={{ color: appTheme.text.tertiary }}>
+                  Add your first visit target to get started
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto" style={{ maxWidth: '100%' }}>
+                <table className="w-full border-collapse" style={{ minWidth: '1200px' }}>
+                  <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                        NAME
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[150px]" style={{ color: appTheme.text.secondary }}>
+                        SALESMAN
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[200px]" style={{ color: appTheme.text.secondary }}>
+                        LOCATION
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                        PRIORITY
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                        STATUS
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                        VISIT DATE
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                        APPROVAL
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 z-10" style={{ color: appTheme.text.secondary }}>
+                        ACTIONS
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody className="bg-white divide-y" style={{ borderColor: appTheme.border.light }}>
+                    {visitTargets.map((target) => (
+                      <tr key={target._id} className="hover:bg-blue-50 transition-colors border-b border-gray-100">
+                        <td className="px-4 py-3">
+                          <div className="min-w-[200px]">
+                            <div className="font-semibold" style={{ color: appTheme.text.primary }}>{target.name}</div>
+                            {target.targetName && target.targetName !== target.name && (
+                              <div className="text-sm font-medium mt-1" style={{ color: '#9333ea' }}>Target: {target.targetName}</div>
+                            )}
+                            {target.customerName && target.customerName !== target.name && (
+                              <div className="text-sm font-medium mt-1" style={{ color: appTheme.status.info.main }}>Customer: {target.customerName}</div>
+                            )}
+                            {target.description && (
+                              <div className="text-sm mt-1" style={{ color: appTheme.text.tertiary }}>{target.description}</div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium" style={{ color: appTheme.text.secondary }}>
+                            {target.salesman?.name || '—'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm" style={{ color: appTheme.text.secondary }}>
+                            {target.address || `${target.latitude}, ${target.longitude}`}
+                          </div>
+                          {(target.city || target.state) && (
+                            <div className="text-xs mt-1" style={{ color: appTheme.text.tertiary }}>
+                              {[target.city, target.state].filter(Boolean).join(', ')}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(target.priority)}`}>
+                            {target.priority}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              // Cycle through: Approved -> Reject -> In Screening -> Approved
+                              const statusOrder = ['Approved', 'Reject', 'In Screening']
+                              const currentStatus = target.status || 'Approved'
+                              const currentIndex = statusOrder.indexOf(currentStatus) >= 0 ? statusOrder.indexOf(currentStatus) : 0
+                              const nextIndex = (currentIndex + 1) % statusOrder.length
+                              const newStatus = statusOrder[nextIndex]
+                              
+                              handleUpdateStatus(target._id, newStatus)
+                            }}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all hover:opacity-80 ${getStatusColor(target.status || 'Approved')}`}
+                            title={`Current status: ${target.status || 'Approved'}. Click to change.`}
+                          >
+                            {target.status === 'Approved' && '✓ '}
+                            {target.status || 'Approved'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm whitespace-nowrap" style={{ color: appTheme.text.secondary }}>
+                            {target.visitDate ? new Date(target.visitDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (target.approvalStatus === 'Approved') {
+                                  Swal.fire({
+                                    icon: 'info',
+                                    title: 'Already Approved',
+                                    text: `This visit was approved on ${target.approvedAt ? new Date(target.approvedAt).toLocaleDateString() : 'N/A'}`,
+                                    confirmButtonColor: '#e9931c'
+                                  })
+                                } else {
+                                  handleApprove(target)
+                                }
+                              }}
+                              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold uppercase tracking-wide transition-all hover:opacity-90 ${
+                                target.approvalStatus === 'Approved'
+                                  ? 'bg-green-500 text-white'
+                                  : target.approvalStatus === 'Rejected'
+                                    ? 'bg-red-500 text-white'
+                                    : 'bg-yellow-500 text-white'
+                              }`}
+                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                            >
+                              <span>{target.approvalStatus || 'Pending'}</span>
+                              <FaChevronDown className="w-3 h-3" />
+                              <div className="ml-1 w-4 h-4 bg-white bg-opacity-30 rounded flex items-center justify-center">
+                                <FaCheckCircle className="w-3 h-3 text-white" />
+                              </div>
+                            </button>
+                            {target.approvalStatus === 'Pending' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleReject(target)
+                                }}
+                                className="ml-2 px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                                title="Reject"
+                              >
+                                Reject
+                              </button>
+                            )}
+                          </div>
+                          {target.approvalStatus === 'Rejected' && target.rejectionReason && (
+                            <div className="text-xs mt-1" style={{ color: appTheme.text.tertiary }}>Reason: {target.rejectionReason}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right sticky right-0 bg-white z-10" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleEditTarget(target)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Edit"
+                            >
+                              <FaEdit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTarget(target._id)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Delete"
+                            >
+                              <FaTrash className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Map Picker Modal */}

@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
-import { 
-  FaCheckCircle, 
-  FaClock, 
-  FaExclamationTriangle, 
-  FaPlus, 
-  FaSearch, 
+import { useState, useEffect, useMemo, useRef } from 'react'
+import {
+  FaCheckCircle,
+  FaClock,
+  FaExclamationTriangle,
+  FaPlus,
+  FaSearch,
   FaSpinner,
   FaCalendarAlt,
   FaUser,
@@ -21,10 +21,12 @@ import {
   FaChevronDown,
   FaStickyNote,
   FaChevronRight,
-  FaEllipsisH
+  FaEllipsisH,
+  FaFlask
 } from 'react-icons/fa'
 import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp } from '../../services/salemanservices/followUpService'
-import { getMyCustomers } from '../../services/salemanservices/customerService'
+import { getMyCustomers, getCustomer } from '../../services/salemanservices/customerService'
+import { getMySamples } from '../../services/salemanservices/sampleService'
 import appTheme from '../../apptheme/apptheme'
 import Swal from 'sweetalert2'
 
@@ -36,7 +38,8 @@ const TABS = [
   { id: 'Completed', label: 'Completed' },
 ]
 
-const TASK_TYPES = ['Call', 'Visit', 'Email', 'Quote Follow-up', 'Sample Feedback', 'Order Check']
+// Task types for salesman - only Follow-up and Sample Track
+const TASK_TYPES = ['Follow-up', 'Sample Track']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
 
 const Tasks = () => {
@@ -63,13 +66,19 @@ const Tasks = () => {
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
-  
+  const [taskCustomerDetails, setTaskCustomerDetails] = useState(null) // Full customer details for selected task
+  const [taskActivities, setTaskActivities] = useState([]) // Activities/notes for selected task
+  const [taskSamples, setTaskSamples] = useState([]) // Samples for selected task
+  const [noteInput, setNoteInput] = useState('') // Input for quick note typing
+  const noteInputRef = useRef(null) // Ref for note input field
+  const [activitiesSearch, setActivitiesSearch] = useState('') // Search filter for activities
+
   const [formData, setFormData] = useState({
     customer: '',
     customerName: '',
     customerEmail: '',
     customerPhone: '',
-    type: 'Call',
+    type: 'Follow-up',
     priority: 'Medium',
     dueDate: '',
     dueTime: '09:00',
@@ -79,6 +88,51 @@ const Tasks = () => {
 
   const filtered = useMemo(() => {
     let list = tasks
+    
+    // Get current salesman's assigned customer IDs
+    const assignedCustomerIds = customers.map(c => c._id || c.id).filter(id => id)
+    const assignedCustomerEmails = customers.map(c => (c.email || '').toLowerCase()).filter(email => email)
+    const assignedCustomerNames = customers.map(c => (c.name || c.firstName || '').toLowerCase()).filter(name => name)
+    
+    // Filter tasks to show only those related to salesman's assigned customers
+    list = list.filter((t) => {
+      // Exclude HubSpot imported tasks
+      const isHubSpotImported = t.source === 'hubspot' || 
+                                 (t.hubspotTaskId && t.hubspotTaskId !== '' && t.hubspotTaskId !== null) ||
+                                 (t.description || '').toLowerCase().includes('hubspot task')
+      
+      if (isHubSpotImported) return false
+      
+      // Only show tasks that are:
+      // 1. Created by admin (admin assigned) AND approved AND customer is assigned to salesman
+      // 2. OR created by salesman but approved
+      const createdByRole = t.createdBy?.role
+      const isAdminCreated = createdByRole === 'admin'
+      const isApproved = t.approvalStatus === 'Approved'
+      
+      // Check if task's customer is assigned to this salesman
+      const taskCustomerId = t.customer?._id || t.customer || null
+      const taskCustomerEmail = (t.customerEmail || '').toLowerCase()
+      const taskCustomerName = (t.customerName || '').toLowerCase()
+      
+      const isCustomerAssigned = 
+        (taskCustomerId && assignedCustomerIds.some(id => id.toString() === taskCustomerId.toString())) ||
+        (taskCustomerEmail && assignedCustomerEmails.includes(taskCustomerEmail)) ||
+        (taskCustomerName && assignedCustomerNames.some(name => taskCustomerName.includes(name) || name.includes(taskCustomerName)))
+      
+      // Show if:
+      // - Admin created, approved, AND customer is assigned to salesman
+      // - OR salesman created and approved
+      if (isAdminCreated && isApproved) {
+        return isCustomerAssigned
+      }
+      if (createdByRole === 'salesman' && isApproved) {
+        return true
+      }
+      
+      return false
+    })
+    
     if (activeTab !== 'All') {
       list = list.filter((t) => t.status === activeTab)
     }
@@ -107,12 +161,12 @@ const Tasks = () => {
       tomorrow.setDate(tomorrow.getDate() + 1)
       const nextWeek = new Date(today)
       nextWeek.setDate(nextWeek.getDate() + 7)
-      
+
       list = list.filter(t => {
         if (!t.dueDate) return false
         const dueDate = new Date(t.dueDate)
         dueDate.setHours(0, 0, 0, 0)
-        
+
         switch (activeFilters.dueDateRange) {
           case 'today':
             return dueDate.getTime() === today.getTime()
@@ -189,17 +243,26 @@ const Tasks = () => {
         ? new Date(`${formData.dueDate}T${formData.dueTime}`)
         : new Date()
 
+      // Map task type to backend enum values
+      const mapTaskType = (type) => {
+        const typeLower = (type || '').toLowerCase().trim()
+        if (typeLower === 'follow-up' || typeLower === 'follow up' || typeLower.includes('follow')) return 'Call'
+        if (typeLower === 'sample track' || typeLower.includes('sample')) return 'Sample Feedback'
+        return 'Call' // Default fallback
+      }
+
       const taskData = {
         customer: formData.customer || undefined,
         customerName: formData.customerName,
         customerEmail: formData.customerEmail || undefined,
         customerPhone: formData.customerPhone || undefined,
-        type: formData.type,
+        type: mapTaskType(formData.type), // Map to backend enum value
         priority: formData.priority,
         scheduledDate: dueDateTime,
         dueDate: dueDateTime,
         description: formData.description || `Follow up with ${formData.customerName}`,
         notes: formData.notes || undefined,
+        approvalStatus: 'Pending', // Salesman-created tasks need admin approval
       }
 
       const res = await createFollowUp(taskData)
@@ -207,7 +270,7 @@ const Tasks = () => {
         Swal.fire({
           icon: 'success',
           title: 'Task Created!',
-          text: 'Task created successfully! It is pending admin approval. Once approved, it will be posted to HubSpot.',
+          text: 'Task created successfully! It is pending admin approval. Once approved by admin, it will appear in your tasks list.',
           confirmButtonColor: '#e9931c'
         })
         setShowCreateForm(false)
@@ -234,6 +297,96 @@ const Tasks = () => {
         // Find current task index in filtered list
         const index = filtered.findIndex(t => t._id === task._id)
         setCurrentTaskIndex(index >= 0 ? index : 0)
+        
+        // Load customer details if customer ID exists
+        if (res.data.customer) {
+          try {
+            const customerId = typeof res.data.customer === 'object' ? res.data.customer._id : res.data.customer
+            if (customerId) {
+              const customerRes = await getCustomer(customerId)
+              if (customerRes.success) {
+                setTaskCustomerDetails(customerRes.data)
+              } else {
+                setTaskCustomerDetails(null)
+              }
+            }
+          } catch (e) {
+            console.error('Error loading customer details:', e)
+            setTaskCustomerDetails(null)
+          }
+        } else {
+          setTaskCustomerDetails(null)
+        }
+        
+        // Parse activities from notes
+        if (res.data.notes) {
+          try {
+            const notesLines = res.data.notes.split('\n').filter(line => line.trim())
+            const parsedActivities = []
+            
+            notesLines.forEach(line => {
+              // Match pattern: [DD/MM/YYYY, HH:MM:SS] Type: Content
+              const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
+              if (match) {
+                const [, dateStr, timeStr, type, content] = match
+                try {
+                  const [day, month, year] = dateStr.split('/')
+                  const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
+                  parsedActivities.push({
+                    type: type,
+                    content: content,
+                    date: dateTime,
+                    dateStr: dateStr,
+                    timeStr: timeStr
+                  })
+                } catch (e) {
+                  parsedActivities.push({
+                    type: type,
+                    content: content,
+                    date: new Date(),
+                    dateStr: dateStr,
+                    timeStr: timeStr
+                  })
+                }
+              }
+            })
+            
+            // Sort by date (newest first)
+            parsedActivities.sort((a, b) => {
+              return b.date.getTime() - a.date.getTime()
+            })
+            
+            setTaskActivities(parsedActivities)
+          } catch (e) {
+            console.error('Error parsing activities:', e)
+            setTaskActivities([])
+          }
+        } else {
+          setTaskActivities([])
+        }
+        
+        // Load samples for this customer
+        try {
+          const customerId = typeof res.data.customer === 'object' ? res.data.customer._id : res.data.customer
+          if (customerId) {
+            const samplesRes = await getMySamples({})
+            if (samplesRes.success && samplesRes.data) {
+              // Filter samples that match customer
+              const matchingSamples = samplesRes.data.filter(s => {
+                const sampleCustomerId = typeof s.customer === 'object' ? s.customer._id : s.customer
+                return sampleCustomerId && customerId.toString() === sampleCustomerId.toString()
+              })
+              setTaskSamples(matchingSamples)
+            } else {
+              setTaskSamples([])
+            }
+          } else {
+            setTaskSamples([])
+          }
+        } catch (e) {
+          console.error('Error loading samples:', e)
+          setTaskSamples([])
+        }
       }
     } catch (e) {
       console.error(e)
@@ -261,15 +414,60 @@ const Tasks = () => {
   }
 
   const handleCompleteTask = async (taskId) => {
-    if (!window.confirm('Mark this task as completed?')) return
-    
+    const result = await Swal.fire({
+      title: 'Mark as Completed?',
+      text: 'Are you sure you want to mark this task as completed?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Yes, Complete',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        container: 'swal2-container-custom',
+        popup: 'swal2-popup-custom'
+      },
+      didOpen: () => {
+        // Ensure SweetAlert appears on top
+        const swalContainer = document.querySelector('.swal2-container')
+        if (swalContainer) {
+          swalContainer.style.zIndex = '99999'
+        }
+      }
+    })
+    if (!result.isConfirmed) return
+
     try {
       const res = await updateMyFollowUp(taskId, {
         status: 'Completed',
         completedDate: new Date(),
       })
       if (res.success) {
+        // Reload task details to get updated status
+        const updatedRes = await getMyFollowUp(taskId)
+        if (updatedRes.success) {
+          setSelectedTask(updatedRes.data)
+        }
         await loadTasks()
+        Swal.fire({
+          icon: 'success',
+          title: 'Task Completed!',
+          text: 'Task has been marked as completed successfully.',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true,
+          customClass: {
+            container: 'swal2-container-custom',
+            popup: 'swal2-popup-custom'
+          },
+          didOpen: () => {
+            // Ensure SweetAlert appears on top
+            const swalContainer = document.querySelector('.swal2-container')
+            if (swalContainer) {
+              swalContainer.style.zIndex = '99999'
+            }
+          }
+        })
         setShowTaskDetail(false)
         setSelectedTask(null)
       } else {
@@ -277,7 +475,17 @@ const Tasks = () => {
           icon: 'error',
           title: 'Failed',
           text: res.message || 'Failed to update task',
-          confirmButtonColor: '#e9931c'
+          confirmButtonColor: '#e9931c',
+          customClass: {
+            container: 'swal2-container-custom',
+            popup: 'swal2-popup-custom'
+          },
+          didOpen: () => {
+            const swalContainer = document.querySelector('.swal2-container')
+            if (swalContainer) {
+              swalContainer.style.zIndex = '99999'
+            }
+          }
         })
       }
     } catch (e) {
@@ -286,7 +494,17 @@ const Tasks = () => {
         icon: 'error',
         title: 'Error',
         text: 'Error updating task',
-        confirmButtonColor: '#e9931c'
+        confirmButtonColor: '#e9931c',
+        customClass: {
+          container: 'swal2-container-custom',
+          popup: 'swal2-popup-custom'
+        },
+        didOpen: () => {
+          const swalContainer = document.querySelector('.swal2-container')
+          if (swalContainer) {
+            swalContainer.style.zIndex = '99999'
+          }
+        }
       })
     }
   }
@@ -310,7 +528,7 @@ const Tasks = () => {
       customerName: '',
       customerEmail: '',
       customerPhone: '',
-      type: 'Call',
+      type: 'Follow-up',
       priority: 'Medium',
       dueDate: '',
       dueTime: '09:00',
@@ -360,14 +578,65 @@ const Tasks = () => {
 
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null
-    return sortOrder === 'asc' 
+    return sortOrder === 'asc'
       ? <FaChevronUp className="w-3 h-3 ml-1" />
       : <FaChevronDown className="w-3 h-3 ml-1" />
   }
 
-  // Sort filtered tasks
+  // Sort filtered tasks - Today's tasks first by default
   const sortedTasks = useMemo(() => {
     let sorted = [...filtered]
+    
+    // Check if we're sorting by dueDate (default) and no custom sort is applied
+    const isDefaultDueDateSort = sortField === 'dueDate' && sortOrder === 'asc'
+    
+    if (isDefaultDueDateSort) {
+      // Separate today's tasks from others
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const todayTasks = []
+      const otherTasks = []
+      
+      sorted.forEach(task => {
+        if (!task.dueDate) {
+          otherTasks.push(task)
+          return
+        }
+        
+        const dueDate = new Date(task.dueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        
+        // Check if task is due today
+        if (dueDate.getTime() === today.getTime()) {
+          todayTasks.push(task)
+        } else {
+          otherTasks.push(task)
+        }
+      })
+      
+      // Sort today's tasks by time (if available) or keep original order
+      todayTasks.sort((a, b) => {
+        if (a.dueTime && b.dueTime) {
+          return a.dueTime.localeCompare(b.dueTime)
+        }
+        return 0
+      })
+      
+      // Sort other tasks by date (ascending - oldest first)
+      otherTasks.sort((a, b) => {
+        const aDate = new Date(a.dueDate || 0).getTime()
+        const bDate = new Date(b.dueDate || 0).getTime()
+        return aDate - bDate
+      })
+      
+      // Return today's tasks first, then others
+      return [...todayTasks, ...otherTasks]
+    }
+    
+    // For other sort fields, use normal sorting
     sorted.sort((a, b) => {
       let aVal, bVal
       switch (sortField) {
@@ -452,8 +721,8 @@ const Tasks = () => {
     setSearch('')
   }
 
-  const hasActiveFilters = activeFilters.taskType.length > 0 || 
-    activeFilters.priority.length > 0 || 
+  const hasActiveFilters = activeFilters.taskType.length > 0 ||
+    activeFilters.priority.length > 0 ||
     activeFilters.dueDateRange !== null ||
     search.trim() !== ''
 
@@ -486,11 +755,10 @@ const Tasks = () => {
               setActiveTab(tab.id)
               setCurrentPage(1)
             }}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors relative ${
-              activeTab === tab.id
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors relative ${activeTab === tab.id
                 ? 'text-white'
                 : 'text-gray-700 hover:bg-gray-100'
-            }`}
+              }`}
             style={activeTab === tab.id ? { backgroundColor: appTheme.primary.main } : {}}
           >
             {tab.label}
@@ -625,9 +893,8 @@ const Tasks = () => {
                         handleFilterChange('dueDateRange', option.value)
                         setShowDueDateDropdown(false)
                       }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                        activeFilters.dueDateRange === option.value ? 'bg-blue-50 text-blue-700' : ''
-                      }`}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${activeFilters.dueDateRange === option.value ? 'bg-blue-50 text-blue-700' : ''
+                        }`}
                     >
                       {option.label}
                     </button>
@@ -721,7 +988,7 @@ const Tasks = () => {
             <table className="w-full border-collapse" style={{ minWidth: '1400px' }}>
               <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
                 <tr>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: appTheme.text.secondary }}
                     onClick={() => handleSort('status')}
@@ -731,7 +998,7 @@ const Tasks = () => {
                       <SortIcon field="status" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[200px]"
                     style={{ color: appTheme.text.secondary }}
                     onClick={() => handleSort('description')}
@@ -741,7 +1008,7 @@ const Tasks = () => {
                       <SortIcon field="description" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[150px]"
                     style={{ color: appTheme.text.secondary }}
                     onClick={() => handleSort('customerName')}
@@ -760,7 +1027,7 @@ const Tasks = () => {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[120px]" style={{ color: appTheme.text.secondary }}>
                     LAST ENGAGEMENT
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: appTheme.text.secondary }}
                     onClick={() => handleSort('type')}
@@ -770,7 +1037,7 @@ const Tasks = () => {
                       <SortIcon field="type" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: appTheme.text.secondary }}
                     onClick={() => handleSort('dueDate')}
@@ -806,7 +1073,7 @@ const Tasks = () => {
                             {task.status}
                           </span>
                           {task.approvalStatus === 'Pending' && (
-                            <span 
+                            <span
                               className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-yellow-100 text-black transition-all hover:opacity-80 cursor-default"
                               title="Pending Approval"
                             >
@@ -814,7 +1081,7 @@ const Tasks = () => {
                             </span>
                           )}
                           {task.approvalStatus === 'Rejected' && (
-                            <span 
+                            <span
                               className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-red-100 text-black transition-all hover:opacity-80 cursor-default"
                               title="Rejected"
                             >
@@ -822,7 +1089,7 @@ const Tasks = () => {
                             </span>
                           )}
                           {task.approvalStatus === 'Approved' && task.hubspotTaskId && (
-                            <span 
+                            <span
                               className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-green-100 text-black transition-all hover:opacity-80 cursor-default"
                               title="Posted to HubSpot"
                             >
@@ -962,11 +1229,10 @@ const Tasks = () => {
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium ${
-                      currentPage === pageNum
+                    className={`px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium ${currentPage === pageNum
                         ? 'bg-blue-600 text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -1026,7 +1292,7 @@ const Tasks = () => {
                   value={formData.customer}
                   onChange={(e) => handleCustomerSelect(e.target.value)}
                   className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
+                  style={{
                     borderColor: appTheme.border.medium,
                     focusRingColor: appTheme.primary.main
                   }}
@@ -1051,7 +1317,7 @@ const Tasks = () => {
                   value={formData.customerName}
                   onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
+                  style={{
                     borderColor: appTheme.border.medium,
                     focusRingColor: appTheme.primary.main
                   }}
@@ -1069,7 +1335,7 @@ const Tasks = () => {
                   value={formData.customerEmail}
                   onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
+                  style={{
                     borderColor: appTheme.border.medium,
                     focusRingColor: appTheme.primary.main
                   }}
@@ -1087,7 +1353,7 @@ const Tasks = () => {
                   value={formData.customerPhone}
                   onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
+                  style={{
                     borderColor: appTheme.border.medium,
                     focusRingColor: appTheme.primary.main
                   }}
@@ -1106,7 +1372,7 @@ const Tasks = () => {
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
@@ -1125,7 +1391,7 @@ const Tasks = () => {
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
@@ -1149,7 +1415,7 @@ const Tasks = () => {
                     value={formData.dueDate}
                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
@@ -1164,7 +1430,7 @@ const Tasks = () => {
                     value={formData.dueTime}
                     onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
@@ -1182,7 +1448,7 @@ const Tasks = () => {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
+                  style={{
                     borderColor: appTheme.border.medium,
                     focusRingColor: appTheme.primary.main
                   }}
@@ -1200,7 +1466,7 @@ const Tasks = () => {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={4}
                   className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
-                  style={{ 
+                  style={{
                     borderColor: appTheme.border.medium,
                     focusRingColor: appTheme.primary.main
                   }}
@@ -1217,7 +1483,7 @@ const Tasks = () => {
                     resetForm()
                   }}
                   className="px-5 py-2 rounded-lg font-medium transition-colors"
-                  style={{ 
+                  style={{
                     color: appTheme.text.secondary,
                     backgroundColor: appTheme.background.lightGray
                   }}
@@ -1311,45 +1577,234 @@ const Tasks = () => {
             <div className="flex-1 flex overflow-hidden">
               {/* Left Panel - Contact Information */}
               <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
-                {selectedTask.customerName && (
-                  <>
-                    {/* Contact Card */}
-                    <div className="p-6 border-b border-gray-200">
-                      <div className="flex items-center gap-4 mb-4">
-                        <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-2xl font-semibold text-gray-600">
-                            {(selectedTask.customerName || '?')[0].toUpperCase()}
-                          </span>
+                {(() => {
+                  // Prioritize customer details from customer object
+                  const displayName = taskCustomerDetails?.name || 
+                    taskCustomerDetails?.firstName ||
+                    selectedTask.customerName ||
+                    ''
+                  const displayEmail = taskCustomerDetails?.email ||
+                    selectedTask.customerEmail ||
+                    ''
+                  return displayName || displayEmail ? (
+                    <>
+                      {/* Contact Card */}
+                      <div className="p-6 border-b border-gray-200">
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
+                            <span className="text-2xl font-semibold text-gray-600">
+                              {(displayName || displayEmail || '?')[0].toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <h2 className="text-lg font-semibold text-gray-900">{displayName || '—'}</h2>
+                            {displayEmail && (
+                              <p className="text-sm text-gray-500 mt-1">{displayEmail}</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <h2 className="text-lg font-semibold text-gray-900">{selectedTask.customerName}</h2>
-                          {selectedTask.customerEmail && (
-                            <p className="text-sm text-gray-500 mt-1">{selectedTask.customerEmail}</p>
-                          )}
-                        </div>
-                      </div>
-                      
+
                       {/* Action Buttons */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                          onClick={() => {
+                            setModalActiveTab('activities')
+                            // Focus typing pad after a short delay
+                            setTimeout(() => {
+                              if (noteInputRef.current) {
+                                noteInputRef.current.focus()
+                              }
+                            }, 100)
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <FaStickyNote className="w-4 h-4" />
                           Note
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                          onClick={async () => {
+                            const email = taskCustomerDetails?.email ||
+                              selectedTask.customerEmail ||
+                              ''
+                            if (email) {
+                              window.location.href = `mailto:${email}`
+                              
+                              // Save email activity
+                              try {
+                                if (selectedTask && selectedTask._id) {
+                                  const currentNotes = selectedTask.notes || ''
+                                  const activityNote = `[${new Date().toLocaleString('en-GB')}] Email: Sent to ${email}`
+                                  const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                  
+                                  await updateMyFollowUp(selectedTask._id, {
+                                    notes: updatedNotes
+                                  })
+                                  
+                                  // Add to activities
+                                  const newActivity = {
+                                    type: 'Email',
+                                    content: `Email sent to ${email}`,
+                                    date: new Date().toISOString(),
+                                    createdAt: new Date().toISOString()
+                                  }
+                                  setTaskActivities([newActivity, ...taskActivities])
+                                  
+                                  // Reload task
+                                  const updatedRes = await getMyFollowUp(selectedTask._id)
+                                  if (updatedRes.success) {
+                                    setSelectedTask(updatedRes.data)
+                                  }
+                                  
+                                  await loadTasks()
+                                }
+                              } catch (e) {
+                                console.error('Error saving email activity:', e)
+                              }
+                            } else {
+                              Swal.fire({
+                                icon: 'warning',
+                                title: 'No Email',
+                                text: 'No email address available for this contact',
+                                confirmButtonColor: '#e9931c'
+                              })
+                            }
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <FaEnvelope className="w-4 h-4" />
                           Email
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                          onClick={async () => {
+                            const phone = taskCustomerDetails?.phone ||
+                              selectedTask.customerPhone ||
+                              ''
+                            if (phone) {
+                              // Show options: Call or WhatsApp
+                              Swal.fire({
+                                title: 'Choose Action',
+                                showDenyButton: true,
+                                showCancelButton: true,
+                                confirmButtonText: 'Call',
+                                denyButtonText: 'WhatsApp',
+                                cancelButtonText: 'Cancel',
+                                confirmButtonColor: '#e9931c',
+                                denyButtonColor: '#25D366',
+                              }).then(async (result) => {
+                                if (result.isConfirmed) {
+                                  window.location.href = `tel:${phone}`
+                                  
+                                  // Save call activity
+                                  try {
+                                    if (selectedTask && selectedTask._id) {
+                                      const currentNotes = selectedTask.notes || ''
+                                      const activityNote = `[${new Date().toLocaleString('en-GB')}] Call: Called ${phone}`
+                                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                      
+                                      await updateMyFollowUp(selectedTask._id, {
+                                        notes: updatedNotes
+                                      })
+                                      
+                                      const newActivity = {
+                                        type: 'Call',
+                                        content: `Called ${phone}`,
+                                        date: new Date().toISOString(),
+                                        createdAt: new Date().toISOString()
+                                      }
+                                      setTaskActivities([newActivity, ...taskActivities])
+                                      
+                                      const updatedRes = await getMyFollowUp(selectedTask._id)
+                                      if (updatedRes.success) {
+                                        setSelectedTask(updatedRes.data)
+                                      }
+                                      
+                                      await loadTasks()
+                                    }
+                                  } catch (e) {
+                                    console.error('Error saving call activity:', e)
+                                  }
+                                } else if (result.isDenied) {
+                                  const cleanPhone = phone.replace(/\D/g, '')
+                                  window.open(`https://wa.me/${cleanPhone}`, '_blank')
+                                  
+                                  // Save WhatsApp activity
+                                  try {
+                                    if (selectedTask && selectedTask._id) {
+                                      const currentNotes = selectedTask.notes || ''
+                                      const activityNote = `[${new Date().toLocaleString('en-GB')}] WhatsApp: Messaged ${phone}`
+                                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                      
+                                      await updateMyFollowUp(selectedTask._id, {
+                                        notes: updatedNotes
+                                      })
+                                      
+                                      const newActivity = {
+                                        type: 'WhatsApp',
+                                        content: `WhatsApp message to ${phone}`,
+                                        date: new Date().toISOString(),
+                                        createdAt: new Date().toISOString()
+                                      }
+                                      setTaskActivities([newActivity, ...taskActivities])
+                                      
+                                      const updatedRes = await getMyFollowUp(selectedTask._id)
+                                      if (updatedRes.success) {
+                                        setSelectedTask(updatedRes.data)
+                                      }
+                                      
+                                      await loadTasks()
+                                    }
+                                  } catch (e) {
+                                    console.error('Error saving WhatsApp activity:', e)
+                                  }
+                                }
+                              })
+                            } else {
+                              Swal.fire({
+                                icon: 'warning',
+                                title: 'No Phone',
+                                text: 'No phone number available for this contact',
+                                confirmButtonColor: '#e9931c'
+                              })
+                            }
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <FaPhone className="w-4 h-4" />
                           Call
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                          onClick={() => {
+                            setModalActiveTab('activities')
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <FaCalendarAlt className="w-4 h-4" />
                           Task
                         </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                          onClick={() => {
+                            setModalActiveTab('activities')
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <FaCalendarAlt className="w-4 h-4" />
                           Meeting
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setModalActiveTab('overview')
+                            // Scroll to sample tracking section
+                            setTimeout(() => {
+                              const sampleSection = document.getElementById('sample-tracking-section')
+                              if (sampleSection) {
+                                sampleSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              }
+                            }, 100)
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <FaFlask className="w-4 h-4" />
+                          Sample Track
                         </button>
                         <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                           <FaEllipsisH className="w-4 h-4" />
@@ -1361,16 +1816,24 @@ const Tasks = () => {
                     <div className="p-6 border-b border-gray-200">
                       <h3 className="text-sm font-semibold text-gray-900 mb-4">About this contact</h3>
                       <div className="space-y-3">
-                        {selectedTask.customerEmail && (
+                        {displayEmail && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Email</p>
-                            <p className="text-sm text-gray-900">{selectedTask.customerEmail}</p>
+                            <p className="text-sm text-gray-900">{displayEmail}</p>
                           </div>
                         )}
-                        {selectedTask.customerPhone && (
+                        {(taskCustomerDetails?.phone || selectedTask.customerPhone) && (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Phone Number</p>
-                            <p className="text-sm text-gray-900">{selectedTask.customerPhone}</p>
+                            <p className="text-sm text-gray-900">{taskCustomerDetails?.phone || selectedTask.customerPhone}</p>
+                          </div>
+                        )}
+                        {(taskCustomerDetails?.address || taskCustomerDetails?.city || taskCustomerDetails?.state) && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Address</p>
+                            <p className="text-sm text-gray-900">
+                              {[taskCustomerDetails?.address, taskCustomerDetails?.city, taskCustomerDetails?.state].filter(Boolean).join(', ')}
+                            </p>
                           </div>
                         )}
                         {selectedTask.salesman && (
@@ -1390,7 +1853,8 @@ const Tasks = () => {
                       </div>
                     </div>
                   </>
-                )}
+                  ) : null
+                })()}
               </div>
 
               {/* Center Panel - Task Details with Tabs */}
@@ -1400,33 +1864,21 @@ const Tasks = () => {
                   <div className="flex items-center gap-6">
                     <button
                       onClick={() => setModalActiveTab('overview')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        modalActiveTab === 'overview'
+                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'overview'
                           ? 'border-blue-600 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
+                        }`}
                     >
                       Overview
                     </button>
                     <button
                       onClick={() => setModalActiveTab('activities')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        modalActiveTab === 'activities'
+                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'activities'
                           ? 'border-blue-600 text-blue-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
+                        }`}
                     >
                       Activities
-                    </button>
-                    <button
-                      onClick={() => setModalActiveTab('intelligence')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        modalActiveTab === 'intelligence'
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      Intelligence
                     </button>
                   </div>
                 </div>
@@ -1435,6 +1887,166 @@ const Tasks = () => {
                 <div className="p-6">
                   {modalActiveTab === 'overview' && (
                     <div className="space-y-6">
+                      {/* Task Details Section */}
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">Task Details</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Follow-up Number</p>
+                            <p className="text-sm font-medium text-gray-900">{selectedTask.followUpNumber || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Task Type</p>
+                            <p className="text-sm font-medium text-gray-900">{selectedTask.type || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Priority</p>
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                              {selectedTask.priority || '—'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Status</p>
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                              {selectedTask.status || '—'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Approval Status</p>
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                              {selectedTask.approvalStatus || '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dates Section */}
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">Dates & Timeline</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Scheduled Date</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {selectedTask.scheduledDate
+                                ? `${new Date(selectedTask.scheduledDate).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })} ${new Date(selectedTask.scheduledDate).toLocaleTimeString('en-GB', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: false
+                                  })}`
+                                : '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Due Date</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {selectedTask.dueDate
+                                ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: false
+                                  })}`
+                                : '—'}
+                            </p>
+                          </div>
+                          {selectedTask.completedDate && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Completed Date</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {`${new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.completedDate).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`}
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Created Date</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {selectedTask.createdAt
+                                ? `${new Date(selectedTask.createdAt).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })} ${new Date(selectedTask.createdAt).toLocaleTimeString('en-GB', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: false
+                                  })}`
+                                : '—'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Description & Notes */}
+                      {(selectedTask.description || selectedTask.notes) && (
+                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                          <h3 className="text-sm font-semibold text-gray-900 mb-4">Description & Notes</h3>
+                          {selectedTask.description && (
+                            <div className="mb-4">
+                              <p className="text-xs text-gray-500 mb-1">Description</p>
+                              <p className="text-sm text-gray-900">{selectedTask.description}</p>
+                            </div>
+                          )}
+                          {selectedTask.notes && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-3">Activity History</p>
+                              {taskActivities.length > 0 ? (
+                                <div className="space-y-3">
+                                  {taskActivities.slice(0, 5).map((activity, idx) => (
+                                    <div 
+                                      key={idx}
+                                      className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-2">
+                                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                              activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
+                                              activity.type === 'Email' ? 'bg-green-100 text-green-800' :
+                                              activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
+                                              activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                              'bg-gray-100 text-gray-800'
+                                            }`}>
+                                              {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
+                                              {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
+                                              {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
+                                              {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
+                                              {activity.type}
+                                            </span>
+                                            <span className="text-xs text-gray-500">
+                                              {activity.dateStr} {activity.timeStr}
+                                            </span>
+                                          </div>
+                                          <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                                            {activity.content}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500 italic">No activities recorded yet</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Data Highlights */}
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <h3 className="text-sm font-semibold text-gray-900 mb-4">Data highlights</h3>
@@ -1444,26 +2056,28 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.createdAt
                                 ? new Date(selectedTask.createdAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  }) + ' GMT+5'
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                }) + ' GMT+5'
                                 : '—'}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">LAST ACTIVITY DATE</p>
                             <p className="text-sm font-medium text-gray-900">
-                              {selectedTask.dueDate
-                                ? new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  }) + ' GMT+5'
+                              {selectedTask.dueDate || selectedTask.updatedAt
+                                ? `${new Date(selectedTask.dueDate || selectedTask.updatedAt).toLocaleDateString('en-GB', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.dueDate || selectedTask.updatedAt).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })} GMT+5`
                                 : '—'}
                             </p>
                           </div>
@@ -1494,7 +2108,12 @@ const Tasks = () => {
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                            <input type="checkbox" className="rounded border-gray-300" />
+                            <input 
+                              type="checkbox" 
+                              className="rounded border-gray-300" 
+                              checked={selectedTask.status === 'Completed'}
+                              readOnly
+                            />
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-900">
@@ -1502,27 +2121,43 @@ const Tasks = () => {
                                 </span>
                                 <span className="text-sm text-gray-500">›</span>
                                 <span className="text-sm text-gray-600">
-                                  Task assigned to {selectedTask.salesman?.name || 'Salesman'}
+                                  {selectedTask.status === 'Completed' 
+                                    ? `Completed ${selectedTask.completedDate ? new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      }) + ' GMT+5' : ''}`
+                                    : `Task assigned to ${selectedTask.salesman?.name || 'Salesman'}`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs px-2 py-1 rounded ${
-                                  selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                                  selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-blue-100 text-blue-700'
-                                }`}>
+                                <span className={`text-xs px-2 py-1 rounded ${selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                    selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
+                                    selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                      'bg-blue-100 text-blue-700'
+                                  }`}>
                                   {selectedTask.status === 'Overdue' ? 'Overdue' : selectedTask.status}
                                 </span>
                                 <span className="text-sm text-gray-600">
-                                  {selectedTask.dueDate
-                                    ? new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
+                                  {selectedTask.status === 'Completed' && selectedTask.completedDate
+                                    ? `${new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })} GMT+5`
+                                    : selectedTask.dueDate
+                                      ? new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
                                         day: '2-digit',
                                         month: 'short',
                                         year: 'numeric',
                                         hour: '2-digit',
                                         minute: '2-digit'
                                       }) + ' GMT+5'
-                                    : '—'}
+                                      : '—'}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-900 mt-1">
@@ -1532,20 +2167,209 @@ const Tasks = () => {
                           </div>
                         </div>
                       </div>
+                      
+                      {/* Sample Tracking Section */}
+                      <div id="sample-tracking-section" className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <FaFlask className="w-4 h-4" />
+                          Sample Tracking
+                        </h3>
+                        {taskSamples && taskSamples.length > 0 ? (
+                          <div className="space-y-3">
+                            {taskSamples.map((sample) => (
+                              <div 
+                                key={sample._id || sample.id} 
+                                className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="text-sm font-semibold text-gray-900">
+                                        {sample.sampleNumber || `Sample #${sample._id?.slice(-6) || 'N/A'}`}
+                                      </span>
+                                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                        sample.status === 'Converted' ? 'bg-green-100 text-green-800' :
+                                        sample.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        sample.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {sample.status || 'Pending'}
+                                      </span>
+                                    </div>
+                                    {sample.productName && (
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        Product: <span className="text-gray-900">{sample.productName}</span>
+                                      </p>
+                                    )}
+                                    {sample.customerName && (
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        Customer: <span className="text-gray-900">{sample.customerName}</span>
+                                      </p>
+                                    )}
+                                    {sample.createdAt && (
+                                      <p className="text-xs text-gray-500">
+                                        Created: {new Date(sample.createdAt).toLocaleDateString('en-GB', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric'
+                                        })} {new Date(sample.createdAt).toLocaleTimeString('en-GB', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          hour12: false
+                                        })}
+                                      </p>
+                                    )}
+                                    {sample.notes && (
+                                      <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
+                                        {sample.notes}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No samples found for this task/customer</p>
+                        )}
+                      </div>
                     </div>
                   )}
 
                   {modalActiveTab === 'activities' && (
-                    <div className="text-center py-12">
-                      <p className="text-gray-500">Activities tab content</p>
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                      {/* Fixed Header and Typing Box */}
+                      <div className="flex-shrink-0 space-y-4 pb-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-gray-900">Activities</h3>
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                              <input
+                                type="text"
+                                placeholder="Search activities"
+                                className="pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Typing Pad */}
+                        <div className="pb-4 border-b border-gray-200">
+                          <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <textarea
+                                ref={noteInputRef}
+                                value={noteInput}
+                                onChange={(e) => setNoteInput(e.target.value)}
+                                onKeyDown={async (e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault()
+                                    if (noteInput.trim()) {
+                                      const noteContent = noteInput.trim()
+                                      const newActivity = {
+                                        type: 'Note',
+                                        content: noteContent,
+                                        date: new Date().toISOString(),
+                                        createdAt: new Date().toISOString()
+                                      }
+                                      setTaskActivities([newActivity, ...taskActivities])
+                                      setNoteInput('')
+                                      
+                                      // Save to backend
+                                      try {
+                                        if (selectedTask && selectedTask._id) {
+                                          const currentNotes = selectedTask.notes || ''
+                                          const activityNote = `[${new Date().toLocaleString('en-GB')}] Note: ${noteContent}`
+                                          const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                                          
+                                          await updateMyFollowUp(selectedTask._id, {
+                                            notes: updatedNotes
+                                          })
+                                          
+                                          // Reload task
+                                          const updatedRes = await getMyFollowUp(selectedTask._id)
+                                          if (updatedRes.success) {
+                                            setSelectedTask(updatedRes.data)
+                                          }
+                                          
+                                          await loadTasks()
+                                        }
+                                      } catch (e) {
+                                        console.error('Error saving note:', e)
+                                      }
+                                    }
+                                  }
+                                }}
+                                rows={3}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                placeholder="Type a note and press Enter to save..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Scrollable Activities List */}
+                      <div className="flex-1 overflow-y-auto space-y-3">
+                        {taskActivities.filter(activity => {
+                          if (!activitiesSearch.trim()) return true
+                          const search = activitiesSearch.toLowerCase()
+                          return (
+                            activity.type.toLowerCase().includes(search) ||
+                            activity.content.toLowerCase().includes(search) ||
+                            (activity.dateStr && activity.dateStr.includes(search)) ||
+                            (activity.timeStr && activity.timeStr.includes(search))
+                          )
+                        }).length > 0 ? (
+                          taskActivities.filter(activity => {
+                            if (!activitiesSearch.trim()) return true
+                            const search = activitiesSearch.toLowerCase()
+                            return (
+                              activity.type.toLowerCase().includes(search) ||
+                              activity.content.toLowerCase().includes(search) ||
+                              (activity.dateStr && activity.dateStr.includes(search)) ||
+                              (activity.timeStr && activity.timeStr.includes(search))
+                            )
+                          }).map((activity, idx) => (
+                            <div 
+                              key={idx}
+                              className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                                      activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
+                                      activity.type === 'Email' ? 'bg-green-100 text-green-800' :
+                                      activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
+                                      activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
+                                      {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
+                                      {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
+                                      {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
+                                      {activity.type}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {activity.dateStr} {activity.timeStr}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                                    {activity.content}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500 italic text-center py-8">No activities recorded yet</p>
+                        )}
+                      </div>
                     </div>
                   )}
 
-                  {modalActiveTab === 'intelligence' && (
-                    <div className="text-center py-12">
-                      <p className="text-gray-500">Intelligence tab content</p>
-                    </div>
-                  )}
                 </div>
               </div>
 

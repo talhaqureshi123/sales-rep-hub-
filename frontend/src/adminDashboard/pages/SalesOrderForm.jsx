@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { FaShoppingCart, FaPlus, FaTrash, FaSave, FaTimes, FaSpinner } from 'react-icons/fa'
 import { getSalesOrder, createSalesOrder, updateSalesOrder } from '../../services/adminservices/salesOrderService'
-import { getCustomers } from '../../services/adminservices/customerService'
-import { getProducts } from '../../services/adminservices/productService'
-import { getUsers } from '../../services/adminservices/userService'
 import Swal from 'sweetalert2'
 
-const SalesOrderForm = ({ orderId = null, onClose = null }) => {
+const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) => {
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [customers, setCustomers] = useState([])
@@ -100,6 +97,9 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
 
     // Customer Signature
     customerSignature: '',
+    
+    // Internal tracking
+    _previousStatus: 'Draft',
   })
 
   useEffect(() => {
@@ -107,17 +107,159 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
     if (orderId) {
       loadOrder(orderId)
     } else {
-      // Set current user as sales person
+      // Set current user as sales person - pre-fill all user info
       const user = JSON.parse(localStorage.getItem('user') || '{}')
-      if (user.email) {
+      const currentUserRole = localStorage.getItem('userRole') || 'admin'
+      const userId = localStorage.getItem('userId') || user._id || user.id || ''
+      const userEmail = localStorage.getItem('userEmail') || user.email || ''
+      const userName = localStorage.getItem('userName') || user.name || user.firstName || ''
+      
+      // Always set sales person if salesman role, otherwise set if userId available
+      if ((currentUserRole === 'salesman' && userId) || (userId || userEmail)) {
         setFormData(prev => ({
           ...prev,
-          salesPersonEmail: user.email,
-          salesPerson: user._id || user.id || '',
+          salesPersonEmail: userEmail,
+          salesPerson: userId,
+          // Pre-fill user info if available
+          contactPerson: userName || prev.contactPerson,
+          phoneNumber: user.phone || prev.phoneNumber,
+          emailAddress: userEmail || prev.emailAddress,
+        }))
+      }
+      
+      // Pre-fill data from visit target (achievement click)
+      // Note: Customer selection will happen in useEffect after customers are loaded
+      const visitTargetData = localStorage.getItem('salesOrderVisitTarget')
+      const isFromAchievement = localStorage.getItem('salesOrderFromAchievement') === 'true'
+      if (visitTargetData) {
+        try {
+          const data = JSON.parse(visitTargetData)
+          setFormData(prev => ({
+            ...prev,
+            customerName: data.customerName || prev.customerName,
+            emailAddress: data.customerEmail || prev.emailAddress,
+            phoneNumber: data.customerPhone || prev.phoneNumber,
+            deliveryAddress: data.deliveryAddress || prev.deliveryAddress,
+            contactPerson: data.customerName || prev.contactPerson,
+            billingAddress: data.deliveryAddress || prev.billingAddress,
+            // If from achievement, set sendToAdmin to true by default and status to Pending
+            sendToAdmin: isFromAchievement ? true : prev.sendToAdmin,
+            orderStatus: isFromAchievement ? 'Pending' : prev.orderStatus,
+          }))
+          // Don't remove localStorage yet - we'll use it in useEffect to auto-select customer
+        } catch (e) {
+          console.error('Error parsing visit target data:', e)
+        }
+      } else if (isFromAchievement) {
+        // Even if no visit target data, set sendToAdmin if from achievement
+        setFormData(prev => ({
+          ...prev,
+          sendToAdmin: true,
+          orderStatus: 'Pending',
+        }))
+      }
+      
+      // Pre-fill from initialData prop if provided
+      if (initialData) {
+        setFormData(prev => ({
+          ...prev,
+          customerName: initialData.customerName || prev.customerName,
+          emailAddress: initialData.customerEmail || prev.emailAddress,
+          phoneNumber: initialData.customerPhone || prev.phoneNumber,
+          deliveryAddress: initialData.deliveryAddress || prev.deliveryAddress,
         }))
       }
     }
-  }, [orderId])
+  }, [orderId, initialData])
+
+  // Auto-select customer from visit target data (from Sales Tracking)
+  useEffect(() => {
+    const visitTargetData = localStorage.getItem('salesOrderVisitTarget')
+    if (visitTargetData && customers.length > 0 && !formData.customer) {
+      try {
+        const data = JSON.parse(visitTargetData)
+        const customerName = (data.customerName || '').trim().toLowerCase()
+        const customerEmail = (data.customerEmail || '').trim().toLowerCase()
+        
+        // Find matching customer by name or email
+        const matchingCustomer = customers.find(c => {
+          const cName = ((c.name || c.firstName || '') + ' ' + (c.contactPerson || '')).trim().toLowerCase()
+          const cEmail = (c.email || '').trim().toLowerCase()
+          
+          return (customerName && (cName.includes(customerName) || customerName.includes(cName))) ||
+                 (customerEmail && cEmail === customerEmail) ||
+                 (customerName && cName === customerName)
+        })
+        
+        if (matchingCustomer) {
+          setFormData(prev => ({
+            ...prev,
+            customer: matchingCustomer._id || matchingCustomer.id,
+            customerName: matchingCustomer.firstName || matchingCustomer.name || data.customerName || prev.customerName,
+            contactPerson: matchingCustomer.contactPerson || data.customerName || prev.contactPerson,
+            phoneNumber: matchingCustomer.phone || data.customerPhone || prev.phoneNumber,
+            emailAddress: matchingCustomer.email || data.customerEmail || prev.emailAddress,
+            billingAddress: matchingCustomer.address || data.deliveryAddress || prev.billingAddress,
+            deliveryAddress: matchingCustomer.address || data.deliveryAddress || prev.deliveryAddress,
+          }))
+          setCustomerSearch(matchingCustomer.firstName || matchingCustomer.name || data.customerName || '')
+          console.log('✅ Auto-selected customer from Sales Tracking:', matchingCustomer.firstName || matchingCustomer.name)
+        } else {
+          console.log('⚠️ Could not find matching customer for:', data.customerName || data.customerEmail)
+        }
+        
+        // Clean up localStorage after use
+        localStorage.removeItem('salesOrderVisitTarget')
+        localStorage.removeItem('salesOrderFromAchievement')
+      } catch (e) {
+        console.error('Error auto-selecting customer from visit target:', e)
+        localStorage.removeItem('salesOrderVisitTarget')
+        localStorage.removeItem('salesOrderFromAchievement')
+      }
+    }
+  }, [customers, formData.customer])
+
+  // Set current user as sales person when salesPersons list loads (for salesman)
+  useEffect(() => {
+    const currentUserRole = localStorage.getItem('userRole') || 'admin'
+    if (currentUserRole === 'salesman') {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const userId = localStorage.getItem('userId') || user._id || user.id || ''
+      const userEmail = localStorage.getItem('userEmail') || user.email || ''
+      const userName = localStorage.getItem('userName') || user.name || user.firstName || ''
+      
+      if (userId && !formData.salesPerson) {
+        // Find current user in salespersons list
+        const currentUser = salesPersons.find(p => {
+          const pId = (p._id || p.id || '').toString()
+          return pId === userId.toString()
+        })
+        
+        if (currentUser) {
+          setFormData(prev => ({
+            ...prev,
+            salesPerson: currentUser._id || currentUser.id || userId,
+            salesPersonEmail: currentUser.email || userEmail || prev.salesPersonEmail,
+          }))
+        } else if (userId) {
+          // If user not in list, add them and set
+          const newSalesPerson = {
+            _id: userId,
+            id: userId,
+            name: userName,
+            email: userEmail,
+            role: 'salesman'
+          }
+          setSalesPersons([newSalesPerson, ...salesPersons])
+          setFormData(prev => ({
+            ...prev,
+            salesPerson: userId,
+            salesPersonEmail: userEmail || prev.salesPersonEmail,
+          }))
+        }
+      }
+    }
+  }, [salesPersons, formData.salesPerson])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -141,10 +283,48 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
   const loadInitialData = async () => {
     try {
       setInitialLoading(true)
+      
+      // Get current user role to determine which services to use
+      const currentUserRole = localStorage.getItem('userRole') || 'admin'
+      
+      // Dynamically import services based on user role
+      let getCustomers, getProducts, getUsers
+      
+      if (currentUserRole === 'salesman') {
+        // Use salesman services
+        const customerService = await import('../../services/salemanservices/customerService')
+        const productService = await import('../../services/salemanservices/productService')
+        getCustomers = customerService.getMyCustomers // Use getMyCustomers for salesman
+        getProducts = productService.getProducts
+        // For salesman, create current user object for salesPersons list
+        const user = JSON.parse(localStorage.getItem('user') || '{}')
+        const userId = localStorage.getItem('userId') || user._id || user.id || ''
+        const userEmail = localStorage.getItem('userEmail') || user.email || ''
+        const userName = localStorage.getItem('userName') || user.name || user.firstName || ''
+        getUsers = async () => ({ 
+          success: true, 
+          data: userId ? [{
+            _id: userId,
+            id: userId,
+            name: userName,
+            email: userEmail,
+            role: 'salesman'
+          }] : []
+        })
+      } else {
+        // Use admin services
+        const customerService = await import('../../services/adminservices/customerService')
+        const productService = await import('../../services/adminservices/productService')
+        const userService = await import('../../services/adminservices/userService')
+        getCustomers = customerService.getCustomers
+        getProducts = productService.getProducts
+        getUsers = () => userService.getUsers({ role: 'salesman' })
+      }
+      
       const [customersResult, productsResult, usersResult] = await Promise.all([
         getCustomers(),
         getProducts(),
-        getUsers({ role: 'salesman' }),
+        getUsers(),
       ])
 
       if (customersResult.success) {
@@ -174,10 +354,67 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
       }
 
       if (usersResult.success) {
-        setSalesPersons(usersResult.data || [])
-        console.log(`✅ Loaded ${usersResult.data?.length || 0} salespersons`)
+        let salesPersonsList = usersResult.data || []
+        const currentUserRole = localStorage.getItem('userRole') || 'admin'
+        const user = JSON.parse(localStorage.getItem('user') || '{}')
+        const userId = localStorage.getItem('userId') || user._id || user.id || ''
+        const userEmail = localStorage.getItem('userEmail') || user.email || ''
+        const userName = localStorage.getItem('userName') || user.name || user.firstName || ''
+        
+        // For salesman, ensure current user is in the list
+        if (currentUserRole === 'salesman' && userId) {
+          const currentUserExists = salesPersonsList.some(p => {
+            const pId = (p._id || p.id || '').toString()
+            return pId === userId.toString()
+          })
+          
+          // If current user not in list, add them
+          if (!currentUserExists) {
+            salesPersonsList = [{
+              _id: userId,
+              id: userId,
+              name: userName,
+              email: userEmail,
+              role: 'salesman'
+            }, ...salesPersonsList]
+          }
+          
+          // Set current user as selected
+          setFormData(prev => ({
+            ...prev,
+            salesPerson: userId,
+            salesPersonEmail: userEmail || prev.salesPersonEmail,
+          }))
+        }
+        
+        setSalesPersons(salesPersonsList)
+        console.log(`✅ Loaded ${salesPersonsList.length} salespersons`)
       } else {
         console.error('Failed to load salespersons:', usersResult.message)
+        
+        // If salesman and salespersons failed to load, still set current user and add to list
+        const currentUserRole = localStorage.getItem('userRole') || 'admin'
+        const user = JSON.parse(localStorage.getItem('user') || '{}')
+        const userId = localStorage.getItem('userId') || user._id || user.id || ''
+        const userEmail = localStorage.getItem('userEmail') || user.email || ''
+        const userName = localStorage.getItem('userName') || user.name || user.firstName || ''
+        
+        if (currentUserRole === 'salesman' && userId) {
+          // Add current user to salesPersons list even if load failed
+          setSalesPersons([{
+            _id: userId,
+            id: userId,
+            name: userName,
+            email: userEmail,
+            role: 'salesman'
+          }])
+          
+          setFormData(prev => ({
+            ...prev,
+            salesPerson: userId,
+            salesPersonEmail: userEmail || prev.salesPersonEmail,
+          }))
+        }
       }
     } catch (error) {
       console.error('Error loading initial data:', error)
@@ -198,12 +435,15 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
       const result = await getSalesOrder(id)
       if (result.success && result.data) {
         const order = result.data
-        setFormData({
+        const previousStatus = formData.orderStatus || order.orderStatus || 'Draft'
+        
+        setFormData(prev => ({
           ...order,
           orderDate: order.orderDate ? new Date(order.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           expectedDispatchDate: order.expectedDispatchDate ? new Date(order.expectedDispatchDate).toISOString().split('T')[0] : '',
           actualDispatchDate: order.actualDispatchDate ? new Date(order.actualDispatchDate).toISOString().split('T')[0] : '',
-        })
+          _previousStatus: previousStatus
+        }))
         if (order.customerSignature) {
           setTimeout(() => {
             loadSignatureToCanvas(order.customerSignature)
@@ -429,14 +669,49 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
       }
 
       if (result.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Success!',
-          text: orderId ? 'Order updated successfully!' : 'Order created successfully!',
-          confirmButtonColor: '#e9931c'
-        })
+        // Check if order was submitted for approval (sendToAdmin = true)
+        const isFromAchievement = localStorage.getItem('salesOrderFromAchievement') === 'true'
+        
+        // Check if admin is approving an order (status changed from Pending/Draft to Confirmed)
+        const previousStatus = formData._previousStatus || formData.orderStatus
+        const isAdminApproval = orderId && 
+                                orderData.orderStatus === 'Confirmed' && 
+                                (previousStatus === 'Pending' || previousStatus === 'Draft')
+        
+        if (orderData.sendToAdmin && isFromAchievement) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Order Submitted!',
+            text: 'Your order has been submitted for admin approval. Once approved, it will appear in your Sales Targets.',
+            confirmButtonColor: '#e9931c'
+          }).then(() => {
+            localStorage.removeItem('salesOrderFromAchievement')
+            // Navigate to Sales Targets
+            const event = new CustomEvent('navigateToTab', { detail: 'sales-targets' })
+            window.dispatchEvent(event)
+          })
+        } else if (isAdminApproval) {
+          // Admin approved the order - store flag for salesman to see
+          localStorage.setItem('orderApprovedRedirect', 'true')
+          localStorage.setItem('approvedOrderId', orderId)
+          
+          Swal.fire({
+            icon: 'success',
+            title: 'Order Approved!',
+            text: 'Order has been approved and confirmed. Salesman will be notified.',
+            confirmButtonColor: '#e9931c'
+          })
+        } else {
+          Swal.fire({
+            icon: 'success',
+            title: 'Success!',
+            text: orderId ? 'Order updated successfully!' : 'Order created successfully!',
+            confirmButtonColor: '#e9931c'
+          })
+        }
+        
         if (onClose) onClose()
-        else window.location.reload()
+        else if (!isFromAchievement) window.location.reload()
       } else {
         Swal.fire({
           icon: 'error',
@@ -829,12 +1104,13 @@ const SalesOrderForm = ({ orderId = null, onClose = null }) => {
                     </td>
                     <td className="px-4 py-2">
                       <select
-                        value={item.unit}
+                        value={item.unit || 'Rolls'}
                         onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c] min-w-[100px]"
+                        style={{ minWidth: '100px', textOverflow: 'ellipsis' }}
                       >
                         {unitOptions.map(unit => (
-                          <option key={unit} value={unit}>{unit}</option>
+                          <option key={unit} value={unit} title={unit}>{unit}</option>
                         ))}
                       </select>
                     </td>

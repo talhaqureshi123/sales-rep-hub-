@@ -148,6 +148,20 @@ const followUpSchema = new mongoose.Schema({
   completedDate: {
     type: Date,
   },
+  startedAt: {
+    type: Date,
+    // When task was started
+  },
+  meterPicture: {
+    type: String,
+    trim: true,
+    // Base64 encoded meter picture when task is started
+  },
+  meterReading: {
+    type: String,
+    trim: true,
+    // Meter reading value when task is started
+  },
   description: {
     type: String,
     trim: true,

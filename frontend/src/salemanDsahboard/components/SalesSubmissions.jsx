@@ -21,13 +21,8 @@ import {
   FaPhone,
   FaMapMarkerAlt
 } from 'react-icons/fa'
-import { 
-  getMySalesSubmissions, 
-  createSalesSubmission, 
-  updateSalesSubmission,
-  deleteSalesSubmission,
-  getMySalesSubmissionStats
-} from '../../services/salemanservices/salesSubmissionService'
+// Sales submission service removed - using sales orders instead
+import { getSalesOrders, createSalesOrder, updateSalesOrder, deleteSalesOrder } from '../../services/adminservices/salesOrderService'
 import { getMyCustomers } from '../../services/salemanservices/customerService'
 import { createFollowUp } from '../../services/salemanservices/followUpService'
 import { createSample } from '../../services/salemanservices/sampleService'
@@ -38,7 +33,7 @@ import Swal from 'sweetalert2'
 const SalesSubmissions = () => {
   const [activeTab, setActiveTab] = useState('sales') // 'sales', 'tasks', 'samples'
   const [loading, setLoading] = useState(false)
-  const [submissions, setSubmissions] = useState([])
+  const [submissions, setSubmissions] = useState([]) // Now contains sales orders
   const [stats, setStats] = useState(null)
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -171,15 +166,22 @@ const SalesSubmissions = () => {
   const loadSubmissions = async () => {
     try {
       setLoading(true)
-      const filterParams = {}
+      // Get current salesman ID
+      const userId = localStorage.getItem('userId') || JSON.parse(localStorage.getItem('user') || '{}')._id
+      
+      const filterParams = {
+        salesPerson: userId // Filter by current salesman
+      }
       if (filters.status !== 'All') filterParams.status = filters.status
 
-      const result = await getMySalesSubmissions(filterParams)
+      const result = await getSalesOrders(filterParams)
       if (result.success && result.data) {
-        setSubmissions(result.data || [])
+        // Map sales orders to match submission format for compatibility
+        const orders = result.data || []
+        setSubmissions(orders)
       }
     } catch (error) {
-      console.error('Error loading submissions:', error)
+      console.error('Error loading sales orders:', error)
     } finally {
       setLoading(false)
     }
@@ -187,9 +189,26 @@ const SalesSubmissions = () => {
 
   const loadStats = async () => {
     try {
-      const result = await getMySalesSubmissionStats()
+      // Get current salesman ID
+      const userId = localStorage.getItem('userId') || JSON.parse(localStorage.getItem('user') || '{}')._id
+      
+      const result = await getSalesOrders({ salesPerson: userId })
       if (result.success && result.data) {
-        setStats(result.data)
+        const orders = result.data || []
+        // Calculate stats from sales orders
+        const totalOrders = orders.length
+        const confirmedOrders = orders.filter(o => o.orderStatus === 'Confirmed').length
+        const pendingOrders = orders.filter(o => o.orderStatus === 'Pending' || o.orderStatus === 'Draft').length
+        const totalAmount = orders
+          .filter(o => o.orderStatus === 'Confirmed')
+          .reduce((sum, o) => sum + (o.grandTotal || 0), 0)
+        
+        setStats({
+          total: totalOrders,
+          approved: confirmedOrders,
+          pending: pendingOrders,
+          totalAmount: totalAmount
+        })
       }
     } catch (error) {
       console.error('Error loading stats:', error)
@@ -359,53 +378,27 @@ const SalesSubmissions = () => {
         return
       }
 
-      setLoading(true)
-      try {
-        let result
-        if (editingSubmission) {
-          result = await updateSalesSubmission(editingSubmission._id, salesFormData)
-        } else {
-          result = await createSalesSubmission(salesFormData)
+      // Redirect to Sales Orders page to create order
+      // Sales submissions are now handled via Sales Orders
+      const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+      window.dispatchEvent(event)
+      
+      // Store flag to open form
+      localStorage.setItem('openSalesOrderForm', 'true')
+      
+      // Pre-fill customer data if available
+      if (salesFormData.customer) {
+        const customerData = {
+          customerName: salesFormData.customerName,
+          customerEmail: salesFormData.customerEmail,
+          customerPhone: salesFormData.customerPhone,
+          deliveryAddress: salesFormData.location || ''
         }
-
-        if (result.success) {
-          // Show achievement message with sales amount
-          const salesAmount = salesFormData.salesAmount || 0
-          Swal.fire({
-            icon: 'success',
-            title: '🎉 Sales Submitted Successfully!',
-            html: `
-              <div class="text-center">
-                <p class="text-lg mb-3">Sales Amount: <strong>₹${salesAmount.toLocaleString()}</strong></p>
-                <p class="text-sm text-gray-600 mb-2">Waiting for admin approval.</p>
-                <p class="text-sm text-gray-600">Once approved, this will be added to your sales target!</p>
-              </div>
-            `,
-            confirmButtonColor: '#e9931c',
-            confirmButtonText: 'Great!'
-          })
-          resetForm()
-          loadSubmissions()
-          loadStats()
-        } else {
-          Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: result.message || 'Failed to save submission',
-            confirmButtonColor: '#e9931c'
-          })
-        }
-      } catch (error) {
-        console.error('Error saving submission:', error)
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: 'Error saving submission. Please try again.',
-          confirmButtonColor: '#e9931c'
-        })
-      } finally {
-        setLoading(false)
+        localStorage.setItem('salesOrderCustomer', JSON.stringify(customerData))
       }
+      
+      setShowForm(false)
+      resetForm()
     } else if (activeTab === 'tasks') {
       if (!taskFormData.customerName || !taskFormData.dueDate || !taskFormData.description) {
         Swal.fire({
@@ -492,37 +485,31 @@ const SalesSubmissions = () => {
   }
 
 
-  const handleEdit = (submission) => {
-    if (submission.approvalStatus !== 'Pending') {
+  const handleEdit = (order) => {
+    // Only allow edit for Draft or Pending orders
+    if (order.orderStatus !== 'Draft' && order.orderStatus !== 'Pending') {
       Swal.fire({
         icon: 'warning',
         title: 'Cannot Edit',
-        text: 'Only pending submissions can be edited',
+        text: 'Only Draft or Pending orders can be edited',
         confirmButtonColor: '#e9931c'
       })
       return
     }
-    setEditingSubmission(submission)
-    setSalesFormData({
-      customer: submission.customer?._id || submission.customer || '',
-      customerName: submission.customerName || '',
-      customerEmail: submission.customerEmail || '',
-      customerPhone: submission.customerPhone || '',
-      location: submission.location || '',
-      salesDate: submission.salesDate ? new Date(submission.salesDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      salesAmount: submission.salesAmount || 0,
-      salesDescription: submission.salesDescription || '',
-      documents: submission.documents || []
-    })
-    setShowForm(true)
+    // Navigate to sales orders page to edit
+    const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+    window.dispatchEvent(event)
+    // Store order ID to edit
+    localStorage.setItem('editSalesOrderId', order._id)
   }
 
-  const handleDelete = async (submission) => {
-    if (submission.approvalStatus !== 'Pending') {
+  const handleDelete = async (order) => {
+    // Only allow delete for Draft or Pending orders
+    if (order.orderStatus !== 'Draft' && order.orderStatus !== 'Pending') {
       Swal.fire({
         icon: 'warning',
         title: 'Cannot Delete',
-        text: 'Only pending submissions can be deleted',
+        text: 'Only Draft or Pending orders can be deleted',
         confirmButtonColor: '#e9931c'
       })
       return
@@ -530,8 +517,8 @@ const SalesSubmissions = () => {
 
     const result = await Swal.fire({
       icon: 'warning',
-      title: 'Delete Submission?',
-      text: 'Are you sure you want to delete this sales submission?',
+      title: 'Delete Sales Order?',
+      text: 'Are you sure you want to delete this sales order?',
       showCancelButton: true,
       confirmButtonColor: '#e9931c',
       cancelButtonColor: '#6c757d',
@@ -540,12 +527,12 @@ const SalesSubmissions = () => {
 
     if (result.isConfirmed) {
       try {
-        const deleteResult = await deleteSalesSubmission(submission._id)
+        const deleteResult = await deleteSalesOrder(order._id)
         if (deleteResult.success) {
           Swal.fire({
             icon: 'success',
             title: 'Deleted!',
-            text: 'Sales submission deleted successfully',
+            text: 'Sales order deleted successfully',
             confirmButtonColor: '#e9931c'
           })
           loadSubmissions()
@@ -554,16 +541,16 @@ const SalesSubmissions = () => {
           Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: deleteResult.message || 'Failed to delete submission',
+            text: deleteResult.message || 'Failed to delete order',
             confirmButtonColor: '#e9931c'
           })
         }
       } catch (error) {
-        console.error('Error deleting submission:', error)
+        console.error('Error deleting order:', error)
         Swal.fire({
           icon: 'error',
           title: 'Error',
-          text: 'Error deleting submission. Please try again.',
+          text: 'Error deleting order. Please try again.',
           confirmButtonColor: '#e9931c'
         })
       }
@@ -617,6 +604,14 @@ const SalesSubmissions = () => {
     }
   }
 
+  // Map order status to approval status for display compatibility
+  const mapOrderStatusToApproval = (orderStatus) => {
+    if (orderStatus === 'Confirmed') return 'Approved'
+    if (orderStatus === 'Draft' || orderStatus === 'Pending') return 'Pending'
+    if (orderStatus === 'Cancelled') return 'Rejected'
+    return 'Approved' // Processing, Dispatched, Delivered are considered approved
+  }
+
   const getStatusIcon = (status) => {
     switch (status) {
       case 'Approved':
@@ -667,17 +662,29 @@ const SalesSubmissions = () => {
             <FaUpload className="w-5 h-5 sm:w-6 sm:h-6 text-[#e9931c]" />
             Uploads
           </h2>
-          <p className="text-sm sm:text-base text-gray-600">Upload sales, tasks, or samples for admin approval</p>
+          <p className="text-sm sm:text-base text-gray-600">View your sales orders, tasks, and sample tracking</p>
         </div>
         <button
           onClick={() => {
-            resetForm()
-            setShowForm(!showForm)
+            if (activeTab === 'sales') {
+              // Redirect to Sales Orders page to create order
+              const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+              window.dispatchEvent(event)
+              localStorage.setItem('openSalesOrderForm', 'true')
+            } else {
+              resetForm()
+              setShowForm(!showForm)
+            }
           }}
           className="flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-[#e9931c] text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-[#d8820a] transition-colors w-full sm:w-auto justify-center"
         >
           <FaPlus className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span>{showForm ? 'Cancel' : `Upload ${activeTab === 'sales' ? 'Sales' : activeTab === 'tasks' ? 'Task' : 'Sample'}`}</span>
+          <span>
+            {activeTab === 'sales' ? 'Create Sales Order' :
+             showForm ? 'Cancel' :
+             activeTab === 'tasks' ? 'Create Task' : 
+             'Upload Sample'}
+          </span>
         </button>
       </div>
 
@@ -696,7 +703,7 @@ const SalesSubmissions = () => {
             }`}
           >
             <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="whitespace-nowrap">Sales Upload</span>
+            <span className="whitespace-nowrap">Sales Orders</span>
           </button>
           <button
             onClick={() => {
@@ -737,7 +744,7 @@ const SalesSubmissions = () => {
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-5 border border-blue-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs sm:text-sm text-gray-600">Total Submissions</p>
+              <p className="text-xs sm:text-sm text-gray-600">Total Orders</p>
               <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
             <p className="text-2xl sm:text-3xl font-bold text-blue-700">{stats.total || 0}</p>
@@ -750,7 +757,7 @@ const SalesSubmissions = () => {
               <FaClock className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
             </div>
             <p className="text-2xl sm:text-3xl font-bold text-yellow-700">{stats.pending || 0}</p>
-            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Awaiting approval</p>
+              <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Draft/Pending</p>
           </div>
 
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-5 border border-green-200 shadow-sm">
@@ -764,11 +771,11 @@ const SalesSubmissions = () => {
 
           <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-5 border border-orange-200 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs sm:text-sm text-gray-600">Total Amount</p>
+              <p className="text-xs sm:text-sm text-gray-600">Total Revenue</p>
               <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
             </div>
-            <p className="text-2xl sm:text-3xl font-bold text-orange-700">£{stats.approvedAmount?.toLocaleString() || 0}</p>
-            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Approved sales</p>
+            <p className="text-2xl sm:text-3xl font-bold text-orange-700">£{stats.totalAmount?.toLocaleString() || 0}</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">From confirmed orders</p>
           </div>
         </div>
       )}
@@ -777,7 +784,7 @@ const SalesSubmissions = () => {
       {showForm && (
         <div className="bg-white rounded-lg p-4 sm:p-6 border-2 border-gray-200 shadow-lg">
           <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4">
-            {activeTab === 'sales' && (editingSubmission ? 'Edit Sales Submission' : 'Upload New Sales')}
+            {activeTab === 'sales' && 'Create Sales Order'}
             {activeTab === 'tasks' && 'Create New Task'}
             {activeTab === 'samples' && 'Upload Sample Track'}
           </h3>
@@ -1172,7 +1179,7 @@ const SalesSubmissions = () => {
                   <>
                     <FaUpload className="w-4 h-4" />
                     <span>
-                      {activeTab === 'sales' && (editingSubmission ? 'Update Submission' : 'Submit for Approval')}
+                      {activeTab === 'sales' && 'Create Sales Order'}
                       {activeTab === 'tasks' && 'Create Task'}
                       {activeTab === 'samples' && 'Upload Sample'}
                     </span>
@@ -1193,7 +1200,7 @@ const SalesSubmissions = () => {
                 <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search submission number, customer name..."
+                  placeholder="Search order number, customer name, invoice..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c]"
                 />
               </div>
@@ -1204,9 +1211,13 @@ const SalesSubmissions = () => {
               className="px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c] w-full sm:w-auto"
             >
               <option value="All">All Status</option>
+              <option value="Draft">Draft</option>
               <option value="Pending">Pending</option>
-              <option value="Approved">Approved</option>
-              <option value="Rejected">Rejected</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Processing">Processing</option>
+              <option value="Dispatched">Dispatched</option>
+              <option value="Delivered">Delivered</option>
+              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
         </div>
@@ -1222,11 +1233,11 @@ const SalesSubmissions = () => {
           ) : submissions.length === 0 ? (
             <div className="text-center py-12">
               <FaFileInvoice className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600 font-medium">No sales submissions found</p>
+              <p className="text-gray-600 font-medium">No sales orders found</p>
               <p className="text-sm text-gray-500 mt-2">
                 {filters.status !== 'All'
                   ? 'Try adjusting your filter'
-                  : 'Upload your first sales submission to get started'}
+                  : 'Create your first sales order to get started'}
               </p>
             </div>
           ) : (
@@ -1238,19 +1249,19 @@ const SalesSubmissions = () => {
                       STATUS
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      SUBMISSION NUMBER
+                      ORDER #
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       CUSTOMER
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      SALES DATE
+                      ORDER DATE
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      AMOUNT
+                      TOTAL AMOUNT
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      DOCUMENTS
+                      INVOICE
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       ACTIONS
@@ -1258,20 +1269,23 @@ const SalesSubmissions = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {submissions.map((submission) => (
+                  {submissions.map((order) => {
+                    // Map order to submission-like format for display
+                    const approvalStatus = mapOrderStatusToApproval(order.orderStatus || 'Pending')
+                    return (
                     <tr 
-                      key={submission._id}
+                      key={order._id}
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(submission.approvalStatus)}`}>
-                          {getStatusIcon(submission.approvalStatus)}
-                          {submission.approvalStatus}
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(approvalStatus)}`}>
+                          {getStatusIcon(approvalStatus)}
+                          {order.orderStatus || 'Pending'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium text-blue-600">
-                          {submission.submissionNumber}
+                          {order.soNumber || order.invoiceNumber || 'N/A'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -1279,8 +1293,8 @@ const SalesSubmissions = () => {
                           <button
                             onClick={() => {
                               const customer = customers.find(c => 
-                                (c._id || c.id) === submission.customer ||
-                                (c.firstName || c.name) === submission.customerName
+                                (c._id || c.id) === order.customer ||
+                                (c.firstName || c.name) === order.customerName
                               )
                               if (customer) {
                                 setSelectedCustomer(customer)
@@ -1289,49 +1303,49 @@ const SalesSubmissions = () => {
                             }}
                             className="text-left hover:text-[#e9931c] transition-colors"
                           >
-                            <p className="text-sm font-medium text-gray-900">{submission.customerName}</p>
-                            {submission.customerEmail && (
-                              <p className="text-xs text-gray-500">{submission.customerEmail}</p>
+                            <p className="text-sm font-medium text-gray-900">{order.customerName}</p>
+                            {order.emailAddress && (
+                              <p className="text-xs text-gray-500">{order.emailAddress}</p>
                             )}
                           </button>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-900">
-                          {new Date(submission.salesDate).toLocaleDateString()}
+                          {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm font-semibold text-[#e9931c]">
-                          £{submission.salesAmount?.toLocaleString() || 0}
+                          £{order.grandTotal?.toLocaleString() || 0}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {submission.documents && submission.documents.length > 0 ? (
-                          <div className="flex items-center gap-1">
-                            {submission.documents[0].fileType === 'image' ? (
-                              <FaImage className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <FaFile className="w-4 h-4 text-gray-600" />
-                            )}
-                            <span className="text-xs text-gray-600">{submission.documents.length}</span>
-                          </div>
+                        {/* Sales orders don't have documents field - show invoice number if available */}
+                        {order.invoiceNumber ? (
+                          <span className="text-xs text-gray-600">{order.invoiceNumber}</span>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {submission.approvalStatus === 'Pending' && (
+                        {(order.orderStatus === 'Draft' || order.orderStatus === 'Pending') && (
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => handleEdit(submission)}
+                              onClick={() => {
+                                // Navigate to sales orders page to edit
+                                const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+                                window.dispatchEvent(event)
+                                // Store order ID to edit
+                                localStorage.setItem('editSalesOrderId', order._id)
+                              }}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="Edit"
                             >
                               <FaEdit className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDelete(submission)}
+                              onClick={() => handleDelete(order)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                               title="Delete"
                             >
@@ -1339,14 +1353,14 @@ const SalesSubmissions = () => {
                             </button>
                           </div>
                         )}
-                        {submission.approvalStatus !== 'Pending' && (
+                        {order.orderStatus !== 'Draft' && order.orderStatus !== 'Pending' && (
                           <span className="text-xs text-gray-500">
-                            {submission.approvalStatus === 'Approved' ? 'Approved' : 'Rejected'}
+                            {order.orderStatus === 'Confirmed' ? 'Confirmed' : order.orderStatus}
                           </span>
                         )}
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FaBullseye, FaCheckCircle, FaChartLine, FaExclamationTriangle, FaFilter, FaCalendarAlt, FaPlus, FaEdit, FaTrash, FaDollarSign } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 import { getSalesTargets, getSalesTarget, createSalesTarget, updateSalesTarget, deleteSalesTarget } from '../../services/adminservices/salesTargetService'
 import { getUsers } from '../../services/adminservices/userService'
 
@@ -16,12 +17,13 @@ const SalesTargets = () => {
     status: 'All',
     period: 'All',
     fromDate: '',
+    targetType: 'Orders', // Only show Orders type targets
   })
 
   const [formData, setFormData] = useState({
     salesman: '',
     targetName: '',
-    targetType: '',
+    targetType: 'Orders', // Default to Orders
     targetValue: 0,
     period: '',
     startDate: '',
@@ -30,7 +32,7 @@ const SalesTargets = () => {
 
   const statusOptions = ['All', 'Active', 'Completed', 'Failed', 'Cancelled']
   const periodOptions = ['All', 'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly']
-  const targetTypeOptions = ['Revenue', 'Visits', 'New Customers', 'Quotes', 'Conversions', 'Orders']
+  const targetTypeOptions = ['Orders'] // Only Orders type allowed
 
   useEffect(() => {
     loadSalesmen()
@@ -155,6 +157,41 @@ const SalesTargets = () => {
     }
   }
 
+  const handleApproveTarget = async (targetId) => {
+    setLoading(true)
+    try {
+      const result = await updateSalesTarget(targetId, { approvalStatus: 'Approved' })
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Approved!',
+          text: 'Sales target has been approved and is now visible to the salesman.',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
+        loadTargets()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to approve sales target',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error approving target:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error approving sales target',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleDeleteTarget = async (targetId) => {
     if (!window.confirm('Are you sure you want to delete this sales target?')) {
       return
@@ -181,7 +218,7 @@ const SalesTargets = () => {
     setFormData({
       salesman: '',
       targetName: '',
-      targetType: '',
+      targetType: 'Orders', // Default to Orders
       targetValue: 0,
       period: '',
       startDate: '',
@@ -199,10 +236,8 @@ const SalesTargets = () => {
   }
 
   const formatProgress = (target) => {
-    if (target.targetType === 'Revenue') {
-      return `${formatCurrency(target.currentProgress || 0)} / ${formatCurrency(target.targetValue || 0)}`
-    }
-    return `${target.currentProgress || 0} / ${target.targetValue || 0}`
+    // All targets are Orders type now
+    return `${target.currentProgress || 0} / ${target.targetValue || 0} orders`
   }
 
   const calculateProgressPercentage = (target) => {

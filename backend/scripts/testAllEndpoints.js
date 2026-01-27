@@ -104,7 +104,7 @@ const createdIds = {
   followUp: null,
   salesOrder: null,
   salesTarget: null,
-  salesSubmission: null,
+  // salesSubmission removed - using sales orders instead
   shiftPhoto: null,
   tracking: null,
   location: null
@@ -787,7 +787,10 @@ async function testSalesmanEndpoints() {
   await testEndpoint('Get My Sales Target Stats', 'GET', '/salesman/sales-targets/stats', salesmanToken);
   
   // Sales Submissions
-  log('\n📊 Sales Submissions', 'blue');
+  // Sales Submissions removed - using sales orders instead
+  log('\n📊 Sales Submissions (REMOVED - using Sales Orders)', 'yellow');
+  // Commented out - Sales submission endpoints removed
+  /*
   await testEndpoint('Get My Sales Submissions', 'GET', '/salesman/sales-submissions', salesmanToken);
   await testEndpoint('Get My Sales Submission Stats', 'GET', '/salesman/sales-submissions/stats', salesmanToken);
   const salesSubmissionResult = await testEndpoint('Create Sales Submission', 'POST', '/salesman/sales-submissions', salesmanToken, {
@@ -804,6 +807,7 @@ async function testSalesmanEndpoints() {
       amount: 6000
     });
   }
+  */
 }
 
 // ============================================
