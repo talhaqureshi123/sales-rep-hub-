@@ -170,7 +170,12 @@ const ProductCatalog = () => {
       }
     } catch (error) {
       console.error('Error creating product:', error)
-      alert('Error creating product')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating product. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -185,7 +190,12 @@ const ProductCatalog = () => {
     try {
       const token = localStorage.getItem('token')
       if (!token) {
-        alert('Authentication token not found. Please login again.')
+        Swal.fire({
+          icon: 'error',
+          title: 'Authentication Error',
+          text: 'Authentication token not found. Please login again.',
+          confirmButtonColor: '#e9931c'
+        })
         return
       }
 
@@ -215,12 +225,30 @@ const ProductCatalog = () => {
         
         // Clean up the blob URL
         window.URL.revokeObjectURL(blobURL)
+        Swal.fire({
+          icon: 'success',
+          title: 'Downloaded!',
+          text: 'QR code downloaded successfully',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
       } else {
-        alert(data.message || 'Failed to download QR code')
+        Swal.fire({
+          icon: 'error',
+          title: 'Download Failed',
+          text: data.message || 'Failed to download QR code',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error downloading QR code:', error)
-      alert('Failed to download QR code. Please try again.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to download QR code. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     }
   }
 

@@ -126,6 +126,7 @@ const Tasks = () => {
     associatedCompanyName: '',
     associatedCompanyDomain: '',
     type: 'Call',
+    followUpType: '', // New field for Follow-up type
     priority: 'Medium',
     dueDate: '',
     dueTime: '09:00',
@@ -617,7 +618,10 @@ const Tasks = () => {
         // Associated Company (HubSpot-style)
         associatedCompanyName: formData.associatedCompanyName || undefined,
         associatedCompanyDomain: formData.associatedCompanyDomain || undefined,
-        type: mapTaskType(formData.type), // Map to valid enum value
+        // If Follow-up is selected and followUpType is set, use followUpType; otherwise map the type
+        type: (formData.type === 'Follow-up' && formData.followUpType) 
+          ? formData.followUpType 
+          : mapTaskType(formData.type), // Map to valid enum value
         priority: formData.priority,
         scheduledDate: dueDateTime,
         dueDate: dueDateTime,
@@ -1670,6 +1674,7 @@ const Tasks = () => {
       associatedCompanyName: '',
       associatedCompanyDomain: '',
       type: 'Call',
+      followUpType: '', // Reset follow-up type
       priority: 'Medium',
       dueDate: '',
       dueTime: '09:00',
@@ -2859,20 +2864,6 @@ const Tasks = () => {
                               Imported
                             </span>
                           )}
-                          {/* Show Start Task button for Today tasks that are not started */}
-                          {task.status === 'Today' && !task.startedAt && task.approvalStatus === 'Approved' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleStartTask(task)
-                              }}
-                              className="px-3 py-1.5 rounded text-xs font-medium text-white hover:opacity-90 transition-all"
-                              style={{ backgroundColor: appTheme.status.success.main }}
-                              title="Start Task"
-                            >
-                              Start Task
-                            </button>
-                          )}
                           {/* Show Started badge if task is started */}
                           {task.startedAt && (
                             <span 
@@ -3195,7 +3186,15 @@ const Tasks = () => {
                   <select
                     required
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) => {
+                      const newType = e.target.value
+                      setFormData({ 
+                        ...formData, 
+                        type: newType,
+                        // Reset followUpType when task type changes
+                        followUpType: newType === 'Follow-up' ? formData.followUpType : ''
+                      })
+                    }}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
                     style={{ 
                       borderColor: appTheme.border.medium,
@@ -3227,6 +3226,33 @@ const Tasks = () => {
                   </select>
                 </div>
               </div>
+
+              {/* Follow-up Type - Show only when Follow-up is selected */}
+              {formData.type === 'Follow-up' && (
+                <div>
+                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                    Follow-up Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.followUpType}
+                    onChange={(e) => setFormData({ ...formData, followUpType: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                    style={{ 
+                      borderColor: appTheme.border.medium,
+                      focusRingColor: appTheme.primary.main
+                    }}
+                  >
+                    <option value="">Select follow-up type</option>
+                    <option value="Call">Call</option>
+                    <option value="Email">Email</option>
+                    <option value="Meeting">Meeting</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Visit">Visit</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              )}
 
               {/* Due Date and Time */}
               <div className="grid grid-cols-2 gap-4">
@@ -5082,7 +5108,7 @@ const Tasks = () => {
                                       ${deal.properties?.amount ? `
                                         <div class="flex justify-between">
                                           <span class="text-gray-600">Amount:</span>
-                                          <span class="text-gray-900 font-medium">£${parseFloat(deal.properties.amount || 0).toLocaleString()}</span>
+                                          <span class="text-gray-900 font-medium">£${Number(deal.properties.amount || 0).toFixed(2)}</span>
                                         </div>
                                       ` : ''}
                                       ${deal.properties?.dealstage ? `
@@ -5115,7 +5141,7 @@ const Tasks = () => {
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-gray-900">{deal.properties?.dealname || 'HubSpot Deal'}</p>
                                 {deal.properties?.amount && (
-                                  <p className="text-xs text-gray-500 mt-1">£{parseFloat(deal.properties.amount || 0).toLocaleString()}</p>
+                                  <p className="text-xs text-gray-500 mt-1">£{Number(deal.properties.amount || 0).toFixed(2)}</p>
                                 )}
                               </div>
                               <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">HubSpot</span>
@@ -5138,9 +5164,9 @@ const Tasks = () => {
                                         const itemQuantity = item.quantity || 1
                                         const itemPrice = item.price || item.unitPrice || 0
                                         const itemTotal = item.total || item.lineTotal || (itemQuantity * itemPrice)
-                                        const itemTotalFormatted = itemTotal.toLocaleString()
-                                        const itemPriceFormatted = itemPrice.toLocaleString()
-                                        const discountHtml = item.discount ? `<p class="text-gray-500">Discount: £${item.discount.toLocaleString()}</p>` : ''
+                                        const itemTotalFormatted = Number(itemTotal || 0).toFixed(2)
+                                        const itemPriceFormatted = Number(itemPrice || 0).toFixed(2)
+                                        const discountHtml = item.discount ? `<p class="text-gray-500">Discount: £${Number(item.discount || 0).toFixed(2)}</p>` : ''
                                         
                                         return `
                                           <div class="text-xs text-gray-600 border-b border-gray-100 pb-2">
@@ -5225,24 +5251,24 @@ const Tasks = () => {
                                           ${quote.subtotal ? `
                                             <div class="flex justify-between">
                                               <span class="text-gray-600">Subtotal:</span>
-                                              <span class="text-gray-900">£${quote.subtotal.toLocaleString()}</span>
+                                              <span class="text-gray-900">£${Number(quote.subtotal || 0).toFixed(2)}</span>
                                             </div>
                                           ` : ''}
                                           ${quote.discount ? `
                                             <div class="flex justify-between">
                                               <span class="text-gray-600">Discount:</span>
-                                              <span class="text-gray-900">£${quote.discount.toLocaleString()}</span>
+                                              <span class="text-gray-900">£${Number(quote.discount || 0).toFixed(2)}</span>
                                             </div>
                                           ` : ''}
                                           ${quote.tax ? `
                                             <div class="flex justify-between">
                                               <span class="text-gray-600">Tax:</span>
-                                              <span class="text-gray-900">£${quote.tax.toLocaleString()}</span>
+                                              <span class="text-gray-900">£${Number(quote.tax || 0).toFixed(2)}</span>
                                             </div>
                                           ` : ''}
                                           <div class="flex justify-between font-semibold pt-2 border-t border-gray-200">
                                             <span class="text-gray-900">Total:</span>
-                                            <span class="text-gray-900">£${quote.total?.toLocaleString() || '0'}</span>
+                                            <span class="text-gray-900">£${Number(quote.total || 0).toFixed(2)}</span>
                                           </div>
                                         </div>
                                         ${quote.notes ? `
@@ -5285,7 +5311,7 @@ const Tasks = () => {
                               </span>
                             </div>
                             <div className="text-sm text-gray-600">
-                              <p>Total: £{quotation.total?.toLocaleString() || '0'}</p>
+                              <p>Total: £{Number(quotation.total || 0).toFixed(2)}</p>
                               {quotation.validUntil && (
                                 <p className="text-xs text-gray-500 mt-1">
                                   Valid until: {new Date(quotation.validUntil).toLocaleDateString('en-GB', {

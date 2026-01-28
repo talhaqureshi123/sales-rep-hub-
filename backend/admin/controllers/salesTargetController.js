@@ -5,108 +5,56 @@ const Quotation = require('../../database/models/Quotation');
 const VisitTarget = require('../../database/models/VisitTarget');
 const Customer = require('../../database/models/Customer');
 
-// Helper function to calculate progress based on target type
+// Get salesman ObjectId (works when populated or plain id)
+const getSalesmanId = (target) => {
+  const s = target.salesman;
+  if (!s) return null;
+  return s._id ? s._id : s;
+};
+
+// Helper function to calculate progress (order count) based on target type
 const calculateProgress = async (target) => {
-  // Normalize dates to ensure accurate comparison
   const startDate = new Date(target.startDate);
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(target.endDate);
   endDate.setHours(23, 59, 59, 999);
-  
-  switch (target.targetType) {
-    case 'Revenue':
-      // Calculate from confirmed sales orders (both approved and pending)
-      // Use approvedAt if available and in range, otherwise use orderDate
-      const orders = await SalesOrder.find({
-        salesPerson: target.salesman,
-        orderStatus: 'Confirmed',
-        $or: [
-          // Orders approved within date range
-          {
-            approvedAt: { $gte: startDate, $lte: endDate },
-            approvalStatus: 'Approved'
-          },
-          // Orders with orderDate in range (including pending approval orders)
-          {
-            orderDate: { $gte: startDate, $lte: endDate },
-            $or: [
-              { approvedAt: { $exists: false } },
-              { approvedAt: null },
-              // Also include orders approved outside the target range but orderDate is in range
-              { approvedAt: { $lt: startDate } },
-              { approvedAt: { $gt: endDate } }
-            ]
-          }
-        ]
-      });
-      return orders.reduce((sum, order) => sum + (order.grandTotal || 0), 0);
-    
-    case 'Visits':
-      // Calculate from visit targets
-      const visits = await VisitTarget.countDocuments({
-        salesman: target.salesman,
-        visitDate: { $gte: startDate, $lte: endDate },
-        status: 'Completed',
-      });
-      return visits;
-    
-    case 'New Customers':
-      // Calculate new customers created in period
-      const customers = await Customer.countDocuments({
-        assignedSalesman: target.salesman,
-        createdAt: { $gte: startDate, $lte: endDate },
-      });
-      return customers;
-    
-    case 'Quotes':
-      // Calculate quotations created
-      const quotes = await Quotation.countDocuments({
-        salesman: target.salesman,
-        createdAt: { $gte: startDate, $lte: endDate },
-      });
-      return quotes;
-    
-    case 'Conversions':
-      // Calculate quotations converted to orders
-      const convertedQuotes = await Quotation.countDocuments({
-        salesman: target.salesman,
-        status: 'Approved',
-        updatedAt: { $gte: startDate, $lte: endDate },
-      });
-      return convertedQuotes;
-    
-    case 'Orders':
-      // Calculate confirmed orders (both approved and pending approval)
-      // Count all confirmed orders where either:
-      // 1. Order was approved within the target date range (use approvedAt)
-      // 2. Order date falls within target range (use orderDate) - for orders not yet approved or approved outside range
-      const orderCount = await SalesOrder.countDocuments({
-        salesPerson: target.salesman,
-        orderStatus: 'Confirmed',
-        $or: [
-          // Orders approved within date range
-          {
-            approvedAt: { $gte: startDate, $lte: endDate },
-            approvalStatus: 'Approved'
-          },
-          // Orders with orderDate in range (including pending approval orders)
-          {
-            orderDate: { $gte: startDate, $lte: endDate },
-            $or: [
-              { approvedAt: { $exists: false } },
-              { approvedAt: null },
-              // Also include orders approved outside the target range but orderDate is in range
-              { approvedAt: { $lt: startDate } },
-              { approvedAt: { $gt: endDate } }
-            ]
-          }
-        ]
-      });
-      return orderCount;
-    
-    default:
-      return 0;
+  const salesmanId = getSalesmanId(target);
+  if (!salesmanId) return 0;
+
+  if (target.targetType === 'Orders') {
+    const orderCount = await SalesOrder.countDocuments({
+      salesPerson: salesmanId,
+      orderStatus: { $in: ['Confirmed', 'Processing', 'Dispatched', 'Delivered'] },
+      orderDate: { $gte: startDate, $lte: endDate }
+    });
+    return orderCount;
   }
+  return 0;
+};
+
+// Helper: total order amount for target period (same statuses as progress)
+const calculateOrderAmount = async (target) => {
+  const startDate = new Date(target.startDate);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(target.endDate);
+  endDate.setHours(23, 59, 59, 999);
+  const salesmanId = getSalesmanId(target);
+  if (!salesmanId) return 0;
+
+  if (target.targetType === 'Orders') {
+    const result = await SalesOrder.aggregate([
+      {
+        $match: {
+          salesPerson: salesmanId,
+          orderStatus: { $in: ['Confirmed', 'Processing', 'Dispatched', 'Delivered'] },
+          orderDate: { $gte: startDate, $lte: endDate }
+        }
+      },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$grandTotal', 0] } } } }
+    ]);
+    return (result[0] && result[0].total != null) ? Number(result[0].total) : 0;
+  }
+  return 0;
 };
 
 // @desc    Get all sales targets
@@ -147,19 +95,33 @@ const getSalesTargets = async (req, res) => {
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
 
-    // Update progress for each target
+    // Update progress, amount and fix status for each target
+    const now = new Date();
+    const data = [];
     for (const target of targets) {
       const progress = await calculateProgress(target);
+      const currentAmount = await calculateOrderAmount(target);
+      let needsSave = false;
       if (target.currentProgress !== progress) {
         target.currentProgress = progress;
-        await target.save();
+        needsSave = true;
       }
+      const endDate = new Date(target.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      if (target.status === 'Failed' && now <= endDate) {
+        target.status = 'Active';
+        needsSave = true;
+      }
+      if (needsSave) await target.save();
+      const obj = target.toObject ? target.toObject() : { ...target };
+      obj.currentAmount = currentAmount;
+      data.push(obj);
     }
 
     res.status(200).json({
       success: true,
-      count: targets.length,
-      data: targets,
+      count: data.length,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -185,16 +147,37 @@ const getSalesTarget = async (req, res) => {
       });
     }
 
-    // Update progress
+    // Update progress and fix status - ALWAYS recalculate to ensure accuracy
     const progress = await calculateProgress(target);
+    let needsSave = false;
+    
+    // Always update progress (even if same) to ensure it's fresh
     if (target.currentProgress !== progress) {
+      target.currentProgress = progress;
+      needsSave = true;
+    }
+    
+    const now = new Date();
+    const endDate = new Date(target.endDate);
+    endDate.setHours(23, 59, 59, 999);
+    if (target.status === 'Failed' && now <= endDate) {
+      target.status = 'Active';
+      needsSave = true;
+    }
+    
+    // Force save to ensure progress is always up-to-date
+    if (needsSave || target.currentProgress !== progress) {
       target.currentProgress = progress;
       await target.save();
     }
 
+    const currentAmount = await calculateOrderAmount(target);
+    const responseData = target.toObject ? target.toObject() : { ...target };
+    responseData.currentAmount = currentAmount;
+
     res.status(200).json({
       success: true,
-      data: target,
+      data: responseData,
     });
   } catch (error) {
     res.status(500).json({
@@ -368,13 +351,18 @@ const updateSalesTarget = async (req, res) => {
       }
     }
 
-    if (targetName) target.targetName = targetName;
-    if (targetType) target.targetType = targetType;
+    if (targetName !== undefined) target.targetName = targetName;
+    if (targetType !== undefined) target.targetType = targetType;
     if (targetValue !== undefined) target.targetValue = targetValue;
-    if (period) target.period = period;
-    if (startDate) target.startDate = new Date(startDate);
-    if (endDate) target.endDate = new Date(endDate);
-    if (status) target.status = status;
+    if (period !== undefined) target.period = period;
+    // Always update dates if provided (even if empty string, convert to null)
+    if (startDate !== undefined) {
+      target.startDate = startDate ? new Date(startDate) : null;
+    }
+    if (endDate !== undefined) {
+      target.endDate = endDate ? new Date(endDate) : null;
+    }
+    if (status !== undefined) target.status = status;
     if (notes !== undefined) target.notes = notes;
 
     // Recalculate progress

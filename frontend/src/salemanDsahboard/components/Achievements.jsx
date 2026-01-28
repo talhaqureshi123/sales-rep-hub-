@@ -110,7 +110,7 @@ const Achievements = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-3 sm:mb-4">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
             <p className="text-xs sm:text-sm text-gray-600 mb-1">Monthly Sales</p>
-            <p className="text-xl sm:text-2xl font-bold text-blue-700">£{stats.monthlySales.toLocaleString()}</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-700">£{Number(stats.monthlySales || 0).toFixed(2)}</p>
             <div className="mt-2">
               <div className="w-full bg-blue-200 rounded-full h-2">
                 <div
@@ -119,7 +119,7 @@ const Achievements = () => {
                 ></div>
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                {salesProgress.toFixed(1)}% of £{stats.monthlyTarget.toLocaleString()} target
+                {salesProgress.toFixed(1)}% of £{Number(stats.monthlyTarget || 0).toFixed(2)} target
               </p>
             </div>
           </div>

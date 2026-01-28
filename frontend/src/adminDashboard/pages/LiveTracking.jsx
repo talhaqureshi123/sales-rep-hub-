@@ -58,9 +58,25 @@ const LiveTracking = () => {
       // Mark as "online" if updated within last 5 minutes (backend default)
       const result = await getLatestSalesmenLocations({ activeWithinMinutes: 5 })
       if (result.success) {
-        const rows = result.data || []
+        // Filter to only show salesmen (not admins) - safety filter
+        const rows = (result.data || []).filter(row => 
+          row.salesman?.role === 'salesman' || !row.salesman?.role // Include if role is salesman or undefined (backward compatibility)
+        )
+        
+        // Debug log to see what we're getting
+        console.log('📍 Live Tracking - Loaded salesmen:', rows.length)
+        rows.forEach(row => {
+          const hasLocation = !!(row.latestLocation?.latitude && row.latestLocation?.longitude)
+          const locationAge = row.latestLocation?.timestamp 
+            ? Math.round((Date.now() - new Date(row.latestLocation.timestamp).getTime()) / 60000)
+            : null
+          console.log(`   ${row.salesman?.name || 'Unknown'}: Online=${row.isOnline}, HasLocation=${hasLocation}, LocationAge=${locationAge ? locationAge + ' min' : 'N/A'}`)
+        })
+        
         setSalesmenLocations(rows)
-        setOnlineCount(result.onlineCount || 0)
+        // Recalculate online count for filtered salesmen only
+        const filteredOnlineCount = rows.reduce((sum, r) => sum + (r.isOnline ? 1 : 0), 0)
+        setOnlineCount(filteredOnlineCount)
 
         // Fetch addresses only if not already loading and Google Maps is available
         if (!loadingAddressesRef.current && window.google && window.google.maps) {
@@ -342,24 +358,48 @@ const LiveTracking = () => {
   }
 
   // Memoize map markers to prevent map re-rendering
+  // Show ALL salesmen with location data (even if old) - don't filter by age
   const mapMarkers = useMemo(() => {
-    return salesmenLocations
-      .filter(r => r.latestLocation?.latitude && r.latestLocation?.longitude)
+    const markers = salesmenLocations
+      .filter(r => {
+        const hasLocation = !!(r.latestLocation?.latitude && r.latestLocation?.longitude)
+        if (!hasLocation) {
+          // Debug: log salesmen without location
+          console.log(`⚠️ ${r.salesman?.name || 'Unknown'} has no location data`)
+        }
+        return hasLocation
+      })
       .map(r => {
         const salesmanId = r.salesman?._id
+        const locationAge = r.latestLocation?.timestamp 
+          ? Math.round((Date.now() - new Date(r.latestLocation.timestamp).getTime()) / 60000)
+          : null
+        
+        // Determine status: Online if location is recent OR if salesman is marked online
+        const isLocationRecent = locationAge !== null && locationAge <= 5
+        const status = (r.isOnline || isLocationRecent) ? 'Online' : 'Offline'
+        
         return {
           _id: r.latestLocation?._id || salesmanId,
           name: r.salesman?.name || r.salesman?.email || 'Salesman',
           latitude: parseFloat(r.latestLocation.latitude),
           longitude: parseFloat(r.latestLocation.longitude),
-          status: r.isOnline ? 'Online' : 'Offline',
+          status: status,
           address: locationAddresses[salesmanId] || '',
           salesman: r.salesman,
           timestamp: r.latestLocation?.timestamp,
           accuracy: r.latestLocation?.accuracy,
           lastSeenMs: r.lastSeenMs,
+          locationAgeMinutes: locationAge, // Add location age for debugging
         }
       })
+    
+    console.log(`🗺️ Map markers created: ${markers.length} markers`)
+    markers.forEach(m => {
+      console.log(`   ${m.name}: ${m.status}, Location age: ${m.locationAgeMinutes !== null ? m.locationAgeMinutes + ' min' : 'N/A'}`)
+    })
+    
+    return markers
   }, [salesmenLocations, locationAddresses]) // Only update when locations or addresses change
 
   // Get first salesman's location coordinates (only from location data, not addresses)
@@ -390,13 +430,22 @@ const LiveTracking = () => {
   return (
     <div className="w-full flex flex-col" style={{ height: 'calc(100vh - 120px)', minHeight: '600px' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-shrink-0">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div className="flex items-center gap-3">
           <FaMapMarkerAlt className="w-8 h-8 text-[#e9931c]" />
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Live Tracking</h1>
             <p className="text-gray-600">Monitor sales reps in real-time</p>
           </div>
+        </div>
+      </div>
+
+      {/* Start Tracking - Info card: sales reps start tracking from their dashboard */}
+      <div className="mb-4 p-4 bg-[#e9931c]/10 border border-[#e9931c]/30 rounded-lg flex items-center gap-3 flex-shrink-0">
+        <FaLocationArrow className="w-6 h-6 text-[#e9931c]" />
+        <div>
+          <h3 className="font-semibold text-gray-900">Start Tracking</h3>
+          <p className="text-sm text-gray-600">Sales reps start and manage their GPS tracking from the Sales Rep Hub app (Sales Tracking). Their live location will appear here once they start tracking.</p>
         </div>
       </div>
 

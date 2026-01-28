@@ -13,9 +13,9 @@ const getLatestSalesmenLocations = async (req, res) => {
     const now = Date.now();
 
     // Aggregate from Users so we include salesmen with no location yet
-    // Also include admins for online status tracking
+    // Only fetch salesmen (not admins) for live tracking
     const rows = await User.aggregate([
-      { $match: { role: { $in: ["salesman", "admin"] } } },
+      { $match: { role: "salesman" } },
       {
         $lookup: {
           from: "locations",
@@ -54,13 +54,26 @@ const getLatestSalesmenLocations = async (req, res) => {
     ]);
 
     const data = rows.map((u) => {
-      // For salesmen: use location timestamp if available, otherwise use lastActivity
-      // For admins: use lastActivity (they don't have location tracking)
+      // For salesmen: determine online status based on most recent activity
+      // Priority: Use the MOST RECENT timestamp between location and lastActivity
       let ts = null;
-      if (u.role === "salesman" && u.latestLocation?.timestamp) {
-        ts = new Date(u.latestLocation.timestamp).getTime();
-      } else if (u.lastActivity) {
-        ts = new Date(u.lastActivity).getTime();
+      let locationTs = null;
+      let activityTs = null;
+      
+      if (u.latestLocation?.timestamp) {
+        locationTs = new Date(u.latestLocation.timestamp).getTime();
+      }
+      if (u.lastActivity) {
+        activityTs = new Date(u.lastActivity).getTime();
+      }
+      
+      // Use the most recent timestamp (location OR lastActivity, whichever is newer)
+      if (locationTs && activityTs) {
+        ts = Math.max(locationTs, activityTs); // Use the newer one
+      } else if (locationTs) {
+        ts = locationTs;
+      } else if (activityTs) {
+        ts = activityTs;
       }
       
       const lastSeenMs = ts ? now - ts : null;

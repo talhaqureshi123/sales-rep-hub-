@@ -27,7 +27,6 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
     { id: 'quotes', label: 'Quotes', icon: FaFileInvoice },
     { id: 'sample-tracker', label: 'Samples', icon: FaFlask },
     { id: 'hubspot-tasks', label: 'Tasks', icon: FaTasks },
-    { id: 'follow-up-manager', label: 'Follow-ups', icon: FaBell },
     { id: 'user-management', label: 'Salesmen', icon: FaUsers },
     { id: 'customer-management', label: 'Customers', icon: FaUser },
     { id: 'shift-photos', label: 'Photos', icon: FaCamera },

@@ -31,7 +31,6 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
     { id: 'sales-orders', icon: FaShoppingCart, label: 'Sales Orders' },
     { id: 'quotes', icon: FaFileInvoice, label: 'Quotes' },
     { id: 'sample-tracker', icon: FaFlask, label: 'Sample Tracker' },
-    { id: 'follow-up-manager', icon: FaBell, label: 'Follow-Up Manager' },
     { id: 'sales-targets', icon: FaBullseye, label: 'Sales Targets' },
     { id: 'sales-submissions', icon: FaUpload, label: 'Sales Submissions' },
     { id: 'user-management', icon: FaUsers, label: 'Salesman Management' },
@@ -55,7 +54,7 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
             </svg>
           </div>
           <div className="hidden md:block">
-            <h2 className="text-gray-800 font-bold text-sm">Sales Rap Hub</h2>
+            <h2 className="text-gray-800 font-bold text-sm">Sales Rep Hub</h2>
             <p className="text-gray-600 text-xs">Admin Dashboard</p>
           </div>
         </div>

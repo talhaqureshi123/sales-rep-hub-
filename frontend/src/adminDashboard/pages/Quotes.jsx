@@ -873,7 +873,7 @@ const Quotes = () => {
                       <div>
                         <p className="text-gray-500">Total Amount</p>
                         <p className="font-bold text-lg text-[#e9931c]">
-                          £{quote.total ? quote.total.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                          £{Number(quote.total || 0).toFixed(2)}
                         </p>
                       </div>
                     </div>

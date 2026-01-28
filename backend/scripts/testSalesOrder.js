@@ -129,7 +129,7 @@ const testSalesOrder = async () => {
       sendToWarehouse: false,
       creditLimitCheck: true,
 
-      // Admin-created orders are auto-approved
+      // All orders are auto-approved by default (both admin and salesman)
       approvalStatus: 'Approved',
       approvedBy: salesman._id, // Using salesman ID for testing
       approvedAt: new Date(),

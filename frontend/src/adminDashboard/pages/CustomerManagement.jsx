@@ -1471,7 +1471,7 @@ const CustomerManagement = () => {
                           {customerDetailData.customer?.monthlySpend !== undefined && (
                             <div>
                               <p className="text-xs text-gray-500 font-medium mb-1">Monthly Spend</p>
-                              <p className="text-sm font-semibold text-gray-800">₹{customerDetailData.customer.monthlySpend?.toLocaleString() || 0}</p>
+                              <p className="text-sm font-semibold text-gray-800">£{Number(customerDetailData.customer.monthlySpend || 0).toFixed(2)}</p>
                             </div>
                           )}
                           {customerDetailData.customer?.address && (
@@ -1772,7 +1772,7 @@ const CustomerManagement = () => {
                                   )}
                                 </div>
                                 {quotation.total !== undefined && (
-                                  <p className="text-sm font-semibold text-gray-800 mb-1">Total: ₹{quotation.total?.toLocaleString() || 0}</p>
+                                  <p className="text-sm font-semibold text-gray-800 mb-1">Total: £{Number(quotation.total || 0).toFixed(2)}</p>
                                 )}
                                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                                   {quotation.createdAt && (
@@ -1822,7 +1822,7 @@ const CustomerManagement = () => {
                                   )}
                                 </div>
                                 {order.grandTotal !== undefined && (
-                                  <p className="text-sm font-semibold text-gray-800 mb-1">Total: ₹{order.grandTotal?.toLocaleString() || 0}</p>
+                                  <p className="text-sm font-semibold text-gray-800 mb-1">Total: £{Number(order.grandTotal || 0).toFixed(2)}</p>
                                 )}
                                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                                   {order.orderDate && (

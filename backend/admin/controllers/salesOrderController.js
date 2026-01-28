@@ -6,17 +6,30 @@ const { sendOrderApprovalEmail } = require("../../utils/emailService");
 
 // @desc    Get all sales orders
 // @route   GET /api/admin/sales-orders
-// @access  Private/Admin
+// @access  Private/Admin, Salesman
 const getSalesOrders = async (req, res) => {
   try {
     const { status, search, salesPerson } = req.query;
     const filter = {};
 
+    // If logged-in user is a salesman, automatically filter by their ID
+    // Salesman can only see their own orders
+    if (req.user.role === 'salesman') {
+      filter.salesPerson = req.user._id;
+      console.log(`[Sales Orders] 👤 SALESMAN VIEW - Filter: ${req.user._id} (${req.user.name || req.user.email})`);
+    } else {
+      // Admin can see ALL orders (no filter by default)
+      console.log(`[Sales Orders] 👑 ADMIN VIEW - Showing ALL orders`);
+      if (salesPerson) {
+        // Admin can filter by any salesPerson (from query param)
+        filter.salesPerson = salesPerson;
+        console.log(`[Sales Orders] 👑 ADMIN - Filtered by salesPerson: ${salesPerson}`);
+      }
+    }
+
     if (status && status !== 'All') {
       filter.orderStatus = status;
-    }
-    if (salesPerson) {
-      filter.salesPerson = salesPerson;
+      console.log(`[Sales Orders] 📊 Status filter: ${status}`);
     }
     if (search) {
       filter.$or = [
@@ -25,7 +38,13 @@ const getSalesOrders = async (req, res) => {
         { emailAddress: { $regex: search, $options: "i" } },
         { invoiceNumber: { $regex: search, $options: "i" } },
       ];
+      console.log(`[Sales Orders] 🔍 Search filter: ${search}`);
     }
+
+    const totalCount = await SalesOrder.countDocuments({});
+    const filteredCount = await SalesOrder.countDocuments(filter);
+    console.log(`[Sales Orders] 📈 Total orders in DB: ${totalCount}, Filtered: ${filteredCount}`);
+    console.log(`[Sales Orders] 🔍 Filter applied:`, JSON.stringify(filter, null, 2));
 
     const orders = await SalesOrder.find(filter)
       .populate('salesPerson', 'name email')
@@ -141,39 +160,75 @@ const createSalesOrder = async (req, res) => {
       }));
     }
 
-    // Set approval status based on user role
-    const currentUserRole = req.user.role;
-    if (currentUserRole === 'salesman') {
-      // Salesman-created orders need approval (Pending)
-      orderData.approvalStatus = 'Pending';
-      orderData.orderStatus = orderData.orderStatus || 'Pending';
-      orderData.createdBy = req.user._id;
-    } else {
-      // Admin-created orders are auto-approved
-      orderData.approvalStatus = 'Approved';
-      orderData.approvedBy = req.user._id;
-      orderData.approvedAt = new Date();
-      if (!orderData.orderStatus || orderData.orderStatus === 'Draft') {
-        orderData.orderStatus = 'Confirmed';
-        // Generate invoice number for confirmed orders
-        if (!orderData.invoiceNumber) {
-          let invoiceNumber;
-          let isUnique = false;
-          while (!isUnique) {
-            const prefix = 'INV';
-            const randomNum = Math.floor(100000 + Math.random() * 900000);
-            invoiceNumber = `${prefix}-${randomNum}`;
-            const exists = await SalesOrder.findOne({ invoiceNumber });
-            if (!exists) {
-              isUnique = true;
-            }
+    // Set approval status - ALL orders are auto-approved by default (both admin and salesman)
+    orderData.approvalStatus = 'Approved';
+    orderData.approvedBy = req.user._id;
+    orderData.approvedAt = new Date();
+    orderData.createdBy = req.user._id;
+    
+    // Set order status - if not provided or Draft, set to Confirmed
+    if (!orderData.orderStatus || orderData.orderStatus === 'Draft' || orderData.orderStatus === 'Pending') {
+      orderData.orderStatus = 'Confirmed';
+      // Generate invoice number for confirmed orders
+      if (!orderData.invoiceNumber) {
+        let invoiceNumber;
+        let isUnique = false;
+        while (!isUnique) {
+          const prefix = 'INV';
+          const randomNum = Math.floor(100000 + Math.random() * 900000);
+          invoiceNumber = `${prefix}-${randomNum}`;
+          const exists = await SalesOrder.findOne({ invoiceNumber });
+          if (!exists) {
+            isUnique = true;
           }
-          orderData.invoiceNumber = invoiceNumber;
         }
+        orderData.invoiceNumber = invoiceNumber;
       }
     }
 
     const order = await SalesOrder.create(orderData);
+
+    // Send email notification when order is created and approved (non-blocking)
+    if (order.approvalStatus === 'Approved' && order.orderStatus === 'Confirmed') {
+      (async () => {
+        try {
+          const populatedOrder = await SalesOrder.findById(order._id)
+            .populate('salesPerson', 'name email')
+            .populate('customer', 'firstName lastName email phone')
+            .populate('approvedBy', 'name email');
+
+          const orderDetails = {
+            soNumber: populatedOrder.soNumber,
+            orderDate: populatedOrder.orderDate,
+            orderStatus: populatedOrder.orderStatus,
+            poNumber: populatedOrder.poNumber,
+            customerName: populatedOrder.customerName,
+            contactPerson: populatedOrder.contactPerson,
+            emailAddress: populatedOrder.emailAddress,
+            phoneNumber: populatedOrder.phoneNumber,
+            billingAddress: populatedOrder.billingAddress,
+            salesPerson: populatedOrder.salesPerson,
+            invoiceNumber: populatedOrder.invoiceNumber,
+            items: populatedOrder.items,
+            subtotal: populatedOrder.subtotal,
+            discount: populatedOrder.discount,
+            deliveryCharges: populatedOrder.deliveryCharges,
+            vat: populatedOrder.vat,
+            vatRate: populatedOrder.vatRate,
+            grandTotal: populatedOrder.grandTotal,
+            paymentMethod: populatedOrder.paymentMethod,
+            amountPaid: populatedOrder.amountPaid,
+            balanceRemaining: populatedOrder.balanceRemaining,
+          };
+
+          const APPROVAL_EMAIL = 'iotfiy.solution@gmail.com';
+          await sendOrderApprovalEmail(APPROVAL_EMAIL, 'Admin', orderDetails);
+          console.log('✅ Order creation email sent to', APPROVAL_EMAIL);
+        } catch (emailError) {
+          console.error('Error sending order creation email:', emailError);
+        }
+      })();
+    }
 
     // Update monthly sales targets when order is confirmed (non-blocking)
     if (order.orderStatus === 'Confirmed' && order.salesPerson) {
@@ -343,7 +398,7 @@ const updateSalesOrder = async (req, res) => {
       }));
     }
 
-    // Track previous status to detect approval
+    // Track previous status to detect when order becomes Delivered (complete)
     const previousStatus = order.orderStatus;
     const previousSalesPerson = order.salesPerson;
 
@@ -356,18 +411,21 @@ const updateSalesOrder = async (req, res) => {
 
     await order.save();
 
-    // Update monthly sales targets when order status changes to Confirmed (non-blocking)
-    const isNewlyConfirmed = order.orderStatus === 'Confirmed' && previousStatus !== 'Confirmed';
+    // Update sales targets when order reaches a counted status: Confirmed, Processing, Dispatched, Delivered
+    // Only count once when order first reaches any of these statuses (not when moving between them)
+    const countedStatuses = ['Confirmed', 'Processing', 'Dispatched', 'Delivered'];
+    const wasNotCounted = !countedStatuses.includes(previousStatus);
+    const isNowCounted = countedStatuses.includes(order.orderStatus);
+    const shouldUpdateTarget = wasNotCounted && isNowCounted; // First time reaching a counted status
+    
     const orderAmount = order.grandTotal || 0;
     const salesPersonId = order.salesPerson || previousSalesPerson;
 
-    if (isNewlyConfirmed && salesPersonId) {
+    if (shouldUpdateTarget && salesPersonId) {
       (async () => {
         try {
           const orderDate = new Date(order.orderDate || order.createdAt || new Date());
           
-          // Find ALL active targets for this salesman (both Orders and Revenue types)
-          // Check targets that overlap with the order date (not just Monthly)
           const allTargets = await SalesTarget.find({
             salesman: salesPersonId,
             targetType: { $in: ['Orders', 'Revenue'] },
@@ -376,9 +434,7 @@ const updateSalesOrder = async (req, res) => {
             endDate: { $gte: orderDate }
           });
 
-          // Update each matching target's currentProgress
           for (const target of allTargets) {
-            // Normalize dates for accurate comparison
             const targetStart = new Date(target.startDate);
             targetStart.setHours(0, 0, 0, 0);
             const targetEnd = new Date(target.endDate);
@@ -386,24 +442,20 @@ const updateSalesOrder = async (req, res) => {
             const orderDateNormalized = new Date(orderDate);
             orderDateNormalized.setHours(12, 0, 0, 0);
             
-            // Check if order date falls within target date range
             if (orderDateNormalized >= targetStart && orderDateNormalized <= targetEnd) {
               if (target.targetType === 'Orders') {
-                // For Orders type: increment count by 1
                 target.currentProgress = (target.currentProgress || 0) + 1;
                 await target.save();
-                console.log(`✅ Sales order ${order.soNumber} confirmed: 1 order added to ${target.period} Orders target "${target.targetName}" (${target._id})`);
+                console.log(`✅ Sales order ${order.soNumber} (${order.orderStatus}): 1 order added to ${target.period} Orders target "${target.targetName}" (${target._id})`);
               } else if (target.targetType === 'Revenue' && orderAmount > 0) {
-                // For Revenue type: add order amount
                 target.currentProgress = (target.currentProgress || 0) + orderAmount;
                 await target.save();
-                console.log(`✅ Sales order ${order.soNumber} confirmed: £${orderAmount.toFixed(2)} added to ${target.period} Revenue target "${target.targetName}" (${target._id})`);
+                console.log(`✅ Sales order ${order.soNumber} (${order.orderStatus}): £${orderAmount.toFixed(2)} added to ${target.period} Revenue target "${target.targetName}" (${target._id})`);
               }
             }
           }
         } catch (targetError) {
-          console.error('Error updating monthly sales targets:', targetError);
-          // Don't fail the order update if target update fails
+          console.error('Error updating sales targets:', targetError);
         }
       })();
     }
@@ -497,94 +549,45 @@ const approveSalesOrder = async (req, res) => {
 
     await order.save();
 
-    // Update monthly sales targets when order is approved (non-blocking)
-    const orderAmount = order.grandTotal || 0;
-    const salesPersonId = order.salesPerson;
+    // Sales targets are updated only when order is marked Delivered (see updateSalesOrder).
 
-    if (salesPersonId) {
-      (async () => {
-        try {
-          // Use approval date (when order was approved) instead of order date
-          // This ensures orders are counted in the month they were approved
-          const approvalDate = order.approvedAt || new Date();
-          const orderDate = new Date(order.orderDate || order.createdAt || new Date());
-          
-          // Find ALL active targets for this salesman (both Orders and Revenue types)
-          // Check targets that overlap with the approval date (not just Monthly)
-          const allTargets = await SalesTarget.find({
-            salesman: salesPersonId,
-            targetType: { $in: ['Orders', 'Revenue'] },
-            status: 'Active',
-            startDate: { $lte: approvalDate },
-            endDate: { $gte: approvalDate }
-          });
-
-          // Update each matching target's currentProgress
-          for (const target of allTargets) {
-            // Normalize dates to midnight for accurate comparison
-            const targetStart = new Date(target.startDate);
-            targetStart.setHours(0, 0, 0, 0);
-            const targetEnd = new Date(target.endDate);
-            targetEnd.setHours(23, 59, 59, 999);
-            const approvalDateNormalized = new Date(approvalDate);
-            approvalDateNormalized.setHours(12, 0, 0, 0); // Set to noon for safe comparison
-            
-            // Check if approval date falls within target date range
-            // This ensures orders are counted in the period they were approved (Daily, Weekly, Monthly, etc.)
-            if (approvalDateNormalized >= targetStart && approvalDateNormalized <= targetEnd) {
-              if (target.targetType === 'Orders') {
-                // For Orders type: increment count by 1
-                target.currentProgress = (target.currentProgress || 0) + 1;
-                await target.save();
-                console.log(`✅ Sales order ${order.soNumber} approved: 1 order added to ${target.period} Orders target "${target.targetName}" (${target._id})`);
-              } else if (target.targetType === 'Revenue' && orderAmount > 0) {
-                // For Revenue type: add order amount
-                target.currentProgress = (target.currentProgress || 0) + orderAmount;
-                await target.save();
-                console.log(`✅ Sales order ${order.soNumber} approved: £${orderAmount.toFixed(2)} added to ${target.period} Revenue target "${target.targetName}" (${target._id})`);
-              }
-            } else {
-              console.log(`⚠️ Order ${order.soNumber} approval date (${approvalDateNormalized.toISOString()}) not in target range (${targetStart.toISOString()} - ${targetEnd.toISOString()})`);
-            }
-          }
-        } catch (targetError) {
-          console.error('Error updating monthly sales targets:', targetError);
-          // Don't fail the order approval if target update fails
-        }
-      })();
-    }
-
-    // Send email notification to all admins (non-blocking)
+    // Send email notification to talhaabid400@gmail.com (non-blocking)
+    const APPROVAL_EMAIL = 'talhaabid400@gmail.com';
     (async () => {
       try {
-        const admins = await User.find({ role: 'admin', email: { $exists: true, $ne: '' } })
-          .select('name email');
-        
-        if (admins && admins.length > 0) {
-          const populatedOrder = await SalesOrder.findById(order._id)
-            .populate('salesPerson', 'name email')
-            .populate('customer', 'firstName lastName email phone')
-            .populate('approvedBy', 'name email');
+        const populatedOrder = await SalesOrder.findById(order._id)
+          .populate('salesPerson', 'name email')
+          .populate('customer', 'firstName lastName email phone')
+          .populate('approvedBy', 'name email');
 
-          const orderDetails = {
-            soNumber: populatedOrder.soNumber,
-            customerName: populatedOrder.customerName,
-            grandTotal: populatedOrder.grandTotal,
-            salesPerson: populatedOrder.salesPerson,
-            invoiceNumber: populatedOrder.invoiceNumber,
-          };
+        const orderDetails = {
+          soNumber: populatedOrder.soNumber,
+          orderDate: populatedOrder.orderDate,
+          orderStatus: populatedOrder.orderStatus,
+          poNumber: populatedOrder.poNumber,
+          customerName: populatedOrder.customerName,
+          contactPerson: populatedOrder.contactPerson,
+          emailAddress: populatedOrder.emailAddress,
+          phoneNumber: populatedOrder.phoneNumber,
+          billingAddress: populatedOrder.billingAddress,
+          salesPerson: populatedOrder.salesPerson,
+          invoiceNumber: populatedOrder.invoiceNumber,
+          items: populatedOrder.items,
+          subtotal: populatedOrder.subtotal,
+          discount: populatedOrder.discount,
+          deliveryCharges: populatedOrder.deliveryCharges,
+          vat: populatedOrder.vat,
+          vatRate: populatedOrder.vatRate,
+          grandTotal: populatedOrder.grandTotal,
+          paymentMethod: populatedOrder.paymentMethod,
+          amountPaid: populatedOrder.amountPaid,
+          balanceRemaining: populatedOrder.balanceRemaining,
+        };
 
-          // Send email to all admins
-          for (const admin of admins) {
-            if (admin.email) {
-              await sendOrderApprovalEmail(admin.email, admin.name || 'Admin', orderDetails);
-            }
-          }
-          console.log(`✅ Order approval emails sent to ${admins.length} admin(s)`);
-        }
+        await sendOrderApprovalEmail(APPROVAL_EMAIL, 'Admin', orderDetails);
+        console.log('✅ Order approval email sent to', APPROVAL_EMAIL);
       } catch (emailError) {
-        console.error('Error sending order approval emails:', emailError);
-        // Don't fail the order approval if email fails
+        console.error('Error sending order approval email:', emailError);
       }
     })();
 

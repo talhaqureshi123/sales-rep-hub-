@@ -58,7 +58,7 @@ app.get("/api/health", (req, res) => {
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Sales Rap Hub API",
+    message: "Sales Rep Hub API",
     version: "1.0.0",
   });
 });

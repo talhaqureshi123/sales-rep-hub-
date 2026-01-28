@@ -157,6 +157,12 @@ const SalesTargets = () => {
         </div>
       </div>
 
+      {/* Info: Which orders count */}
+      <div className="p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg text-xs sm:text-sm text-gray-700">
+        <p className="font-medium text-gray-900 mb-0.5">Orders counted</p>
+        <p className="text-gray-600">Progress counts orders: Confirmed, Processing, Dispatched, Delivered. Draft, Pending and Cancelled are not counted.</p>
+      </div>
+
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -329,6 +335,16 @@ const SalesTargets = () => {
                         {formatTargetValue(target.currentProgress || 0, target.targetType)}
                       </p>
                     </div>
+
+                    {/* Order Amount (total value of orders in this period) */}
+                    {target.currentAmount != null && (
+                      <div className="bg-[#e9931c]/10 rounded-lg p-1.5 border border-[#e9931c]/30">
+                        <p className="text-xs text-gray-600 mb-0.5 font-medium">Amount</p>
+                        <p className="text-base font-bold text-[#e9931c]">
+                          £{Number(target.currentAmount || 0).toFixed(2)}
+                        </p>
+                      </div>
+                    )}
                     
                     {/* Remaining Target or Exceeded */}
                     {isExceeded ? (

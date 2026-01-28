@@ -151,7 +151,11 @@ const visitTargetSchema = new mongoose.Schema(
     },
 
     visitedAreaImage: {
-      type: String, // URL (Cloudinary / S3) - Image of visited area
+      type: String, // URL (Cloudinary / S3) - Image of visited area (single image for backward compatibility)
+    },
+    visitedAreaImages: {
+      type: [String], // Array of URLs - Multiple images of visited area
+      default: [],
     },
 
     // ===== TRACKING SESSION =====

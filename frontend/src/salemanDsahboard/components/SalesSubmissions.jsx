@@ -166,19 +166,19 @@ const SalesSubmissions = () => {
   const loadSubmissions = async () => {
     try {
       setLoading(true)
-      // Get current salesman ID
-      const userId = localStorage.getItem('userId') || JSON.parse(localStorage.getItem('user') || '{}')._id
-      
-      const filterParams = {
-        salesPerson: userId // Filter by current salesman
-      }
+      // Backend automatically filters by logged-in salesman, no need to pass salesPerson
+      const filterParams = {}
       if (filters.status !== 'All') filterParams.status = filters.status
 
       const result = await getSalesOrders(filterParams)
       if (result.success && result.data) {
         // Map sales orders to match submission format for compatibility
         const orders = result.data || []
+        console.log('📦 Loaded sales orders:', orders.length, 'orders')
+        console.log('   Orders:', orders.map(o => ({ so: o.soNumber, status: o.orderStatus, date: o.orderDate })))
         setSubmissions(orders)
+      } else {
+        console.warn('⚠️ No orders returned:', result.message)
       }
     } catch (error) {
       console.error('Error loading sales orders:', error)
@@ -189,12 +189,12 @@ const SalesSubmissions = () => {
 
   const loadStats = async () => {
     try {
-      // Get current salesman ID
-      const userId = localStorage.getItem('userId') || JSON.parse(localStorage.getItem('user') || '{}')._id
-      
-      const result = await getSalesOrders({ salesPerson: userId })
+      // Backend automatically filters by logged-in salesman
+      const result = await getSalesOrders({})
       if (result.success && result.data) {
         const orders = result.data || []
+        console.log('📊 Stats calculation - Total orders:', orders.length)
+        
         // Calculate stats from sales orders
         const totalOrders = orders.length
         const confirmedOrders = orders.filter(o => o.orderStatus === 'Confirmed').length
@@ -203,15 +203,31 @@ const SalesSubmissions = () => {
           .filter(o => o.orderStatus === 'Confirmed')
           .reduce((sum, o) => sum + (o.grandTotal || 0), 0)
         
+        console.log('   Stats:', { total: totalOrders, confirmed: confirmedOrders, pending: pendingOrders, amount: totalAmount })
+        
         setStats({
           total: totalOrders,
           approved: confirmedOrders,
           pending: pendingOrders,
           totalAmount: totalAmount
         })
+      } else {
+        console.warn('⚠️ Stats: No orders returned:', result.message)
+        setStats({
+          total: 0,
+          approved: 0,
+          pending: 0,
+          totalAmount: 0
+        })
       }
     } catch (error) {
       console.error('Error loading stats:', error)
+      setStats({
+        total: 0,
+        approved: 0,
+        pending: 0,
+        totalAmount: 0
+      })
     }
   }
 
@@ -774,7 +790,7 @@ const SalesSubmissions = () => {
               <p className="text-xs sm:text-sm text-gray-600">Total Revenue</p>
               <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
             </div>
-            <p className="text-2xl sm:text-3xl font-bold text-orange-700">£{stats.totalAmount?.toLocaleString() || 0}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-orange-700">£{Number(stats.totalAmount || 0).toFixed(2)}</p>
             <p className="text-[10px] sm:text-xs text-gray-600 mt-1">From confirmed orders</p>
           </div>
         </div>
@@ -1317,7 +1333,7 @@ const SalesSubmissions = () => {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm font-semibold text-[#e9931c]">
-                          £{order.grandTotal?.toLocaleString() || 0}
+                          £{Number(order.grandTotal || 0).toFixed(2)}
                         </span>
                       </td>
                       <td className="px-4 py-3">

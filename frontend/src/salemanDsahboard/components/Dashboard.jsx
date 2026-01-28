@@ -410,7 +410,7 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <p className="text-sm opacity-90">Total Sales</p>
-            <p className="text-2xl font-bold">£{overall.totalSales.toLocaleString()}</p>
+            <p className="text-2xl font-bold">£{Number(overall.totalSales || 0).toFixed(2)}</p>
           </div>
           <div>
             <p className="text-sm opacity-90">Total Quotations</p>

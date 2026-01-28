@@ -14,8 +14,9 @@ const salesTargetSchema = new mongoose.Schema(
     },
     targetType: {
       type: String,
-      enum: ['Revenue', 'Visits', 'New Customers', 'Quotes', 'Conversions', 'Orders'],
+      enum: ['Orders'],
       required: [true, 'Please provide target type'],
+      default: 'Orders',
     },
     targetValue: {
       type: Number,
@@ -100,23 +101,31 @@ salesTargetSchema.pre('save', async function () {
   
   // Auto-update status based on dates and progress
   const now = new Date();
+  const startDate = new Date(this.startDate);
   const endDate = new Date(this.endDate);
+  endDate.setHours(23, 59, 59, 999); // End of end date day
   
-  if (this.status !== 'Cancelled') {
-    // Check if target is completed
-    if (this.currentProgress >= this.targetValue) {
-      this.status = 'Completed';
-      if (!this.completedAt) {
-        this.completedAt = now;
-      }
-    }
-    // Check if target period has ended
-    else if (endDate < now && this.status === 'Active') {
-      // If end date passed and not completed, mark as Failed
-      this.status = 'Failed';
-    }
-    // Check if target is still active
-    else if (now >= new Date(this.startDate) && now <= endDate && this.status !== 'Completed' && this.status !== 'Failed') {
+  if (this.status === 'Cancelled') return;
+  
+  // 1. Target achieved
+  if (this.currentProgress >= this.targetValue) {
+    this.status = 'Completed';
+    if (!this.completedAt) this.completedAt = now;
+    return;
+  }
+  
+  // 2. Period still running (today is before or on end date) → always Active
+  if (now <= endDate && now >= startDate) {
+    this.status = 'Active';
+    return;
+  }
+  
+  // 3. Period has ended (past end date) - Keep as Active (admin can manually change to Failed if needed)
+  if (now > endDate) {
+    // Don't auto-set to Failed - keep as Active so admin can review
+    // Admin can manually change status if needed
+    if (this.status === 'Active' && (this.currentProgress || 0) < this.targetValue) {
+      // Keep as Active even after period ends - admin decides
       this.status = 'Active';
     }
   }

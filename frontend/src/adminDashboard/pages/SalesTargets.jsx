@@ -88,7 +88,12 @@ const SalesTargets = () => {
   const handleCreateTarget = async (e) => {
     e.preventDefault()
     if (!formData.salesman || !formData.targetName || !formData.targetType || !formData.targetValue || !formData.period || !formData.startDate || !formData.endDate) {
-      alert('Please fill in all required fields')
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Required Fields',
+        text: 'Please fill in all required fields',
+        confirmButtonColor: '#e9931c'
+      })
       return
     }
 
@@ -96,16 +101,33 @@ const SalesTargets = () => {
     try {
       const result = await createSalesTarget(formData)
       if (result.success) {
-        alert('Sales target created successfully!')
+        await Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Sales target created successfully!',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
         setShowCreateModal(false)
         resetForm()
         loadTargets()
       } else {
-        alert(result.message || 'Error creating sales target')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: result.message || 'Error creating sales target',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error creating target:', error)
-      alert('Error creating sales target')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating sales target',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -130,7 +152,12 @@ const SalesTargets = () => {
       }
     } catch (error) {
       console.error('Error loading target:', error)
-      alert('Error loading target details')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error loading target details',
+        confirmButtonColor: '#e9931c'
+      })
     }
   }
 
@@ -140,18 +167,42 @@ const SalesTargets = () => {
 
     setLoading(true)
     try {
-      const result = await updateSalesTarget(selectedTarget._id, formData)
+      // Ensure dates are sent in correct format
+      const updateData = {
+        ...formData,
+        startDate: formData.startDate || undefined,
+        endDate: formData.endDate || undefined,
+      }
+      console.log('📅 Updating target with dates:', { startDate: updateData.startDate, endDate: updateData.endDate })
+      const result = await updateSalesTarget(selectedTarget._id, updateData)
       if (result.success) {
-        alert('Sales target updated successfully!')
+        await Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Sales target updated successfully!',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
         setShowEditModal(false)
         resetForm()
         loadTargets()
       } else {
-        alert(result.message || 'Error updating sales target')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: result.message || 'Error updating sales target',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error updating target:', error)
-      alert('Error updating sales target')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating sales target',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -193,22 +244,46 @@ const SalesTargets = () => {
   }
 
   const handleDeleteTarget = async (targetId) => {
-    if (!window.confirm('Are you sure you want to delete this sales target?')) {
-      return
-    }
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Sales Target?',
+      text: 'Are you sure you want to delete this sales target? This action cannot be undone.',
+      showCancelButton: true,
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it'
+    })
+    if (!confirmResult.isConfirmed) return
 
     setLoading(true)
     try {
       const result = await deleteSalesTarget(targetId)
       if (result.success) {
-        alert('Sales target deleted successfully!')
+        await Swal.fire({
+          icon: 'success',
+          title: 'Deleted!',
+          text: 'Sales target deleted successfully!',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
         loadTargets()
       } else {
-        alert(result.message || 'Error deleting sales target')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: result.message || 'Error deleting sales target',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error deleting target:', error)
-      alert('Error deleting sales target')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting sales target',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -236,13 +311,18 @@ const SalesTargets = () => {
   }
 
   const formatProgress = (target) => {
-    // All targets are Orders type now
     return `${target.currentProgress || 0} / ${target.targetValue || 0} orders`
   }
 
   const calculateProgressPercentage = (target) => {
     if (target.targetValue === 0) return 0
-    return Math.min(((target.currentProgress || 0) / target.targetValue) * 100, 100).toFixed(0)
+    const percentage = ((target.currentProgress || 0) / target.targetValue) * 100
+    // If percentage is less than 1%, show 1 decimal place (e.g., 0.2% instead of 0%)
+    // Otherwise show whole number
+    if (percentage > 0 && percentage < 1) {
+      return percentage.toFixed(1) // Show 1 decimal for small percentages
+    }
+    return Math.min(percentage, 100).toFixed(0) // Show whole number for 1% and above
   }
 
   const calculateDaysRemaining = (endDate) => {
@@ -272,7 +352,7 @@ const SalesTargets = () => {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Sales Targets Management</h1>
           <p className="text-gray-600">Create and manage sales targets for your team member</p>
@@ -287,6 +367,12 @@ const SalesTargets = () => {
           <FaPlus className="w-5 h-5" />
           Create New Target
         </button>
+      </div>
+
+      {/* Info: Which orders count */}
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-gray-700">
+        <p className="font-medium text-gray-900 mb-1">Orders counted in target</p>
+        <p className="text-gray-600">Progress counts orders with status: <span className="font-semibold text-[#e9931c]">Confirmed</span>, <span className="font-semibold text-[#e9931c]">Processing</span>, <span className="font-semibold text-[#e9931c]">Dispatched</span>, <span className="font-semibold text-[#e9931c]">Delivered</span>. Draft, Pending and Cancelled orders are not counted.</p>
       </div>
 
       {/* Filters */}
@@ -432,6 +518,11 @@ const SalesTargets = () => {
                   <p className="text-sm font-semibold text-gray-900 mb-2">
                     {formatProgress(target)}
                   </p>
+                  {target.currentAmount != null && (
+                    <p className="text-sm font-medium text-[#e9931c] mb-1">
+                      Amount: £{Number(target.currentAmount || 0).toFixed(2)}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-600">
                     {progressPercent}% Complete
                   </p>
@@ -528,28 +619,13 @@ const SalesTargets = () => {
                   value={formData.targetName}
                   onChange={handleInputChange}
                   required
-                  placeholder="e.g., Q1 2025 Revenue Target"
+                  placeholder="e.g., Q1 2025 Orders Target"
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="targetType"
-                  value={formData.targetType}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select type</option>
-                  {targetTypeOptions.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Target Type is always Orders - hidden field */}
+              <input type="hidden" name="targetType" value="Orders" />
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -562,10 +638,10 @@ const SalesTargets = () => {
                   onChange={handleInputChange}
                   required
                   min="0"
-                  step="0.01"
+                  step="1"
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                 />
-                <p className="text-xs text-gray-500 mt-1">Number of items</p>
+                <p className="text-xs text-gray-500 mt-1">Number of orders to achieve</p>
               </div>
               
               <div>
@@ -696,24 +772,11 @@ const SalesTargets = () => {
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Target Type *</label>
-                <select
-                  name="targetType"
-                  value={formData.targetType}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select type</option>
-                  {targetTypeOptions.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Target Type is always Orders - hidden field */}
+              <input type="hidden" name="targetType" value="Orders" />
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Target Value *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Target Value (Number of Orders) *</label>
                 <input
                   type="number"
                   name="targetValue"
@@ -721,9 +784,10 @@ const SalesTargets = () => {
                   onChange={handleInputChange}
                   required
                   min="0"
-                  step="0.01"
+                  step="1"
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                 />
+                <p className="text-xs text-gray-500 mt-1">Number of orders to achieve</p>
               </div>
               
               <div>

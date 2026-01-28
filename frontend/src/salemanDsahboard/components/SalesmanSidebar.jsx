@@ -42,7 +42,7 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
             </svg>
           </div>
           <div className="hidden md:block">
-            <h2 className="text-gray-800 font-bold text-sm">Sales Rap Hub</h2>
+            <h2 className="text-gray-800 font-bold text-sm">Sales Rep Hub</h2>
             <p className="text-gray-600 text-xs">Salesman Dashboard</p>
           </div>
         </div>

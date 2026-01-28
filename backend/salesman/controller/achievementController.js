@@ -133,7 +133,7 @@ const getAchievementStats = async (req, res) => {
         title: 'Quotation Approved',
         description: `Quotation ${quotation.quotationNumber} approved`,
         date: quotation.updatedAt ? new Date(quotation.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        conversion: `₹${quotation.total?.toLocaleString() || 0}`,
+        conversion: `£${(quotation.total || 0).toFixed(2)}`,
         status: 'completed',
         type: 'quotation',
       })),

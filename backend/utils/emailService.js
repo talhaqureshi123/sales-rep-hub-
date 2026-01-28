@@ -40,9 +40,9 @@ const sendPasswordSetupEmail = async (email, name, token) => {
     const setupUrl = `${config.FRONTEND_URL}/setup-password?token=${token}`;
 
     const mailOptions = {
-      from: `"Sales Rap Hub" <${config.EMAIL_USER}>`,
+      from: `"Sales Rep Hub" <${config.EMAIL_USER}>`,
       to: email,
-      subject: 'Welcome to Sales Rap Hub - Set Your Password',
+      subject: 'Welcome to Sales Rep Hub - Set Your Password',
       html: `
         <!DOCTYPE html>
         <html>
@@ -95,7 +95,7 @@ const sendPasswordSetupEmail = async (email, name, token) => {
         <body>
           <div class="container">
             <div class="header">
-              <h1>Welcome to Sales Rap Hub!</h1>
+              <h1>Welcome to Sales Rep Hub!</h1>
             </div>
             <div class="content">
               <p>Hello ${name},</p>
@@ -113,14 +113,14 @@ const sendPasswordSetupEmail = async (email, name, token) => {
               <p>If you did not expect this email, please ignore it.</p>
             </div>
             <div class="footer">
-              <p>© ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.</p>
             </div>
           </div>
         </body>
         </html>
       `,
       text: `
-        Welcome to Sales Rap Hub!
+        Welcome to Sales Rep Hub!
         
         Hello ${name},
         
@@ -132,7 +132,7 @@ const sendPasswordSetupEmail = async (email, name, token) => {
         
         If you did not expect this email, please ignore it.
         
-        © ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.
+        © ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.
       `,
     };
 
@@ -169,9 +169,9 @@ const sendOTPEmail = async (email, name, otp) => {
     const transporter = createTransporter();
 
     const mailOptions = {
-      from: `"Sales Rap Hub" <${config.EMAIL_USER}>`,
+      from: `"Sales Rep Hub" <${config.EMAIL_USER}>`,
       to: email,
-      subject: 'Sales Rap Hub - Password Setup OTP',
+      subject: 'Sales Rep Hub - Password Setup OTP',
       html: `
         <!DOCTYPE html>
         <html>
@@ -230,7 +230,7 @@ const sendOTPEmail = async (email, name, otp) => {
             </div>
             <div class="content">
               <p>Hello ${name},</p>
-              <p>You are setting up your password for Sales Rap Hub. Please use the OTP below to verify your email:</p>
+              <p>You are setting up your password for Sales Rep Hub. Please use the OTP below to verify your email:</p>
               
               <div class="otp-box">
                 <p style="margin: 0; color: #666; font-size: 14px;">Your OTP Code</p>
@@ -242,7 +242,7 @@ const sendOTPEmail = async (email, name, otp) => {
               <p>If you did not request this OTP, please ignore this email.</p>
             </div>
             <div class="footer">
-              <p>© ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -253,7 +253,7 @@ const sendOTPEmail = async (email, name, otp) => {
         
         Hello ${name},
         
-        You are setting up your password for Sales Rap Hub. Please use the OTP below to verify your email:
+        You are setting up your password for Sales Rep Hub. Please use the OTP below to verify your email:
         
         OTP: ${otp}
         
@@ -261,7 +261,7 @@ const sendOTPEmail = async (email, name, otp) => {
         
         If you did not request this OTP, please ignore this email.
         
-        © ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.
+        © ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.
       `,
     };
 
@@ -274,156 +274,256 @@ const sendOTPEmail = async (email, name, otp) => {
   }
 };
 
+// Create transporter for order approval emails - uses .env (EMAIL_USER, EMAIL_PASS) if set, else fallback
+const createApprovalEmailTransporter = () => {
+  // Use .env first (user can set EMAIL_USER and EMAIL_PASS in backend/.env)
+  const APPROVAL_EMAIL_USER = config.EMAIL_USER || 'talhaabid400@gmail.com';
+  const APPROVAL_EMAIL_PASS = config.EMAIL_PASS || 'your-app-password-here';
+  const cleanPass = (APPROVAL_EMAIL_PASS || '').replace(/\s/g, '');
+  
+  return nodemailer.createTransport({
+    host: config.EMAIL_HOST || 'smtp.gmail.com',
+    port: config.EMAIL_PORT || 587,
+    secure: false,
+    auth: {
+      user: APPROVAL_EMAIL_USER,
+      pass: cleanPass,
+    },
+    debug: process.env.NODE_ENV === 'development',
+    logger: process.env.NODE_ENV === 'development',
+  });
+};
+
 // Send order approval notification to admin
 const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
   try {
-    // Only send email if email is configured
-    if (!config.EMAIL_USER || !config.EMAIL_PASS) {
-      console.warn('⚠️ Email not configured. Skipping order approval email.');
-      return { success: false, message: 'Email not configured' };
-    }
+    const transporter = createApprovalEmailTransporter();
+    const {
+      soNumber,
+      orderDate,
+      orderStatus,
+      poNumber,
+      customerName,
+      contactPerson,
+      emailAddress,
+      phoneNumber,
+      billingAddress,
+      salesPerson,
+      invoiceNumber,
+      items = [],
+      subtotal = 0,
+      discount = 0,
+      deliveryCharges = 0,
+      vat = 0,
+      vatRate = 20,
+      grandTotal = 0,
+      paymentMethod,
+      amountPaid = 0,
+      balanceRemaining = 0,
+    } = orderDetails;
+    const fromEmail = config.EMAIL_USER || 'talhaabid400@gmail.com';
 
-    const transporter = createTransporter();
-    const { soNumber, customerName, grandTotal, salesPerson, invoiceNumber } = orderDetails;
+    const orderDateStr = orderDate
+      ? new Date(orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const reportDateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const itemsRows = (Array.isArray(items) ? items : []).map(
+      (item) => `
+        <tr>
+          <td style="padding:8px;border:1px solid #ddd">${item.productCode || '-'}</td>
+          <td style="padding:8px;border:1px solid #ddd">${item.productName || '-'}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${item.quantity || 0}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.unitPrice || 0).toFixed(2)}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.lineTotal || 0).toFixed(2)}</td>
+        </tr>`
+    ).join('');
 
     const mailOptions = {
-      from: `"Sales Rap Hub" <${config.EMAIL_USER}>`,
+      from: `"Sales Rep Hub" <${fromEmail}>`,
       to: adminEmail,
-      subject: `Sales Order Approved: ${soNumber}`,
+      subject: `Sales Order Report: ${soNumber} - ${customerName || 'Order'}`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
           <style>
-            body {
-              font-family: Arial, sans-serif;
-              line-height: 1.6;
-              color: #333;
-            }
-            .container {
-              max-width: 600px;
-              margin: 0 auto;
-              padding: 20px;
-              background-color: #f9f9f9;
-            }
-            .header {
-              background-color: #e9931c;
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
+            .container { max-width: 680px; margin: 0 auto; background: #fff; }
+            .brand-header {
+              background: linear-gradient(135deg, #e9931c 0%, #d8820a 100%);
               color: white;
-              padding: 20px;
+              padding: 24px;
               text-align: center;
-              border-radius: 5px 5px 0 0;
-            }
-            .content {
-              background-color: white;
-              padding: 30px;
-              border-radius: 0 0 5px 5px;
-            }
-            .order-details {
-              background-color: #f0f0f0;
-              padding: 15px;
-              border-radius: 5px;
-              margin: 20px 0;
-            }
-            .detail-row {
-              display: flex;
-              justify-content: space-between;
-              padding: 8px 0;
-              border-bottom: 1px solid #ddd;
-            }
-            .detail-row:last-child {
-              border-bottom: none;
-            }
-            .detail-label {
+              font-size: 22px;
               font-weight: bold;
-              color: #666;
+              letter-spacing: 0.5px;
             }
-            .detail-value {
-              color: #333;
+            .report-title { font-size: 18px; color: #333; margin: 24px 0 16px; padding-bottom: 8px; border-bottom: 2px solid #e9931c; }
+            .section { margin: 20px 0; }
+            .section table { width: 100%; border-collapse: collapse; font-size: 14px; }
+            .section th { background: #f5f5f5; padding: 10px; text-align: left; border: 1px solid #ddd; }
+            .section td { padding: 8px; border: 1px solid #ddd; }
+            .section .label { font-weight: bold; color: #555; width: 140px; }
+            .totals { margin-top: 16px; text-align: right; }
+            .totals .row { padding: 6px 0; }
+            .totals .grand { font-size: 16px; font-weight: bold; color: #e9931c; margin-top: 8px; padding-top: 8px; border-top: 2px solid #ddd; }
+            .signature {
+              margin-top: 32px;
+              padding-top: 24px;
+              border-top: 1px solid #eee;
+              font-size: 13px;
+              color: #555;
             }
-            .footer {
-              text-align: center;
-              margin-top: 20px;
-              color: #666;
-              font-size: 12px;
-            }
+            .signature .company { font-weight: bold; color: #e9931c; font-size: 15px; margin-bottom: 4px; }
+            .footer { text-align: center; margin-top: 24px; padding: 16px; color: #888; font-size: 12px; }
           </style>
         </head>
         <body>
           <div class="container">
-            <div class="header">
-              <h1>Sales Order Approved</h1>
-            </div>
-            <div class="content">
-              <p>Hello ${adminName},</p>
-              <p>A sales order has been approved and confirmed:</p>
-              
-              <div class="order-details">
-                <div class="detail-row">
-                  <span class="detail-label">Order Number:</span>
-                  <span class="detail-value">${soNumber || 'N/A'}</span>
-                </div>
-                ${invoiceNumber ? `
-                <div class="detail-row">
-                  <span class="detail-label">Invoice Number:</span>
-                  <span class="detail-value">${invoiceNumber}</span>
-                </div>
-                ` : ''}
-                <div class="detail-row">
-                  <span class="detail-label">Customer:</span>
-                  <span class="detail-value">${customerName || 'N/A'}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Sales Person:</span>
-                  <span class="detail-value">${salesPerson?.name || salesPerson?.email || 'N/A'}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Total Amount:</span>
-                  <span class="detail-value">£${(grandTotal || 0).toFixed(2)}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Approved Date:</span>
-                  <span class="detail-value">${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            <div class="brand-header">SALES REP HUB</div>
+            <div style="padding: 24px;">
+              <div class="report-title">Sales Order Report</div>
+              <p style="margin:0 0 20px; color:#666;">Formal sales order notification. Report date: ${reportDateStr}.</p>
+
+              <div class="section">
+                <div class="report-title" style="font-size:16px; margin-top:20px;">Order Information</div>
+                <table class="section">
+                  <tr><td class="label">SO Number</td><td>${soNumber || 'N/A'}</td></tr>
+                  <tr><td class="label">Order Date</td><td>${orderDateStr}</td></tr>
+                  <tr><td class="label">Order Status</td><td>${orderStatus || 'N/A'}</td></tr>
+                  <tr><td class="label">PO Number</td><td>${poNumber || 'Not Provided'}</td></tr>
+                  ${invoiceNumber ? `<tr><td class="label">Invoice Number</td><td>${invoiceNumber}</td></tr>` : ''}
+                </table>
+              </div>
+
+              <div class="section">
+                <div class="report-title" style="font-size:16px;">Sales Representative</div>
+                <table class="section">
+                  <tr><td class="label">Name</td><td>${salesPerson?.name || 'N/A'}</td></tr>
+                  <tr><td class="label">Email</td><td>${salesPerson?.email || 'N/A'}</td></tr>
+                </table>
+              </div>
+
+              <div class="section">
+                <div class="report-title" style="font-size:16px;">Customer Information</div>
+                <table class="section">
+                  <tr><td class="label">Company / Name</td><td>${customerName || 'N/A'}</td></tr>
+                  <tr><td class="label">Contact Person</td><td>${contactPerson || 'N/A'}</td></tr>
+                  <tr><td class="label">Email</td><td>${emailAddress || 'N/A'}</td></tr>
+                  <tr><td class="label">Phone</td><td>${phoneNumber || 'N/A'}</td></tr>
+                  <tr><td class="label">Address</td><td>${billingAddress || 'N/A'}</td></tr>
+                </table>
+              </div>
+
+              <div class="section">
+                <div class="report-title" style="font-size:16px;">Line Items</div>
+                <table class="section">
+                  <thead>
+                    <tr>
+                      <th style="text-align:left">Product Code</th>
+                      <th style="text-align:left">Product Name</th>
+                      <th style="text-align:center">Quantity</th>
+                      <th style="text-align:right">Unit Price</th>
+                      <th style="text-align:right">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>${itemsRows || '<tr><td colspan="5" style="text-align:center;padding:16px">No items</td></tr>'}</tbody>
+                </table>
+              </div>
+
+              <div class="section">
+                <div class="report-title" style="font-size:16px;">Financial Summary</div>
+                <div class="totals">
+                  <div class="row">Subtotal: £${Number(subtotal).toFixed(2)}</div>
+                  ${discount ? `<div class="row">Discount: -£${Number(discount).toFixed(2)}</div>` : ''}
+                  ${deliveryCharges ? `<div class="row">Delivery: £${Number(deliveryCharges).toFixed(2)}</div>` : ''}
+                  <div class="row">VAT (${vatRate}%): £${Number(vat).toFixed(2)}</div>
+                  <div class="row grand">Total: £${Number(grandTotal).toFixed(2)}</div>
                 </div>
               </div>
-              
-              <p>The order has been added to the salesman's monthly sales targets.</p>
-              
-              <p>You can view the order details in the admin dashboard.</p>
+
+              <div class="section">
+                <div class="report-title" style="font-size:16px;">Payment Details</div>
+                <table class="section">
+                  <tr><td class="label">Payment Method</td><td>${paymentMethod || 'N/A'}</td></tr>
+                  <tr><td class="label">Amount Paid</td><td>£${Number(amountPaid).toFixed(2)}</td></tr>
+                  <tr><td class="label">Balance Remaining</td><td>£${Number(balanceRemaining).toFixed(2)}</td></tr>
+                </table>
+              </div>
+
+              <div class="signature">
+                <div class="company">Sales Rep Hub</div>
+                <div>This is an automated sales order report. For support, please use the admin dashboard.</div>
+                <div style="margin-top:8px;">© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.</div>
+              </div>
             </div>
-            <div class="footer">
-              <p>© ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.</p>
-            </div>
+            <div class="footer">Sales Order Report — Sales Rep Hub</div>
           </div>
         </body>
         </html>
       `,
       text: `
-        Sales Order Approved
-        
-        Hello ${adminName},
-        
-        A sales order has been approved and confirmed:
-        
-        Order Number: ${soNumber || 'N/A'}
-        ${invoiceNumber ? `Invoice Number: ${invoiceNumber}\n` : ''}Customer: ${customerName || 'N/A'}
-        Sales Person: ${salesPerson?.name || salesPerson?.email || 'N/A'}
-        Total Amount: £${(grandTotal || 0).toFixed(2)}
-        Approved Date: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-        
-        The order has been added to the salesman's monthly sales targets.
-        
-        You can view the order details in the admin dashboard.
-        
-        © ${new Date().getFullYear()} Sales Rap Hub. All rights reserved.
+Sales Rep Hub — Sales Order Report
+
+Order Information
+SO Number: ${soNumber || 'N/A'}
+Order Date: ${orderDateStr}
+Order Status: ${orderStatus || 'N/A'}
+PO Number: ${poNumber || 'Not Provided'}
+${invoiceNumber ? `Invoice Number: ${invoiceNumber}\n` : ''}
+
+Sales Representative
+Name: ${salesPerson?.name || 'N/A'}
+Email: ${salesPerson?.email || 'N/A'}
+
+Customer Information
+Company/Name: ${customerName || 'N/A'}
+Contact: ${contactPerson || 'N/A'}
+Email: ${emailAddress || 'N/A'}
+Phone: ${phoneNumber || 'N/A'}
+Address: ${billingAddress || 'N/A'}
+
+Line Items: (see HTML report for table)
+Financial Summary
+Subtotal: £${Number(subtotal).toFixed(2)}
+VAT: £${Number(vat).toFixed(2)}
+Total: £${Number(grandTotal).toFixed(2)}
+
+Payment
+Method: ${paymentMethod || 'N/A'}
+Amount Paid: £${Number(amountPaid).toFixed(2)}
+Balance: £${Number(balanceRemaining).toFixed(2)}
+
+—
+Sales Rep Hub
+© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.
       `,
     };
 
+    // Verify transporter before sending
+    try {
+      await transporter.verify();
+      console.log('✅ Approval email transporter verified successfully');
+    } catch (verifyError) {
+      console.error('❌ Email transporter verification failed:', verifyError.message);
+      if (verifyError.code === 'EAUTH') {
+        console.error('🔐 Authentication failed. Please update APPROVAL_EMAIL_PASS in emailService.js with correct Gmail App Password');
+      }
+      throw verifyError;
+    }
+
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Order approval email sent to admin: ${adminEmail}`);
+    console.log('📧 Message ID:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Error sending order approval email:', error.message);
+    if (error.code === 'EAUTH') {
+      console.error('🔐 Authentication failed. Please update APPROVAL_EMAIL_PASS in emailService.js');
+      console.error('💡 For Gmail: Enable 2FA and generate App Password from Google Account settings');
+    }
     return { success: false, error: error.message };
   }
 };

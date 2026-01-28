@@ -936,7 +936,7 @@ const Quotation = () => {
                     <div className="flex items-center justify-between pt-3 border-t border-gray-200">
                       <div>
                         <p className="text-[10px] sm:text-xs text-gray-600">Total Amount</p>
-                        <p className="text-lg sm:text-xl font-bold text-[#e9931c]">£{quote.total.toLocaleString()}</p>
+                        <p className="text-lg sm:text-xl font-bold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</p>
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -997,7 +997,7 @@ const Quotation = () => {
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <div className="font-semibold text-[#e9931c]">£{quote.total.toLocaleString()}</div>
+                          <div className="font-semibold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</div>
                         </td>
                         <td className="py-4 px-4 text-gray-700">{quote.createdAt}</td>
                         <td className="py-4 px-4">

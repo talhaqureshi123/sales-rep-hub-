@@ -33,7 +33,7 @@ const getAllTracking = async (req, res) => {
       trackings.map(async (tracking) => {
         const trackingIdTargets = await VisitTarget.find({
           trackingId: tracking._id,
-        }).select('visitedAreaImage estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate');
+        }).select('visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate');
 
         const salesmanId = tracking.salesman?._id || tracking.salesman;
         const shiftDate = tracking.startedAt || tracking.createdAt;
@@ -46,7 +46,7 @@ const getAllTracking = async (req, res) => {
           ? await VisitTarget.find({
               salesman: salesmanId,
               visitDate: { $gte: shiftStart, $lte: shiftEnd },
-            }).select('visitedAreaImage estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate')
+            }).select('visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate')
           : [];
 
         const visitTargetsMap = new Map();
@@ -63,18 +63,43 @@ const getAllTracking = async (req, res) => {
         // Count visits
         const visitCount = visitTargets.length;
 
-        // Get visited area images for collage (latest first)
-        const visitedAreaImages = visitTargets
-          .filter((vt) => !!vt.visitedAreaImage)
+        // Get visited area images from VisitTargets (latest first)
+        // Support both single visitedAreaImage and multiple visitedAreaImages array
+        const visitedAreaImagesFromVisits = [];
+        visitTargets
+          .filter((vt) => {
+            // Include if has single image or array of images
+            return (vt.visitedAreaImage && vt.visitedAreaImage.trim() !== '') || 
+                   (Array.isArray(vt.visitedAreaImages) && vt.visitedAreaImages.length > 0);
+          })
           .sort((a, b) => {
             const ta = new Date(a.completedAt || a.updatedAt || 0).getTime();
             const tb = new Date(b.completedAt || b.updatedAt || 0).getTime();
             return tb - ta;
           })
-          .map((vt) => vt.visitedAreaImage);
+          .forEach((vt) => {
+            // Add images from visitedAreaImages array if exists
+            if (Array.isArray(vt.visitedAreaImages) && vt.visitedAreaImages.length > 0) {
+              vt.visitedAreaImages.forEach(img => {
+                if (img && img.trim() !== '' && !visitedAreaImagesFromVisits.includes(img)) {
+                  visitedAreaImagesFromVisits.push(img);
+                }
+              });
+            }
+            // Also add single visitedAreaImage if not already in array
+            if (vt.visitedAreaImage && vt.visitedAreaImage.trim() !== '' && !visitedAreaImagesFromVisits.includes(vt.visitedAreaImage)) {
+              visitedAreaImagesFromVisits.push(vt.visitedAreaImage);
+            }
+          });
+
+        // Include Tracking's own visitedAreaImage (from sample track start/stop) so it shows even without visit targets
+        const trackingVisitedImage = tracking.visitedAreaImage || null;
+        const visitedAreaImages = trackingVisitedImage && !visitedAreaImagesFromVisits.includes(trackingVisitedImage)
+          ? [trackingVisitedImage, ...visitedAreaImagesFromVisits]
+          : visitedAreaImagesFromVisits;
 
         // Keep a single primary image for backward compatibility (use latest)
-        const visitedAreaImage = visitedAreaImages[0] || null;
+        const visitedAreaImage = visitedAreaImages[0] || trackingVisitedImage || null;
 
         // Sum estimated kilometers for the shift
         const estimatedKilometers = visitTargets.reduce((sum, vt) => {

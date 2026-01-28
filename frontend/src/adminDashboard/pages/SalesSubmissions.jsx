@@ -335,7 +335,7 @@ const SalesSubmissions = () => {
               <p className="text-sm text-gray-600">Total Amount</p>
               <FaDollarSign className="w-5 h-5 text-orange-600" />
             </div>
-            <p className="text-2xl font-bold text-orange-700">£{stats.totalAmount?.toLocaleString() || 0}</p>
+            <p className="text-2xl font-bold text-orange-700">£{Number(stats.totalAmount || 0).toFixed(2)}</p>
           </div>
         </div>
       )}
@@ -543,7 +543,7 @@ const SalesSubmissions = () => {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm font-semibold text-[#e9931c]">
-                        £{submission.grandTotal?.toLocaleString() || 0}
+                        £{Number(submission.grandTotal || 0).toFixed(2)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -611,7 +611,7 @@ const SalesSubmissions = () => {
                 <strong>Customer:</strong> {selectedSubmission.customerName}
               </p>
               <p className="text-sm text-gray-600 mb-2">
-                <strong>Amount:</strong> £{selectedSubmission.grandTotal?.toLocaleString() || 0}
+                <strong>Amount:</strong> £{Number(selectedSubmission.grandTotal || 0).toFixed(2)}
               </p>
             </div>
             <div className="mb-4">
@@ -672,7 +672,7 @@ const SalesSubmissions = () => {
                 <strong>Customer:</strong> {selectedSubmission.customerName}
               </p>
               <p className="text-sm text-gray-600 mb-2">
-                <strong>Amount:</strong> £{selectedSubmission.grandTotal?.toLocaleString() || 0}
+                <strong>Amount:</strong> £{Number(selectedSubmission.grandTotal || 0).toFixed(2)}
               </p>
             </div>
             <div className="mb-4">

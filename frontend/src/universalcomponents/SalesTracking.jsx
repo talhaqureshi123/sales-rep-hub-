@@ -29,7 +29,8 @@ const SalesTracking = () => {
   const [isTracking, setIsTracking] = useState(false)
   const [showStartModal, setShowStartModal] = useState(false)
   const [uploadedImage, setUploadedImage] = useState(null)
-  const [visitedAreaImage, setVisitedAreaImage] = useState(null)
+  const [visitedAreaImage, setVisitedAreaImage] = useState(null) // Single image for backward compatibility
+  const [visitedAreaImages, setVisitedAreaImages] = useState([]) // Array for multiple images
   const [isExtracting, setIsExtracting] = useState(false)
   const [startingKilometers, setStartingKilometers] = useState('')
   const [endingKilometers, setEndingKilometers] = useState('')
@@ -1026,12 +1027,12 @@ const SalesTracking = () => {
     if (!selectedVisitTarget) return
 
     try {
-      // Validate visited area image is required for each visit
-      if (!visitedAreaImage) {
+      // Validate visited area image is required for each visit (check both single and array)
+      if (!visitedAreaImage && (!visitedAreaImages || visitedAreaImages.length === 0)) {
         await Swal.fire({
           icon: 'warning',
           title: 'Visited Area Picture Required',
-          text: 'Please upload visited area picture. It is required to complete this visit.',
+          text: 'Please upload at least one visited area picture. It is required to complete this visit.',
           confirmButtonColor: '#e9931c'
         })
         return
@@ -1076,12 +1077,26 @@ const SalesTracking = () => {
       // endingKilometers will be set at shift end, not per visit
       // IMPORTANT: Do NOT send endingKilometers field at all for individual visits
       // Backend validation checks if endingKilometers < startingKilometers, and null would trigger it
+      // Combine single image and array images (remove duplicates)
+      const allVisitedImages = []
+      if (visitedAreaImage && !allVisitedImages.includes(visitedAreaImage)) {
+        allVisitedImages.push(visitedAreaImage)
+      }
+      if (Array.isArray(visitedAreaImages) && visitedAreaImages.length > 0) {
+        visitedAreaImages.forEach(img => {
+          if (img && !allVisitedImages.includes(img)) {
+            allVisitedImages.push(img)
+          }
+        })
+      }
+
       const updateData = {
         status: 'Completed',
         // endingKilometers: NOT INCLUDED - will be set at shift end only
         estimatedKilometers: estimatedKmValue,
         // meterImage: NOT INCLUDED - will be saved only at shift end
-        visitedAreaImage: visitedAreaImage || null, // Required for each visit - this is the proof image
+        visitedAreaImage: allVisitedImages[0] || null, // First image for backward compatibility
+        visitedAreaImages: allVisitedImages.length > 0 ? allVisitedImages : undefined, // Array of multiple images
         comments: targetComments || selectedVisitTarget.comments || '',
       }
 
@@ -1205,6 +1220,7 @@ const SalesTracking = () => {
           setEndingKilometers('')
           setEndingMeterImage(null)
           setVisitedAreaImage(null)
+          setVisitedAreaImages([])
           setEstimatedKilometers('')
           setTargetComments('')
           // Keep completion modal open to show continue option
@@ -1443,15 +1459,31 @@ const SalesTracking = () => {
 
   // Handle visited area image upload
   const handleVisitedAreaImageUpload = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const imageDataUrl = event.target.result
-      setVisitedAreaImage(imageDataUrl)
-    }
-    reader.readAsDataURL(file)
+    // Handle multiple files
+    const newImages = []
+    let loadedCount = 0
+
+    files.forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const imageDataUrl = event.target.result
+        newImages.push(imageDataUrl)
+        loadedCount++
+
+        // When all files are loaded, update state
+        if (loadedCount === files.length) {
+          setVisitedAreaImages(prev => [...prev, ...newImages])
+          // Also set first image as visitedAreaImage for backward compatibility
+          if (newImages.length > 0 && !visitedAreaImage) {
+            setVisitedAreaImage(newImages[0])
+          }
+        }
+      }
+      reader.readAsDataURL(file)
+    })
   }
 
   // Handle camera capture for visited area
@@ -1459,17 +1491,31 @@ const SalesTracking = () => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
+    input.multiple = true // Allow multiple images
     input.capture = 'environment' // Use back camera on mobile
     input.onchange = (e) => {
-      const file = e.target.files[0]
-      if (!file) return
+      const files = Array.from(e.target.files || [])
+      if (files.length === 0) return
 
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const imageDataUrl = event.target.result
-        setVisitedAreaImage(imageDataUrl)
-      }
-      reader.readAsDataURL(file)
+      const newImages = []
+      let loadedCount = 0
+
+      files.forEach((file) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const imageDataUrl = event.target.result
+          newImages.push(imageDataUrl)
+          loadedCount++
+
+          if (loadedCount === files.length) {
+            setVisitedAreaImages(prev => [...prev, ...newImages])
+            if (newImages.length > 0 && !visitedAreaImage) {
+              setVisitedAreaImage(newImages[0])
+            }
+          }
+        }
+        reader.readAsDataURL(file)
+      })
     }
     input.click()
   }
@@ -2667,7 +2713,7 @@ const SalesTracking = () => {
                   userLocation={userLocation}
                   onMarkerClick={handleVisitTargetClick}
                   center={mapCenter}
-                  zoom={13}
+                  zoom={11}
                   height="100%"
                   showUserLocation={true}
                   showRadius={false}
@@ -3538,6 +3584,7 @@ const SalesTracking = () => {
                     setShowStartModal(false)
                     setUploadedImage(null)
                     setVisitedAreaImage(null)
+          setVisitedAreaImages([])
                     setStartingKilometers('')
                   }}
                   className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
@@ -3708,6 +3755,7 @@ const SalesTracking = () => {
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleVisitedAreaImageUpload}
                   className="hidden"
                   id="visited-area-upload-completion"
@@ -3715,32 +3763,54 @@ const SalesTracking = () => {
                 <label
                   htmlFor="visited-area-upload-completion"
                   className={`flex flex-col items-center justify-center w-full h-32 sm:h-40 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
-                    visitedAreaImage 
+                    (visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0))
                       ? 'border-green-300 bg-green-50' 
                       : 'border-red-300 bg-red-50 hover:border-[#e9931c] hover:bg-orange-50'
                   }`}
                 >
-                  {visitedAreaImage ? (
-                    <div className="w-full h-full flex items-center justify-center p-2">
-                      <img
-                        src={visitedAreaImage}
-                        alt="Visited area"
-                        className="max-w-full max-h-full rounded-lg object-contain"
-                      />
+                  {(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) ? (
+                    <div className="w-full h-full flex items-center justify-center p-2 overflow-auto">
+                      {visitedAreaImages && visitedAreaImages.length > 1 ? (
+                        <div className="grid grid-cols-2 gap-1 w-full h-full">
+                          {visitedAreaImages.slice(0, 4).map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={img}
+                              alt={`Visited area ${idx + 1}`}
+                              className="w-full h-full rounded object-cover"
+                            />
+                          ))}
+                          {visitedAreaImages.length > 4 && (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded text-xs font-semibold">
+                              +{visitedAreaImages.length - 4}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <img
+                          src={visitedAreaImage || (visitedAreaImages && visitedAreaImages[0])}
+                          alt="Visited area"
+                          className="max-w-full max-h-full rounded-lg object-contain"
+                        />
+                      )}
                     </div>
                   ) : (
                     <div className="text-center p-4">
                       <svg className="w-8 h-8 sm:w-10 sm:h-10 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <p className="text-xs sm:text-sm text-red-700 font-semibold">⚠️ Required: Click to upload visited area picture</p>
-                      <p className="text-xs text-red-600 mt-1">This field is mandatory</p>
+                      <p className="text-xs sm:text-sm text-red-700 font-semibold">⚠️ Required: Click to upload visited area picture(s)</p>
+                      <p className="text-xs text-red-600 mt-1">You can upload multiple images</p>
                     </div>
                   )}
                 </label>
-                {visitedAreaImage && (
+                {(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) && (
                   <button
-                    onClick={() => setVisitedAreaImage(null)}
+                    onClick={() => {
+                      setVisitedAreaImage(null)
+          setVisitedAreaImages([])
+                      setVisitedAreaImages([])
+                    }}
                     className="mt-2 text-xs sm:text-sm text-red-600 hover:text-red-700 font-semibold"
                   >
                     Remove Image

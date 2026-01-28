@@ -624,7 +624,7 @@ const AdminDashboardPage = () => {
                       {target.salesman?.name || 'Salesman'} - {target.period || 'Period'}
                     </p>
                     <p className="text-xs text-gray-500">
-                      Target: ₹{target.targetAmount?.toLocaleString() || '0'}
+                      Target: £{Number(target.targetAmount || 0).toFixed(2)}
                     </p>
                     {target.status && (
                       <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${

@@ -7,7 +7,7 @@ const GoogleMapView = ({
   onMarkerClick,
   onUserLocationClick, // Handler for user location marker click
   center = { lat: 28.6139, lng: 77.2090 }, // Default: Delhi
-  zoom = 13,
+  zoom = 11, // Reduced from 13 - wider default view
   height = '400px',
   showUserLocation = true,
   showRadius = true,
@@ -266,16 +266,23 @@ const GoogleMapView = ({
     }
   }, []) // Only run once on mount
 
+  // Minimum zoom so map never goes too far out (avoids grey blank map when sidebar selection has far-apart points)
+  const MIN_ZOOM = 12
+
   // Update map center - Show both user location and selected target
   useEffect(() => {
     if (!map) return
 
-    // Priority 1: If we have both user location and selected target, fit bounds to show both
+    // Priority 1: If we have both user location and selected target - center on selected target with fixed zoom (don't fit bounds if they're far apart)
     if (userLocation && selectedTarget && selectedTarget.latitude && selectedTarget.longitude) {
-      const bounds = new window.google.maps.LatLngBounds()
-      bounds.extend({ lat: userLocation.latitude, lng: userLocation.longitude })
-      bounds.extend({ lat: parseFloat(selectedTarget.latitude), lng: parseFloat(selectedTarget.longitude) })
-      map.fitBounds(bounds, { padding: 100 })
+      const selLat = parseFloat(selectedTarget.latitude)
+      const selLng = parseFloat(selectedTarget.longitude)
+      map.setCenter({ lat: selLat, lng: selLng })
+      map.setZoom(MIN_ZOOM) // Fixed zoom so selecting from sidebar doesn't zoom out too much
+      const t = setTimeout(() => {
+        if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
+      }, 150)
+      return () => clearTimeout(t)
     }
     // Priority 2: If we have both user location and route to target, fit bounds to show both
     else if (userLocation && routeToMilestone) {
@@ -283,7 +290,11 @@ const GoogleMapView = ({
       bounds.extend({ lat: userLocation.latitude, lng: userLocation.longitude })
       bounds.extend({ lat: routeToMilestone.to.lat, lng: routeToMilestone.to.lng })
       map.fitBounds(bounds, { padding: 100 })
-    } 
+      const t = setTimeout(() => {
+        if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
+      }, 150)
+      return () => clearTimeout(t)
+    }
     // Priority 3: If user location and visit targets, fit bounds to show user and all targets
     else if (userLocation && visitTargets.length > 0) {
       const bounds = new window.google.maps.LatLngBounds()
@@ -294,11 +305,15 @@ const GoogleMapView = ({
         }
       })
       map.fitBounds(bounds, { padding: 100 })
+      const t = setTimeout(() => {
+        if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
+      }, 150)
+      return () => clearTimeout(t)
     } 
     // Priority 4: Only user location available
     else if (userLocation) {
       map.setCenter({ lat: userLocation.latitude, lng: userLocation.longitude })
-      map.setZoom(13)
+      map.setZoom(11) // Reduced from 13 - wider view to show more area around user
     } 
     // Priority 5: Only targets available
     else if (milestones.length > 0 || visitTargets.length > 0) {
@@ -312,7 +327,7 @@ const GoogleMapView = ({
         const target = activeTargets[0]
         if (target.latitude && target.longitude) {
           map.setCenter({ lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) })
-          map.setZoom(16) // Close zoom for single location
+          map.setZoom(13) // Reduced from 16 - wider view for single location
         }
       } else if (activeTargets.length > 0 || milestones.length > 0) {
         const bounds = new window.google.maps.LatLngBounds()
@@ -325,10 +340,10 @@ const GoogleMapView = ({
           }
         })
         map.fitBounds(bounds, { padding: 100 })
-        // Ensure minimum zoom level after fitBounds completes
+        // Ensure minimum zoom level after fitBounds completes - reduced for wider view
         setTimeout(() => {
-          if (map.getZoom() < 15) {
-            map.setZoom(15) // Minimum zoom of 15 for better visibility of live locations
+          if (map.getZoom() < 12) {
+            map.setZoom(12) // Reduced from 15 - wider view to show more area
           }
         }, 100)
       }
@@ -336,7 +351,7 @@ const GoogleMapView = ({
     // Priority 6: Default center
     else {
       map.setCenter(center)
-      map.setZoom(zoom || 13)
+      map.setZoom(zoom || 11) // Reduced from 13 - wider default view
     }
   }, [map, userLocation, milestones, visitTargets, center, zoom, routeToMilestone, selectedTarget])
 

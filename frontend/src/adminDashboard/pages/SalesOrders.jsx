@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
-import { getSalesOrders, deleteSalesOrder } from '../../services/adminservices/salesOrderService'
+import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle, FaEye } from 'react-icons/fa'
+import { getSalesOrders, getSalesOrder, deleteSalesOrder } from '../../services/adminservices/salesOrderService'
 import SalesOrderForm from './SalesOrderForm'
 import Swal from 'sweetalert2'
 
@@ -14,6 +14,9 @@ const SalesOrders = () => {
   const [showForm, setShowForm] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [viewOrderId, setViewOrderId] = useState(null)
+  const [viewOrderDetail, setViewOrderDetail] = useState(null)
+  const [loadingView, setLoadingView] = useState(false)
 
   const statusOptions = [
     'All',
@@ -69,11 +72,19 @@ const SalesOrders = () => {
       const result = await getSalesOrders()
       if (result.success && result.data) {
         const previousOrders = orders
+        const user = JSON.parse(localStorage.getItem('user') || '{}')
+        console.log(`📦 [Admin Sales Orders] Loaded ${result.data.length} orders`)
+        console.log(`   User Role: ${user.role || 'Unknown'}`)
+        console.log(`   Orders:`, result.data.map(o => ({
+          so: o.soNumber,
+          customer: o.customerName,
+          status: o.orderStatus,
+          salesman: o.salesPerson?.name || 'N/A'
+        })))
         setOrders(result.data)
         
         // Check if salesman should be redirected after admin approval
         // Check for orders that were Pending and are now Confirmed
-        const user = JSON.parse(localStorage.getItem('user') || '{}')
         if (user.role === 'salesman' && previousOrders.length > 0) {
           const newlyApproved = result.data.filter(newOrder => {
             const oldOrder = previousOrders.find(o => (o._id || o.id) === (newOrder._id || newOrder.id))
@@ -183,17 +194,27 @@ const SalesOrders = () => {
       // TODO: Implement API call to create order
       // const result = await createSalesOrder(orderData)
       // if (result.success) {
-      //   alert('Order created successfully!')
+      //   Swal.fire({ icon: 'success', title: 'Success', text: 'Order created successfully!', confirmButtonColor: '#e9931c' })
       //   setShowCreateModal(false)
       //   resetForm()
       //   loadOrders()
       // }
-      alert('Order creation functionality will be implemented with backend API')
+      await Swal.fire({
+        icon: 'info',
+        title: 'Coming Soon',
+        text: 'Order creation functionality will be implemented with backend API',
+        confirmButtonColor: '#e9931c'
+      })
       setShowCreateModal(false)
       resetForm()
     } catch (error) {
       console.error('Error creating order:', error)
-      alert('Error creating order')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating order. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -233,6 +254,32 @@ const SalesOrders = () => {
       default:
         return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  const handleViewOrder = async (orderId) => {
+    setViewOrderId(orderId)
+    setLoadingView(true)
+    setViewOrderDetail(null)
+    try {
+      const result = await getSalesOrder(orderId)
+      if (result.success && result.data) {
+        setViewOrderDetail(result.data)
+      } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: result.message || 'Failed to load order', confirmButtonColor: '#e9931c' })
+        setViewOrderId(null)
+      }
+    } catch (err) {
+      console.error(err)
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to load order', confirmButtonColor: '#e9931c' })
+      setViewOrderId(null)
+    } finally {
+      setLoadingView(false)
+    }
+  }
+
+  const closeViewModal = () => {
+    setViewOrderId(null)
+    setViewOrderDetail(null)
   }
 
   return (
@@ -373,12 +420,19 @@ const SalesOrders = () => {
                     <div>
                       <p className="text-gray-500">Total Amount</p>
                       <p className="font-bold text-lg text-[#e9931c]">
-                        £{order.grandTotal ? order.grandTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                        £{Number(order.grandTotal || 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => handleViewOrder(order._id || order.id)}
+                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="View Sales Order"
+                  >
+                    <FaEye className="w-5 h-5" />
+                  </button>
                   <button
                     onClick={() => {
                       setEditingOrderId(order._id || order.id)
@@ -392,12 +446,22 @@ const SalesOrders = () => {
                   </button>
                   <button
                     onClick={async () => {
-                      if (window.confirm('Are you sure you want to delete this order?')) {
+                      const confirmResult = await Swal.fire({
+                        icon: 'warning',
+                        title: 'Delete Order?',
+                        text: 'Are you sure you want to delete this order?',
+                        showCancelButton: true,
+                        confirmButtonColor: '#e9931c',
+                        cancelButtonColor: '#6c757d',
+                        confirmButtonText: 'Yes, delete'
+                      })
+                      if (confirmResult.isConfirmed) {
                         const result = await deleteSalesOrder(order._id || order.id)
                         if (result.success) {
+                          Swal.fire({ icon: 'success', title: 'Deleted', text: 'Order deleted.', confirmButtonColor: '#e9931c' })
                           loadOrders()
                         } else {
-                          alert(result.message || 'Failed to delete order')
+                          Swal.fire({ icon: 'error', title: 'Error', text: result.message || 'Failed to delete order', confirmButtonColor: '#e9931c' })
                         }
                       }
                     }}
@@ -417,6 +481,103 @@ const SalesOrders = () => {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* View Sales Order Modal */}
+      {viewOrderId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+              <h3 className="text-xl font-semibold text-gray-800">View Sales Order</h3>
+              <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-4">
+              {loadingView ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#e9931c] border-t-transparent mx-auto"></div>
+                  <p className="text-gray-600 mt-2">Loading order...</p>
+                </div>
+              ) : viewOrderDetail ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-sm text-gray-500">SO Number</p>
+                      <p className="font-semibold text-gray-900">{viewOrderDetail.soNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Invoice Number</p>
+                      <p className="font-semibold text-gray-900">{viewOrderDetail.invoiceNumber || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Order Status</p>
+                      <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getStatusColor(viewOrderDetail.orderStatus)}`}>{viewOrderDetail.orderStatus}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Approval</p>
+                      <p className="font-medium text-gray-900">{viewOrderDetail.approvalStatus || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Customer</p>
+                      <p className="font-medium text-gray-900">{viewOrderDetail.customerName}</p>
+                      <p className="text-sm text-gray-600">{viewOrderDetail.emailAddress}</p>
+                      {viewOrderDetail.phoneNumber && <p className="text-sm text-gray-600">{viewOrderDetail.phoneNumber}</p>}
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Order Date</p>
+                      <p className="font-medium text-gray-900">{viewOrderDetail.orderDate ? new Date(viewOrderDetail.orderDate).toLocaleDateString() : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Sales Person</p>
+                      <p className="font-medium text-gray-900">{viewOrderDetail.salesPerson?.name || viewOrderDetail.salesPerson?.email || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Grand Total</p>
+                      <p className="font-bold text-lg text-[#e9931c]">£{Number(viewOrderDetail.grandTotal || 0).toFixed(2)}</p>
+                    </div>
+                  </div>
+                  {viewOrderDetail.items && viewOrderDetail.items.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Items</p>
+                      <div className="border rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left p-2">Product</th>
+                              <th className="text-right p-2">Qty</th>
+                              <th className="text-right p-2">Unit Price</th>
+                              <th className="text-right p-2">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {viewOrderDetail.items.map((item, idx) => (
+                              <tr key={idx} className="border-t">
+                                <td className="p-2">{item.productName || item.name || '—'}</td>
+                                <td className="p-2 text-right">{item.quantity ?? 0}</td>
+                                <td className="p-2 text-right">£{Number(item.unitPrice || 0).toFixed(2)}</td>
+                                <td className="p-2 text-right">£{Number(item.lineTotal || (item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {viewOrderDetail.notes && (
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600"><span className="font-medium">Notes:</span> {viewOrderDetail.notes}</p>
+                    </div>
+                  )}
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button onClick={() => { closeViewModal(); setEditingOrderId(viewOrderDetail._id); setShowForm(true); }} className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a]">Edit Order</button>
+                    <button onClick={closeViewModal} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium hover:bg-gray-300">Close</button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
       )}
 
