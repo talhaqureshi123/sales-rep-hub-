@@ -1,34 +1,44 @@
-const FollowUp = require('../../database/models/FollowUp');
-const User = require('../../database/models/User');
-const Customer = require('../../database/models/Customer');
-const hubspotService = require('../../services/hubspotService');
+const FollowUp = require("../../database/models/FollowUp");
+const VisitTarget = require("../../database/models/VisitTarget");
+const User = require("../../database/models/User");
+const Customer = require("../../database/models/Customer");
+const hubspotService = require("../../services/hubspotService");
 
 // @desc    Get all follow-ups
 // @route   GET /api/admin/follow-ups
 // @access  Private/Admin
 const getFollowUps = async (req, res) => {
   try {
-    const { salesman, status, type, priority, search, startDate, endDate, source } = req.query;
+    const {
+      salesman,
+      status,
+      type,
+      priority,
+      search,
+      startDate,
+      endDate,
+      source,
+    } = req.query;
     const filter = {};
 
     if (salesman) {
       filter.salesman = salesman;
     }
-    if (status && status !== 'All') {
+    if (status && status !== "All") {
       filter.status = status;
     }
-    if (type && type !== 'All') {
+    if (type && type !== "All") {
       filter.type = type;
     }
-    if (priority && priority !== 'All') {
+    if (priority && priority !== "All") {
       filter.priority = priority;
     }
     if (search) {
       filter.$or = [
-        { followUpNumber: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerEmail: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { followUpNumber: { $regex: search, $options: "i" } },
+        { customerName: { $regex: search, $options: "i" } },
+        { customerEmail: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
     if (startDate || endDate) {
@@ -42,21 +52,23 @@ const getFollowUps = async (req, res) => {
     }
 
     // Filter imported HubSpot tasks only
-    if (source === 'hubspot') {
-      filter.hubspotTaskId = { $exists: true, $ne: '' };
+    if (source === "hubspot") {
+      filter.hubspotTaskId = { $exists: true, $ne: "" };
     }
 
     // Filter by approval status if needed
     if (req.query.approvalStatus) {
       filter.approvalStatus = req.query.approvalStatus;
-      
+
       // If filtering for Pending approval, only show tasks created by salesman (not admin)
       // Admin tasks are auto-approved, so they shouldn't appear in Pending tab
-      if (req.query.approvalStatus === 'Pending') {
+      if (req.query.approvalStatus === "Pending") {
         // Get all salesman users
-        const salesmanUsers = await User.find({ role: 'salesman' }).select('_id');
-        const salesmanIds = salesmanUsers.map(u => u._id);
-        
+        const salesmanUsers = await User.find({ role: "salesman" }).select(
+          "_id",
+        );
+        const salesmanIds = salesmanUsers.map((u) => u._id);
+
         // Only show tasks created by salesman (not admin)
         if (salesmanIds.length > 0) {
           filter.createdBy = { $in: salesmanIds };
@@ -68,13 +80,16 @@ const getFollowUps = async (req, res) => {
     }
 
     const followUps = await FollowUp.find(filter)
-      .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
-      .populate('relatedQuotation', 'quotationNumber total')
-      .populate('relatedSample', 'sampleNumber productName')
-      .populate('visitTarget', 'name address')
-      .populate('approvedBy', 'name email')
-      .populate('createdBy', 'name email role')
+      .populate("salesman", "name email")
+      .populate(
+        "customer",
+        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      )
+      .populate("relatedQuotation", "quotationNumber total")
+      .populate("relatedSample", "sampleNumber productName")
+      .populate("visitTarget", "name address")
+      .populate("approvedBy", "name email")
+      .populate("createdBy", "name email role")
       .sort({ dueDate: 1, priority: -1 });
 
     res.status(200).json({
@@ -85,7 +100,7 @@ const getFollowUps = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching follow-ups',
+      message: error.message || "Error fetching follow-ups",
     });
   }
 };
@@ -96,18 +111,21 @@ const getFollowUps = async (req, res) => {
 const getFollowUp = async (req, res) => {
   try {
     const followUp = await FollowUp.findById(req.params.id)
-      .populate('salesman', 'name email phone')
-      .populate('customer', 'name email phone address company city state associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
-      .populate('relatedQuotation', 'quotationNumber total status')
-      .populate('relatedSample', 'sampleNumber productName status')
-      .populate('visitTarget', 'name address city')
-      .populate('approvedBy', 'name email')
-      .populate('createdBy', 'name email role');
+      .populate("salesman", "name email phone")
+      .populate(
+        "customer",
+        "name email phone address company city state associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      )
+      .populate("relatedQuotation", "quotationNumber total status")
+      .populate("relatedSample", "sampleNumber productName status")
+      .populate("visitTarget", "name address city")
+      .populate("approvedBy", "name email")
+      .populate("createdBy", "name email role");
 
     if (!followUp) {
       return res.status(404).json({
         success: false,
-        message: 'Follow-up not found',
+        message: "Follow-up not found",
       });
     }
 
@@ -118,7 +136,7 @@ const getFollowUp = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching follow-up',
+      message: error.message || "Error fetching follow-up",
     });
   }
 };
@@ -148,14 +166,38 @@ const createFollowUp = async (req, res) => {
       relatedSample,
       relatedOrder,
       visitTarget,
+      lastContacted,
+      lastEngagement,
     } = req.body;
 
     if (!salesman || !customerName || !type || !dueDate) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields',
+        message: "Please provide all required fields",
       });
     }
+
+    // Prevent duplicate Customer Allotment: same customer + same salesman should not get a second allotment task
+    const isAllotmentTask =
+      (description && String(description).includes("Customer allocated")) ||
+      (notes && String(notes).includes("Customer Allotment"));
+    if (isAllotmentTask && customer) {
+      const existingAllotment = await FollowUp.findOne({
+        salesman,
+        customer,
+        notes: { $regex: /Customer Allotment/i },
+        status: { $ne: "Completed" },
+      });
+      if (existingAllotment) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This customer is already allotted to this salesman. No duplicate allotment.",
+        });
+      }
+    }
+
+    // No same-time conflict check: admin can create multiple tasks (follow-ups, allotments, etc.) at the same time for a salesman.
 
     const followUp = await FollowUp.create({
       salesman,
@@ -170,7 +212,7 @@ const createFollowUp = async (req, res) => {
       associatedCompanyName: associatedCompanyName || undefined,
       associatedCompanyDomain: associatedCompanyDomain || undefined,
       type,
-      priority: priority || 'Medium',
+      priority: priority || "Medium",
       scheduledDate: scheduledDate || dueDate,
       dueDate,
       description,
@@ -179,34 +221,41 @@ const createFollowUp = async (req, res) => {
       relatedSample,
       relatedOrder,
       visitTarget,
+      lastContacted: lastContacted ? new Date(lastContacted) : undefined,
+      lastEngagement: lastEngagement ? new Date(lastEngagement) : undefined,
       createdBy: req.user._id,
-      approvalStatus: 'Approved', // Admin created tasks are auto-approved
-      source: 'app', // Mark admin-created tasks as 'app' source (not 'hubspot')
+      approvalStatus: "Approved",
+      source: "app",
     });
 
     // 🔁 HUBSPOT SYNC (NON-BLOCKING): create task in HubSpot when follow-up is created
     (async () => {
       try {
         const subject = description || `Follow-up: ${customerName}`;
-        const body = notes || '';
+        const body = notes || "";
 
         // Map local priority to HubSpot priority values
-        let hsPriority = 'NONE';
-        const pr = (priority || followUp.priority || '').toLowerCase();
-        if (pr === 'urgent' || pr === 'high') hsPriority = 'HIGH';
-        else if (pr === 'medium') hsPriority = 'MEDIUM';
-        else if (pr === 'low') hsPriority = 'LOW';
+        let hsPriority = "NONE";
+        const pr = (priority || followUp.priority || "").toLowerCase();
+        if (pr === "urgent" || pr === "high") hsPriority = "HIGH";
+        else if (pr === "medium") hsPriority = "MEDIUM";
+        else if (pr === "low") hsPriority = "LOW";
 
         // Get customer email for contact association
-        const populatedCustomer = await FollowUp.findById(followUp._id).populate('customer', 'email');
-        const customerEmail = followUp.customerEmail || (populatedCustomer.customer && populatedCustomer.customer.email) || '';
+        const populatedCustomer = await FollowUp.findById(
+          followUp._id,
+        ).populate("customer", "email");
+        const customerEmail =
+          followUp.customerEmail ||
+          (populatedCustomer.customer && populatedCustomer.customer.email) ||
+          "";
 
         const hubspotTaskId = await hubspotService.createTaskObjectInHubSpot({
           subject,
           body,
-          status: 'NOT_STARTED',
+          status: "NOT_STARTED",
           priority: hsPriority,
-          type: 'TODO',
+          type: "TODO",
           dueDate: followUp.dueDate,
           contactEmail: customerEmail,
         });
@@ -214,30 +263,40 @@ const createFollowUp = async (req, res) => {
         if (hubspotTaskId) {
           followUp.hubspotTaskId = hubspotTaskId;
           await followUp.save();
-          console.log(`✅ Task ${followUp.followUpNumber} synced to HubSpot: ${hubspotTaskId}`);
+          console.log(
+            `✅ Task ${followUp.followUpNumber} synced to HubSpot: ${hubspotTaskId}`,
+          );
         } else {
-          console.warn(`⚠️ Task ${followUp.followUpNumber} failed to sync to HubSpot - will need manual push`);
+          console.warn(
+            `⚠️ Task ${followUp.followUpNumber} failed to sync to HubSpot - will need manual push`,
+          );
         }
       } catch (e) {
-        console.error(`❌ HubSpot follow-up task sync error for ${followUp.followUpNumber}:`, e.message);
+        console.error(
+          `❌ HubSpot follow-up task sync error for ${followUp.followUpNumber}:`,
+          e.message,
+        );
       }
     })();
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
-      .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
-      .populate('relatedQuotation', 'quotationNumber total')
-      .populate('relatedSample', 'sampleNumber productName');
+      .populate("salesman", "name email")
+      .populate(
+        "customer",
+        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      )
+      .populate("relatedQuotation", "quotationNumber total")
+      .populate("relatedSample", "sampleNumber productName");
 
     res.status(201).json({
       success: true,
-      message: 'Follow-up created successfully',
+      message: "Follow-up created successfully",
       data: populatedFollowUp,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error creating follow-up',
+      message: error.message || "Error creating follow-up",
     });
   }
 };
@@ -265,13 +324,15 @@ const updateFollowUp = async (req, res) => {
     if (!followUp) {
       return res.status(404).json({
         success: false,
-        message: 'Follow-up not found',
+        message: "Follow-up not found",
       });
     }
 
+    // No same-time conflict check when updating dueDate: admin can have multiple tasks at same time.
+
     if (status) {
       followUp.status = status;
-      if (status === 'Completed' && !followUp.completedDate) {
+      if (status === "Completed" && !followUp.completedDate) {
         followUp.completedDate = completedDate || new Date();
       }
     }
@@ -281,108 +342,149 @@ const updateFollowUp = async (req, res) => {
     if (dueDate) followUp.dueDate = dueDate;
     if (description !== undefined) followUp.description = description;
     if (notes !== undefined) followUp.notes = notes;
-    if (startedAt !== undefined) followUp.startedAt = startedAt ? new Date(startedAt) : null;
+    if (startedAt !== undefined)
+      followUp.startedAt = startedAt ? new Date(startedAt) : null;
     if (meterPicture !== undefined) followUp.meterPicture = meterPicture;
     if (meterReading !== undefined) followUp.meterReading = meterReading;
 
     await followUp.save();
 
     // Sync to HubSpot if task has hubspotTaskId (imported from HubSpot or already pushed)
-    if (followUp.hubspotTaskId && followUp.hubspotTaskId !== '' && followUp.hubspotTaskId !== null) {
+    if (
+      followUp.hubspotTaskId &&
+      followUp.hubspotTaskId !== "" &&
+      followUp.hubspotTaskId !== null
+    ) {
       try {
         // Update task status in HubSpot when completed
-        if (status === 'Completed') {
-          await hubspotService.updateTaskObjectInHubSpot(followUp.hubspotTaskId, {
-            subject: followUp.description || `Follow-up: ${followUp.customerName}`,
-            body: followUp.notes || '',
-            status: 'COMPLETED', // HubSpot status for completed tasks
-            priority: followUp.priority || 'NONE',
-            type: followUp.hs_task_type || followUp.type || 'TODO',
-            dueDate: followUp.dueDate,
-          });
-          console.log(`✅ Task ${followUp.followUpNumber} marked as completed in HubSpot`);
+        if (status === "Completed") {
+          await hubspotService.updateTaskObjectInHubSpot(
+            followUp.hubspotTaskId,
+            {
+              subject:
+                followUp.description || `Follow-up: ${followUp.customerName}`,
+              body: followUp.notes || "",
+              status: "COMPLETED", // HubSpot status for completed tasks
+              priority: followUp.priority || "NONE",
+              type: followUp.hs_task_type || followUp.type || "TODO",
+              dueDate: followUp.dueDate,
+            },
+          );
+          console.log(
+            `✅ Task ${followUp.followUpNumber} marked as completed in HubSpot`,
+          );
         } else {
           // Update other status changes
-          await hubspotService.updateTaskObjectInHubSpot(followUp.hubspotTaskId, {
-            subject: followUp.description || `Follow-up: ${followUp.customerName}`,
-            body: followUp.notes || '',
-            status: 'NOT_STARTED',
-            priority: followUp.priority || 'NONE',
-            type: followUp.hs_task_type || followUp.type || 'TODO',
-            dueDate: followUp.dueDate,
-          });
+          await hubspotService.updateTaskObjectInHubSpot(
+            followUp.hubspotTaskId,
+            {
+              subject:
+                followUp.description || `Follow-up: ${followUp.customerName}`,
+              body: followUp.notes || "",
+              status: "NOT_STARTED",
+              priority: followUp.priority || "NONE",
+              type: followUp.hs_task_type || followUp.type || "TODO",
+              dueDate: followUp.dueDate,
+            },
+          );
         }
       } catch (e) {
-        console.error('Error syncing task update to HubSpot:', e);
+        console.error("Error syncing task update to HubSpot:", e);
         // Don't fail the request if HubSpot sync fails
       }
     }
 
     // Sync activities (notes with Email/Call/Meeting) to HubSpot if task is linked
-    if (notes && followUp.hubspotTaskId && followUp.hubspotTaskId !== '' && followUp.hubspotTaskId !== null) {
+    if (
+      notes &&
+      followUp.hubspotTaskId &&
+      followUp.hubspotTaskId !== "" &&
+      followUp.hubspotTaskId !== null
+    ) {
       try {
         // Extract latest activity from notes
-        const notesLines = notes.split('\n').filter(line => line.trim());
+        const notesLines = notes.split("\n").filter((line) => line.trim());
         if (notesLines.length > 0) {
           const latestNote = notesLines[notesLines.length - 1];
-          
+
           // Check if it's an activity (Email, Call, Meeting, Note)
-          if (latestNote.includes('Email:') || latestNote.includes('Call:') || latestNote.includes('Meeting:') || latestNote.includes('Note:')) {
+          if (
+            latestNote.includes("Email:") ||
+            latestNote.includes("Call:") ||
+            latestNote.includes("Meeting:") ||
+            latestNote.includes("Note:")
+          ) {
             // Get customer email to find HubSpot contact
-            const customerEmail = followUp.customerEmail || 
-                                 (followUp.customer && typeof followUp.customer === 'object' ? followUp.customer.email : '') ||
-                                 followUp.associatedContactEmail;
-            
+            const customerEmail =
+              followUp.customerEmail ||
+              (followUp.customer && typeof followUp.customer === "object"
+                ? followUp.customer.email
+                : "") ||
+              followUp.associatedContactEmail;
+
             if (customerEmail) {
               // Find HubSpot contact ID
-              const contactId = await hubspotService.findContactByEmail(customerEmail);
-              
+              const contactId =
+                await hubspotService.findContactByEmail(customerEmail);
+
               if (contactId) {
                 // Determine activity type
-                let activityType = 'NOTE';
-                if (latestNote.includes('Email:')) activityType = 'EMAIL';
-                else if (latestNote.includes('Call:')) activityType = 'CALL';
-                else if (latestNote.includes('Meeting:')) activityType = 'MEETING';
-                
+                let activityType = "NOTE";
+                if (latestNote.includes("Email:")) activityType = "EMAIL";
+                else if (latestNote.includes("Call:")) activityType = "CALL";
+                else if (latestNote.includes("Meeting:"))
+                  activityType = "MEETING";
+
                 // Create timeline event in HubSpot
-                if (activityType === 'EMAIL' || activityType === 'CALL') {
+                if (activityType === "EMAIL" || activityType === "CALL") {
                   await hubspotService.createTimelineEvent(
                     contactId,
                     activityType,
-                    latestNote.includes('Email:') ? 'Email Sent' : 'Call Made',
+                    latestNote.includes("Email:") ? "Email Sent" : "Call Made",
                     latestNote,
-                    {}
+                    {},
                   );
-                  console.log(`✅ ${activityType} activity synced to HubSpot for contact: ${contactId}`);
-                } else if (activityType === 'NOTE') {
-                  await hubspotService.createNote(contactId, latestNote, 'GENERAL');
-                  console.log(`✅ Note synced to HubSpot for contact: ${contactId}`);
+                  console.log(
+                    `✅ ${activityType} activity synced to HubSpot for contact: ${contactId}`,
+                  );
+                } else if (activityType === "NOTE") {
+                  await hubspotService.createNote(
+                    contactId,
+                    latestNote,
+                    "GENERAL",
+                  );
+                  console.log(
+                    `✅ Note synced to HubSpot for contact: ${contactId}`,
+                  );
                 }
               }
             }
           }
         }
       } catch (e) {
-        console.error('Error syncing activity to HubSpot:', e);
+        console.error("Error syncing activity to HubSpot:", e);
         // Don't fail the request if HubSpot sync fails
       }
     }
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
-      .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
-      .populate('relatedQuotation', 'quotationNumber total')
-      .populate('relatedSample', 'sampleNumber productName');
+      .populate("salesman", "name email")
+      .populate(
+        "customer",
+        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      )
+      .populate("relatedQuotation", "quotationNumber total")
+      .populate("relatedSample", "sampleNumber productName");
 
     res.status(200).json({
       success: true,
-      message: 'Follow-up updated successfully',
+      message: "Follow-up updated successfully",
       data: populatedFollowUp,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error updating follow-up',
+      message: error.message || "Error updating follow-up",
     });
   }
 };
@@ -396,20 +498,28 @@ const deleteFollowUp = async (req, res) => {
     if (!followUp) {
       return res.status(404).json({
         success: false,
-        message: 'Follow-up not found',
+        message: "Follow-up not found",
       });
+    }
+
+    // If this task is linked to a visit target, delete the visit target too so it disappears from admin complete, salesman visits, sales tracking
+    const visitTargetId =
+      followUp.visitTarget &&
+      (followUp.visitTarget._id || followUp.visitTarget);
+    if (visitTargetId) {
+      await VisitTarget.findByIdAndDelete(visitTargetId);
     }
 
     await FollowUp.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,
-      message: 'Follow-up deleted successfully',
+      message: "Follow-up deleted successfully",
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error deleting follow-up',
+      message: error.message || "Error deleting follow-up",
     });
   }
 };
@@ -423,18 +533,18 @@ const approveFollowUp = async (req, res) => {
     if (!followUp) {
       return res.status(404).json({
         success: false,
-        message: 'Follow-up not found',
+        message: "Follow-up not found",
       });
     }
 
-    if (followUp.approvalStatus === 'Approved') {
+    if (followUp.approvalStatus === "Approved") {
       return res.status(400).json({
         success: false,
-        message: 'Follow-up is already approved',
+        message: "Follow-up is already approved",
       });
     }
 
-    followUp.approvalStatus = 'Approved';
+    followUp.approvalStatus = "Approved";
     followUp.approvedBy = req.user._id;
     followUp.approvedAt = new Date();
     await followUp.save();
@@ -442,26 +552,33 @@ const approveFollowUp = async (req, res) => {
     // 🔁 HUBSPOT SYNC (NON-BLOCKING): create task in HubSpot when approved
     (async () => {
       try {
-        const subject = followUp.description || `Follow-up: ${followUp.customerName}`;
-        const body = followUp.notes || '';
+        const subject =
+          followUp.description || `Follow-up: ${followUp.customerName}`;
+        const body = followUp.notes || "";
 
         // Map local priority to HubSpot priority values
-        let hsPriority = 'NONE';
-        const pr = (followUp.priority || '').toLowerCase();
-        if (pr === 'urgent' || pr === 'high') hsPriority = 'HIGH';
-        else if (pr === 'medium') hsPriority = 'MEDIUM';
-        else if (pr === 'low') hsPriority = 'LOW';
+        let hsPriority = "NONE";
+        const pr = (followUp.priority || "").toLowerCase();
+        if (pr === "urgent" || pr === "high") hsPriority = "HIGH";
+        else if (pr === "medium") hsPriority = "MEDIUM";
+        else if (pr === "low") hsPriority = "LOW";
 
         // Get customer email for contact association
-        const populatedFollowUpForEmail = await FollowUp.findById(followUp._id).populate('customer', 'email');
-        const customerEmail = populatedFollowUpForEmail.customerEmail || (populatedFollowUpForEmail.customer && populatedFollowUpForEmail.customer.email) || '';
+        const populatedFollowUpForEmail = await FollowUp.findById(
+          followUp._id,
+        ).populate("customer", "email");
+        const customerEmail =
+          populatedFollowUpForEmail.customerEmail ||
+          (populatedFollowUpForEmail.customer &&
+            populatedFollowUpForEmail.customer.email) ||
+          "";
 
         const hubspotTaskId = await hubspotService.createTaskObjectInHubSpot({
           subject,
           body,
-          status: 'NOT_STARTED',
+          status: "NOT_STARTED",
           priority: hsPriority,
-          type: 'TODO',
+          type: "TODO",
           dueDate: followUp.dueDate,
           contactEmail: customerEmail,
         });
@@ -469,30 +586,41 @@ const approveFollowUp = async (req, res) => {
         if (hubspotTaskId) {
           followUp.hubspotTaskId = hubspotTaskId;
           await followUp.save();
-          console.log(`✅ Salesman task ${followUp.followUpNumber} approved and synced to HubSpot: ${hubspotTaskId}`);
+          console.log(
+            `✅ Salesman task ${followUp.followUpNumber} approved and synced to HubSpot: ${hubspotTaskId}`,
+          );
         } else {
-          console.warn(`⚠️ Salesman task ${followUp.followUpNumber} approved but HubSpot sync failed - manual push needed`);
+          console.warn(
+            `⚠️ Salesman task ${followUp.followUpNumber} approved but HubSpot sync failed - manual push needed`,
+          );
         }
       } catch (e) {
-        console.error(`❌ HubSpot follow-up task sync error for ${followUp.followUpNumber}:`, e.message);
+        console.error(
+          `❌ HubSpot follow-up task sync error for ${followUp.followUpNumber}:`,
+          e.message,
+        );
       }
     })();
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
-      .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
-      .populate('approvedBy', 'name email')
-      .populate('createdBy', 'name email role');
+      .populate("salesman", "name email")
+      .populate(
+        "customer",
+        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      )
+      .populate("approvedBy", "name email")
+      .populate("createdBy", "name email role");
 
     res.status(200).json({
       success: true,
-      message: 'Follow-up approved successfully. Task will be posted to HubSpot.',
+      message:
+        "Follow-up approved successfully. Task will be posted to HubSpot.",
       data: populatedFollowUp,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error approving follow-up',
+      message: error.message || "Error approving follow-up",
     });
   }
 };
@@ -506,112 +634,131 @@ const pushToHubSpot = async (req, res) => {
     if (!followUp) {
       return res.status(404).json({
         success: false,
-        message: 'Follow-up not found',
+        message: "Follow-up not found",
       });
     }
 
     // Check if task is admin-created (source: 'app') or HubSpot-imported (source: 'hubspot')
-    const isAdminCreated = followUp.source === 'app' || (!followUp.source && followUp.createdBy?.role === 'admin');
-    const isHubSpotImported = followUp.source === 'hubspot';
-    
+    const isAdminCreated =
+      followUp.source === "app" ||
+      (!followUp.source && followUp.createdBy?.role === "admin");
+    const isHubSpotImported = followUp.source === "hubspot";
+
     // For admin-created tasks: allow re-push even if hubspotTaskId exists (will update existing task)
     // For HubSpot-imported tasks: prevent duplicate push if task exists
     if (followUp.hubspotTaskId && isHubSpotImported) {
       try {
-        const hubspotService = require('../../services/hubspotService');
-        const axios = require('axios');
-        const config = require('../../config');
-        const hubspotOAuthService = require('../../services/hubspotOAuthService');
-        
-        let token = '';
-        if (config.HUBSPOT_AUTH_MODE === 'oauth') {
+        const hubspotService = require("../../services/hubspotService");
+        const axios = require("axios");
+        const config = require("../../config");
+        const hubspotOAuthService = require("../../services/hubspotOAuthService");
+
+        let token = "";
+        if (config.HUBSPOT_AUTH_MODE === "oauth") {
           token = await hubspotOAuthService.getValidAccessToken();
         } else {
-          token = config.HUBSPOT_TOKEN || config.HUBSPOT_ACCESS_TOKEN || config.HUBSPOT_API_KEY;
+          token =
+            config.HUBSPOT_TOKEN ||
+            config.HUBSPOT_ACCESS_TOKEN ||
+            config.HUBSPOT_API_KEY;
         }
-        
+
         const headers = {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         };
-        
+
         // Try to fetch the task from HubSpot to verify it exists
         try {
           const taskRes = await axios.get(
             `https://api.hubapi.com/crm/v3/objects/tasks/${followUp.hubspotTaskId}`,
-            { headers, timeout: 5000 }
+            { headers, timeout: 5000 },
           );
-          
+
           // Task exists in HubSpot, prevent duplicate push for imported tasks
           if (taskRes.data && taskRes.data.id) {
             return res.status(400).json({
               success: false,
-              message: 'Task is already synced to HubSpot. Cannot push again to prevent duplicates.',
+              message:
+                "Task is already synced to HubSpot. Cannot push again to prevent duplicates.",
               data: { hubspotTaskId: followUp.hubspotTaskId },
             });
           }
         } catch (verifyError) {
           // Task doesn't exist in HubSpot (404 or other error), allow push
           if (verifyError.response?.status === 404) {
-            console.log(`⚠️ Task ${followUp.followUpNumber} has hubspotTaskId ${followUp.hubspotTaskId} but task doesn't exist in HubSpot. Allowing push.`);
+            console.log(
+              `⚠️ Task ${followUp.followUpNumber} has hubspotTaskId ${followUp.hubspotTaskId} but task doesn't exist in HubSpot. Allowing push.`,
+            );
             // Clear the invalid hubspotTaskId so we can push
             followUp.hubspotTaskId = null;
             await followUp.save();
           } else {
             // Other error - still allow push (safer)
-            console.warn(`⚠️ Could not verify HubSpot task ${followUp.hubspotTaskId}: ${verifyError.message}. Allowing push.`);
+            console.warn(
+              `⚠️ Could not verify HubSpot task ${followUp.hubspotTaskId}: ${verifyError.message}. Allowing push.`,
+            );
             followUp.hubspotTaskId = null;
             await followUp.save();
           }
         }
       } catch (e) {
         // Error verifying - allow push (safer approach)
-        console.warn(`⚠️ Error verifying HubSpot task: ${e.message}. Allowing push.`);
+        console.warn(
+          `⚠️ Error verifying HubSpot task: ${e.message}. Allowing push.`,
+        );
         followUp.hubspotTaskId = null;
         await followUp.save();
       }
     }
 
     // Check if task is approved (only approved tasks can be synced)
-    if (followUp.approvalStatus !== 'Approved') {
+    if (followUp.approvalStatus !== "Approved") {
       return res.status(400).json({
         success: false,
-        message: 'Task must be approved before syncing to HubSpot',
+        message: "Task must be approved before syncing to HubSpot",
       });
     }
 
-    const subject = followUp.description || `Follow-up: ${followUp.customerName}`;
-    const body = followUp.notes || '';
+    const subject =
+      followUp.description || `Follow-up: ${followUp.customerName}`;
+    const body = followUp.notes || "";
 
     // Map local priority to HubSpot priority values
-    let hsPriority = 'NONE';
-    const pr = (followUp.priority || '').toLowerCase();
-    if (pr === 'urgent' || pr === 'high') hsPriority = 'HIGH';
-    else if (pr === 'medium') hsPriority = 'MEDIUM';
-    else if (pr === 'low') hsPriority = 'LOW';
+    let hsPriority = "NONE";
+    const pr = (followUp.priority || "").toLowerCase();
+    if (pr === "urgent" || pr === "high") hsPriority = "HIGH";
+    else if (pr === "medium") hsPriority = "MEDIUM";
+    else if (pr === "low") hsPriority = "LOW";
 
     let hubspotTaskId = followUp.hubspotTaskId;
-    
+
     // Get task type from followUp (will be mapped to HubSpot format in hubspotService)
-    const taskType = followUp.hs_task_type || followUp.type || 'TODO';
-    
+    const taskType = followUp.hs_task_type || followUp.type || "TODO";
+
     // If task already exists in HubSpot (admin-created task with hubspotTaskId), update it
     if (hubspotTaskId && isAdminCreated) {
-      const updated = await hubspotService.updateTaskObjectInHubSpot(hubspotTaskId, {
-        subject,
-        body,
-        status: 'NOT_STARTED',
-        priority: hsPriority,
-        type: taskType, // Use actual task type (will be mapped to HubSpot format)
-        dueDate: followUp.dueDate,
-      });
-      
+      const updated = await hubspotService.updateTaskObjectInHubSpot(
+        hubspotTaskId,
+        {
+          subject,
+          body,
+          status: "NOT_STARTED",
+          priority: hsPriority,
+          type: taskType, // Use actual task type (will be mapped to HubSpot format)
+          dueDate: followUp.dueDate,
+        },
+      );
+
       if (updated) {
-        console.log(`✅ Task ${followUp.followUpNumber} updated in HubSpot: ${hubspotTaskId}`);
+        console.log(
+          `✅ Task ${followUp.followUpNumber} updated in HubSpot: ${hubspotTaskId}`,
+        );
       } else {
         return res.status(500).json({
           success: false,
-          message: 'Failed to update task in HubSpot. Please check HubSpot configuration.',
+          message:
+            "Failed to update task in HubSpot. Please check HubSpot configuration.",
         });
       }
     } else {
@@ -619,7 +766,7 @@ const pushToHubSpot = async (req, res) => {
       hubspotTaskId = await hubspotService.createTaskObjectInHubSpot({
         subject,
         body,
-        status: 'NOT_STARTED',
+        status: "NOT_STARTED",
         priority: hsPriority,
         type: taskType, // Use actual task type (will be mapped to HubSpot format)
         dueDate: followUp.dueDate,
@@ -628,7 +775,8 @@ const pushToHubSpot = async (req, res) => {
       if (!hubspotTaskId) {
         return res.status(500).json({
           success: false,
-          message: 'Failed to sync task to HubSpot. Please check HubSpot configuration.',
+          message:
+            "Failed to sync task to HubSpot. Please check HubSpot configuration.",
         });
       }
 
@@ -636,23 +784,28 @@ const pushToHubSpot = async (req, res) => {
       if (!followUp.hubspotTaskId) {
         followUp.hubspotTaskId = hubspotTaskId;
         await followUp.save();
-        console.log(`✅ Task ${followUp.followUpNumber} pushed to HubSpot: ${hubspotTaskId}`);
+        console.log(
+          `✅ Task ${followUp.followUpNumber} pushed to HubSpot: ${hubspotTaskId}`,
+        );
       }
     }
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
-      .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement');
+      .populate("salesman", "name email")
+      .populate(
+        "customer",
+        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      );
 
     res.status(200).json({
       success: true,
-      message: 'Task successfully synced to HubSpot',
+      message: "Task successfully synced to HubSpot",
       data: populatedFollowUp,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error syncing task to HubSpot',
+      message: error.message || "Error syncing task to HubSpot",
     });
   }
 };
@@ -667,18 +820,18 @@ const rejectFollowUp = async (req, res) => {
     if (!followUp) {
       return res.status(404).json({
         success: false,
-        message: 'Follow-up not found',
+        message: "Follow-up not found",
       });
     }
 
-    if (followUp.approvalStatus === 'Rejected') {
+    if (followUp.approvalStatus === "Rejected") {
       return res.status(400).json({
         success: false,
-        message: 'Follow-up is already rejected',
+        message: "Follow-up is already rejected",
       });
     }
 
-    followUp.approvalStatus = 'Rejected';
+    followUp.approvalStatus = "Rejected";
     followUp.approvedBy = req.user._id;
     followUp.approvedAt = new Date();
     if (rejectionReason) {
@@ -687,19 +840,22 @@ const rejectFollowUp = async (req, res) => {
     await followUp.save();
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
-      .populate('salesman', 'name email')
-      .populate('customer', 'name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement')
-      .populate('approvedBy', 'name email');
+      .populate("salesman", "name email")
+      .populate(
+        "customer",
+        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+      )
+      .populate("approvedBy", "name email");
 
     res.status(200).json({
       success: true,
-      message: 'Follow-up rejected successfully',
+      message: "Follow-up rejected successfully",
       data: populatedFollowUp,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error rejecting follow-up',
+      message: error.message || "Error rejecting follow-up",
     });
   }
 };
@@ -710,11 +866,19 @@ const rejectFollowUp = async (req, res) => {
 const getFollowUpStats = async (req, res) => {
   try {
     const totalFollowUps = await FollowUp.countDocuments();
-    const overdueFollowUps = await FollowUp.countDocuments({ status: 'Overdue' });
-    const todayFollowUps = await FollowUp.countDocuments({ status: 'Today' });
-    const upcomingFollowUps = await FollowUp.countDocuments({ status: 'Upcoming' });
-    const completedFollowUps = await FollowUp.countDocuments({ status: 'Completed' });
-    const pendingApproval = await FollowUp.countDocuments({ approvalStatus: 'Pending' });
+    const overdueFollowUps = await FollowUp.countDocuments({
+      status: "Overdue",
+    });
+    const todayFollowUps = await FollowUp.countDocuments({ status: "Today" });
+    const upcomingFollowUps = await FollowUp.countDocuments({
+      status: "Upcoming",
+    });
+    const completedFollowUps = await FollowUp.countDocuments({
+      status: "Completed",
+    });
+    const pendingApproval = await FollowUp.countDocuments({
+      approvalStatus: "Pending",
+    });
 
     res.status(200).json({
       success: true,
@@ -730,7 +894,7 @@ const getFollowUpStats = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching follow-up statistics',
+      message: error.message || "Error fetching follow-up statistics",
     });
   }
 };

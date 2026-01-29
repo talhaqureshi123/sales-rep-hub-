@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { 
-  FaUpload, 
-  FaFileInvoice, 
-  FaCheckCircle, 
-  FaTimesCircle, 
+import {
+  FaUpload,
+  FaFileInvoice,
+  FaCheckCircle,
+  FaTimesCircle,
   FaClock,
   FaPlus,
   FaTrash,
@@ -110,21 +110,21 @@ const SalesSubmissions = () => {
     // Check for visit target data from SalesTracking (when Achievement button is clicked)
     const visitTargetData = localStorage.getItem('salesUploadVisitTarget')
     const shouldOpenForm = localStorage.getItem('openSalesUploadForm') === 'true'
-    
+
     if (visitTargetData && shouldOpenForm && activeTab === 'sales' && customers.length > 0) {
       try {
         const visitTarget = JSON.parse(visitTargetData)
-        
+
         // Try to find matching customer from loaded customers
         const matchingCustomer = customers.find(c => {
           const customerName = c.firstName || c.name || ''
           const visitName = visitTarget.customerName || visitTarget.name || ''
           return customerName.toLowerCase().trim() === visitName.toLowerCase().trim()
         })
-        
+
         // Build location from visit target (address, city, state, pincode)
         const location = `${visitTarget.address || ''}, ${visitTarget.city || ''}, ${visitTarget.state || ''} ${visitTarget.pincode || ''}`.trim().replace(/^,\s*|,\s*$/g, '')
-        
+
         if (matchingCustomer) {
           // Auto-fill with matching customer
           handleCustomerSelect(matchingCustomer)
@@ -145,13 +145,13 @@ const SalesSubmissions = () => {
           }))
           setCustomerSearch(visitTarget.customerName || visitTarget.name || '')
         }
-        
+
         // Ensure sales tab is active and open the form
         if (activeTab !== 'sales') {
           setActiveTab('sales')
         }
         setShowForm(true)
-        
+
         // Clear the flags
         localStorage.removeItem('salesUploadVisitTarget')
         localStorage.removeItem('openSalesUploadForm')
@@ -194,7 +194,7 @@ const SalesSubmissions = () => {
       if (result.success && result.data) {
         const orders = result.data || []
         console.log('📊 Stats calculation - Total orders:', orders.length)
-        
+
         // Calculate stats from sales orders
         const totalOrders = orders.length
         const confirmedOrders = orders.filter(o => o.orderStatus === 'Confirmed').length
@@ -202,9 +202,9 @@ const SalesSubmissions = () => {
         const totalAmount = orders
           .filter(o => o.orderStatus === 'Confirmed')
           .reduce((sum, o) => sum + (o.grandTotal || 0), 0)
-        
+
         console.log('   Stats:', { total: totalOrders, confirmed: confirmedOrders, pending: pendingOrders, amount: totalAmount })
-        
+
         setStats({
           total: totalOrders,
           approved: confirmedOrders,
@@ -297,44 +297,44 @@ const SalesSubmissions = () => {
 
   const getEmbedUrl = (url) => {
     if (!url) return ''
-    
+
     // YouTube URL patterns
     let videoId = null
     const watchMatch = url.match(/(?:youtube\.com\/watch\?v=)([^&?\s]+)/)
     if (watchMatch) {
       videoId = watchMatch[1]
     }
-    
+
     const embedMatch = url.match(/(?:youtube\.com\/embed\/)([^&?\s]+)/)
     if (embedMatch) {
       videoId = embedMatch[1]
     }
-    
+
     const shortMatch = url.match(/(?:youtu\.be\/)([^&?\s]+)/)
     if (shortMatch) {
       videoId = shortMatch[1]
     }
-    
+
     if (videoId) {
       videoId = videoId.split('&')[0].split('?')[0]
       return `https://www.youtube.com/embed/${videoId}`
     }
-    
+
     // Vimeo
     const vimeoMatch = url.match(/(?:vimeo\.com\/)(?:.*\/)?(\d+)/)
     if (vimeoMatch) {
       return `https://player.vimeo.com/video/${vimeoMatch[1]}`
     }
-    
+
     // Direct video
     if (url.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
       return url
     }
-    
+
     if (url.includes('youtube.com/embed') || url.includes('player.vimeo.com')) {
       return url
     }
-    
+
     return url
   }
 
@@ -372,7 +372,7 @@ const SalesSubmissions = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     if (activeTab === 'sales') {
       if (!salesFormData.customerName || !salesFormData.salesDate || !salesFormData.salesAmount || !salesFormData.location) {
         Swal.fire({
@@ -398,10 +398,10 @@ const SalesSubmissions = () => {
       // Sales submissions are now handled via Sales Orders
       const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
       window.dispatchEvent(event)
-      
+
       // Store flag to open form
       localStorage.setItem('openSalesOrderForm', 'true')
-      
+
       // Pre-fill customer data if available
       if (salesFormData.customer) {
         const customerData = {
@@ -412,7 +412,7 @@ const SalesSubmissions = () => {
         }
         localStorage.setItem('salesOrderCustomer', JSON.stringify(customerData))
       }
-      
+
       setShowForm(false)
       resetForm()
     } else if (activeTab === 'tasks') {
@@ -697,9 +697,9 @@ const SalesSubmissions = () => {
           <FaPlus className="w-4 h-4 sm:w-5 sm:h-5" />
           <span>
             {activeTab === 'sales' ? 'Create Sales Order' :
-             showForm ? 'Cancel' :
-             activeTab === 'tasks' ? 'Create Task' : 
-             'Upload Sample'}
+              showForm ? 'Cancel' :
+                activeTab === 'tasks' ? 'Create Task' :
+                  'Upload Sample'}
           </span>
         </button>
       </div>
@@ -712,11 +712,10 @@ const SalesSubmissions = () => {
               setActiveTab('sales')
               setShowForm(false)
             }}
-            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
-              activeTab === 'sales'
+            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${activeTab === 'sales'
                 ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                 : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-50'
-            }`}
+              }`}
           >
             <FaFileInvoice className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="whitespace-nowrap">Sales Orders</span>
@@ -726,11 +725,10 @@ const SalesSubmissions = () => {
               setActiveTab('tasks')
               setShowForm(false)
             }}
-            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
-              activeTab === 'tasks'
+            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${activeTab === 'tasks'
                 ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                 : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-50'
-            }`}
+              }`}
           >
             <FaTasks className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="whitespace-nowrap">Task Upload</span>
@@ -743,11 +741,10 @@ const SalesSubmissions = () => {
                 loadProducts()
               }
             }}
-            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${
-              activeTab === 'samples'
+            className={`flex-1 min-w-[120px] sm:min-w-0 px-3 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-semibold transition-colors flex items-center justify-center gap-2 flex-shrink-0 ${activeTab === 'samples'
                 ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                 : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-50'
-            }`}
+              }`}
           >
             <FaFlask className="w-4 h-4 sm:w-5 sm:h-5" />
             <span className="whitespace-nowrap">Sample Track Upload</span>
@@ -773,7 +770,7 @@ const SalesSubmissions = () => {
               <FaClock className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
             </div>
             <p className="text-2xl sm:text-3xl font-bold text-yellow-700">{stats.pending || 0}</p>
-              <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Draft/Pending</p>
+            <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Draft/Pending</p>
           </div>
 
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-5 border border-green-200 shadow-sm">
@@ -962,8 +959,8 @@ const SalesSubmissions = () => {
                     {salesFormData.documents.map((doc, index) => (
                       <div key={index} className="relative border-2 border-gray-200 rounded-lg p-2">
                         {doc.fileType === 'image' ? (
-                          <img 
-                            src={doc.fileUrl} 
+                          <img
+                            src={doc.fileUrl}
                             alt={doc.fileName}
                             className="w-full h-32 object-cover rounded"
                           />
@@ -1289,94 +1286,95 @@ const SalesSubmissions = () => {
                     // Map order to submission-like format for display
                     const approvalStatus = mapOrderStatusToApproval(order.orderStatus || 'Pending')
                     return (
-                    <tr 
-                      key={order._id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(approvalStatus)}`}>
-                          {getStatusIcon(approvalStatus)}
-                          {order.orderStatus || 'Pending'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm font-medium text-blue-600">
-                          {order.soNumber || order.invoiceNumber || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <button
-                            onClick={() => {
-                              const customer = customers.find(c => 
-                                (c._id || c.id) === order.customer ||
-                                (c.firstName || c.name) === order.customerName
-                              )
-                              if (customer) {
-                                setSelectedCustomer(customer)
-                                setShowCustomerView(true)
-                              }
-                            }}
-                            className="text-left hover:text-[#e9931c] transition-colors"
-                          >
-                            <p className="text-sm font-medium text-gray-900">{order.customerName}</p>
-                            {order.emailAddress && (
-                              <p className="text-xs text-gray-500">{order.emailAddress}</p>
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-900">
-                          {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm font-semibold text-[#e9931c]">
-                          £{Number(order.grandTotal || 0).toFixed(2)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {/* Sales orders don't have documents field - show invoice number if available */}
-                        {order.invoiceNumber ? (
-                          <span className="text-xs text-gray-600">{order.invoiceNumber}</span>
-                        ) : (
-                          <span className="text-sm text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {(order.orderStatus === 'Draft' || order.orderStatus === 'Pending') && (
-                          <div className="flex items-center justify-end gap-2">
+                      <tr
+                        key={order._id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(approvalStatus)}`}>
+                            {getStatusIcon(approvalStatus)}
+                            {order.orderStatus || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-medium text-blue-600">
+                            {order.soNumber || order.invoiceNumber || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div>
                             <button
                               onClick={() => {
-                                // Navigate to sales orders page to edit
-                                const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
-                                window.dispatchEvent(event)
-                                // Store order ID to edit
-                                localStorage.setItem('editSalesOrderId', order._id)
+                                const customer = customers.find(c =>
+                                  (c._id || c.id) === order.customer ||
+                                  (c.firstName || c.name) === order.customerName
+                                )
+                                if (customer) {
+                                  setSelectedCustomer(customer)
+                                  setShowCustomerView(true)
+                                }
                               }}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit"
+                              className="text-left hover:text-[#e9931c] transition-colors"
                             >
-                              <FaEdit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(order)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete"
-                            >
-                              <FaTrash className="w-4 h-4" />
+                              <p className="text-sm font-medium text-gray-900">{order.customerName}</p>
+                              {order.emailAddress && (
+                                <p className="text-xs text-gray-500">{order.emailAddress}</p>
+                              )}
                             </button>
                           </div>
-                        )}
-                        {order.orderStatus !== 'Draft' && order.orderStatus !== 'Pending' && (
-                          <span className="text-xs text-gray-500">
-                            {order.orderStatus === 'Confirmed' ? 'Confirmed' : order.orderStatus}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-900">
+                            {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 'N/A'}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  )})}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-semibold text-[#e9931c]">
+                            £{Number(order.grandTotal || 0).toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {/* Sales orders don't have documents field - show invoice number if available */}
+                          {order.invoiceNumber ? (
+                            <span className="text-xs text-gray-600">{order.invoiceNumber}</span>
+                          ) : (
+                            <span className="text-sm text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {(order.orderStatus === 'Draft' || order.orderStatus === 'Pending') && (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  // Navigate to sales orders page to edit
+                                  const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+                                  window.dispatchEvent(event)
+                                  // Store order ID to edit
+                                  localStorage.setItem('editSalesOrderId', order._id)
+                                }}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <FaEdit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(order)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <FaTrash className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                          {order.orderStatus !== 'Draft' && order.orderStatus !== 'Pending' && (
+                            <span className="text-xs text-gray-500">
+                              {order.orderStatus === 'Confirmed' ? 'Confirmed' : order.orderStatus}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1388,7 +1386,7 @@ const SalesSubmissions = () => {
       {(activeTab === 'tasks' || activeTab === 'samples') && (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
           <p className="text-gray-600">
-            {activeTab === 'tasks' 
+            {activeTab === 'tasks'
               ? 'Use the "Upload Task" button above to create a new task. Tasks will be sent for admin approval.'
               : 'Use the "Upload Sample" button above to upload a sample track. Samples will be tracked for feedback.'}
           </p>
@@ -1416,7 +1414,7 @@ const SalesSubmissions = () => {
                 </svg>
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1519,7 +1517,7 @@ const SalesSubmissions = () => {
               {(() => {
                 const embedUrl = getEmbedUrl(playingVideo.videoUrl)
                 const isDirectVideo = playingVideo.videoUrl?.match(/\.(mp4|webm|ogg)(\?.*)?$/i)
-                
+
                 if (isDirectVideo) {
                   return (
                     <video

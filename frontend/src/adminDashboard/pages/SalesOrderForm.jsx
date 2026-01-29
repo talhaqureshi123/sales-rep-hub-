@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { FaShoppingCart, FaPlus, FaTrash, FaSave, FaTimes, FaSpinner } from 'react-icons/fa'
+import { FaShoppingCart, FaPlus, FaTrash, FaSave, FaTimes, FaSpinner, FaSearch } from 'react-icons/fa'
 import { getSalesOrder, createSalesOrder, updateSalesOrder } from '../../services/adminservices/salesOrderService'
 import Swal from 'sweetalert2'
+
+// Local date in YYYY-MM-DD (avoids UTC timezone shifting order date)
+const getLocalDateString = (d = new Date()) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) => {
   const [loading, setLoading] = useState(false)
@@ -41,7 +49,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
   const [formData, setFormData] = useState({
     // Section A: Order Information
     soNumber: '',
-    orderDate: new Date().toISOString().split('T')[0],
+    orderDate: getLocalDateString(),
     salesPerson: '',
     salesPersonEmail: '',
     poNumber: '',
@@ -439,7 +447,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
         
         setFormData(prev => ({
           ...order,
-          orderDate: order.orderDate ? new Date(order.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          orderDate: order.orderDate ? getLocalDateString(new Date(order.orderDate)) : getLocalDateString(),
           expectedDispatchDate: order.expectedDispatchDate ? new Date(order.expectedDispatchDate).toISOString().split('T')[0] : '',
           actualDispatchDate: order.actualDispatchDate ? new Date(order.actualDispatchDate).toISOString().split('T')[0] : '',
           _previousStatus: previousStatus
@@ -742,15 +750,20 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
   })
 
   const getFilteredProducts = (itemIndex) => {
-    const searchTerm = (productSearch[itemIndex] || '').toLowerCase()
-    if (!searchTerm) return products.slice(0, 10) // Show first 10 if no search
+    const searchTerm = (productSearch[itemIndex] || '').toLowerCase().trim()
+    if (!searchTerm) return products.slice(0, 15) // Show first 15 when no search
     
     return products.filter(p => {
       const name = (p.name || '').toLowerCase()
-      const code = (p.productCode || '').toLowerCase()
+      const code = (p.productCode || p.code || '').toLowerCase()
       const description = (p.description || '').toLowerCase()
       return name.includes(searchTerm) || code.includes(searchTerm) || description.includes(searchTerm)
-    }).slice(0, 20) // Limit to 20 results
+    }).slice(0, 25) // Limit to 25 results
+  }
+
+  const openProductDropdown = (index, searchValue = '') => {
+    setShowProductDropdown(prev => ({ ...prev, [index]: true }))
+    setProductSearch(prev => ({ ...prev, [index]: searchValue }))
   }
 
   if (initialLoading) {
@@ -917,7 +930,11 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                   ) : (
                     <div className="px-4 py-3 text-center text-gray-500">
                       <p>No customers found</p>
-                      <p className="text-xs mt-1">Try a different search term</p>
+                      {(localStorage.getItem('userRole') === 'salesman' && customers.length === 0) ? (
+                        <p className="text-xs mt-1 text-amber-600">Ask admin to allot customers from <strong>Customer Allotment</strong>. Allotted customers will appear here.</p>
+                      ) : (
+                        <p className="text-xs mt-1">Try a different search term</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1006,69 +1023,87 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
               <tbody>
                 {formData.items.map((item, index) => (
                   <tr key={index} className="border-b">
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2 align-top">
                       <input
                         type="text"
                         value={item.productCode}
-                        onChange={(e) => handleItemChange(index, 'productCode', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
-                        placeholder="Code"
-                      />
-                    </td>
-                    <td className="px-4 py-2 relative dropdown-container">
-                      <input
-                        type="text"
-                        value={item.productName}
                         onChange={(e) => {
                           const value = e.target.value
-                          handleItemChange(index, 'productName', value)
+                          handleItemChange(index, 'productCode', value)
                           setProductSearch(prev => ({ ...prev, [index]: value }))
                           setShowProductDropdown(prev => ({ ...prev, [index]: true }))
                         }}
-                        onFocus={() => {
-                          setShowProductDropdown(prev => ({ ...prev, [index]: true }))
-                          if (!productSearch[index]) {
-                            setProductSearch(prev => ({ ...prev, [index]: item.productName }))
-                          }
-                        }}
-                        onBlur={() => {
-                          // Delay hiding dropdown to allow click
-                          setTimeout(() => {
-                            setShowProductDropdown(prev => ({ ...prev, [index]: false }))
-                          }, 200)
-                        }}
+                        onFocus={() => openProductDropdown(index, item.productCode || '')}
                         className="w-full px-2 py-1 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
-                        placeholder={initialLoading ? "Loading products..." : "Search products by name or code..."}
-                        required
+                        placeholder="Code"
                         disabled={initialLoading}
                       />
+                    </td>
+                    <td className="px-4 py-2 relative align-top dropdown-container">
+                      <div className="flex gap-1">
+                        <div className="flex-1 relative">
+                          <input
+                            type="text"
+                            value={item.productName}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              handleItemChange(index, 'productName', value)
+                              setProductSearch(prev => ({ ...prev, [index]: value }))
+                              setShowProductDropdown(prev => ({ ...prev, [index]: true }))
+                            }}
+                            onFocus={() => openProductDropdown(index, item.productName || '')}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setShowProductDropdown(prev => ({ ...prev, [index]: false }))
+                              }, 220)
+                            }}
+                            className="w-full px-2 py-1 pr-8 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                            placeholder={initialLoading ? "Loading..." : "Search or select product..."}
+                            required
+                            disabled={initialLoading}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => openProductDropdown(index, '')}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded text-gray-500 hover:bg-[#e9931c] hover:text-white transition-colors"
+                            title="Select product from catalog"
+                            disabled={initialLoading}
+                          >
+                            <FaSearch className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                       {showProductDropdown[index] && !initialLoading && (
-                        <div className="absolute z-20 w-full mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        <div className="absolute z-30 left-0 right-0 mt-1 bg-white border-2 border-[#e9931c] rounded-lg shadow-xl max-h-64 overflow-y-auto min-w-[280px]">
+                          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs text-gray-600">
+                            Type name or code above, or pick from list
+                          </div>
                           {getFilteredProducts(index).length > 0 ? (
                             getFilteredProducts(index).map(product => (
                               <div
                                 key={product._id || product.id}
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => {
                                   handleProductSelect(product, index)
                                   setShowProductDropdown(prev => ({ ...prev, [index]: false }))
                                   setProductSearch(prev => ({ ...prev, [index]: '' }))
                                 }}
-                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
+                                className="px-4 py-2.5 hover:bg-[#fff5eb] cursor-pointer border-b border-gray-100 flex flex-col gap-0.5"
                               >
                                 <p className="font-medium text-gray-800">{product.name}</p>
                                 <p className="text-sm text-gray-600">
-                                  Code: {product.productCode || 'N/A'} | Price: £{product.price || 0}
-                                  {product.category && ` | Category: ${product.category}`}
+                                  Code: {product.productCode || product.code || 'N/A'} · £{Number(product.price || product.unitPrice || 0).toFixed(2)}
+                                  {product.category && ` · ${product.category}`}
                                 </p>
                                 {product.description && (
-                                  <p className="text-xs text-gray-500 mt-1 truncate">{product.description}</p>
+                                  <p className="text-xs text-gray-500 truncate">{product.description}</p>
                                 )}
                               </div>
                             ))
                           ) : (
-                            <div className="px-4 py-3 text-center text-gray-500">
-                              <p>No products found</p>
-                              <p className="text-xs mt-1">Try a different search term</p>
+                            <div className="px-4 py-4 text-center text-gray-500">
+                              <p className="font-medium">No products found</p>
+                              <p className="text-xs mt-1">Try a different name or code</p>
                             </div>
                           )}
                         </div>

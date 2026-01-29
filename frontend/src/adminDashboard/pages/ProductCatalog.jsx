@@ -25,7 +25,7 @@ const ProductCatalog = () => {
     description: '',    // new field
     keyFeatures: '',    // new field
   })
-  
+
   const categories = [
     'All',
     'Office Supplies',
@@ -117,15 +117,15 @@ const ProductCatalog = () => {
   const handleAddProduct = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const code = formData.productCode || generateProductCode()
-      
+
       // Convert keyFeatures string to array if provided
       const keyFeaturesArray = formData.keyFeatures
         ? formData.keyFeatures.split(',').map(f => f.trim()).filter(f => f)
         : []
-      
+
       const productData = {
         name: formData.name,
         productCode: code,
@@ -137,10 +137,10 @@ const ProductCatalog = () => {
         description: formData.description,
         keyFeatures: keyFeaturesArray,
       }
-      
+
 
       const result = await createProduct(productData)
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -186,7 +186,7 @@ const ProductCatalog = () => {
       e.stopPropagation()
     }
     setOpenDownloadDropdown(null) // Close dropdown
-    
+
     try {
       const token = localStorage.getItem('token')
       if (!token) {
@@ -208,12 +208,12 @@ const ProductCatalog = () => {
       })
 
       const data = await response.json()
-      
+
       if (data.success && data.qrCodeURL) {
         // Fetch the QR code image
         const imgResponse = await fetch(data.qrCodeURL)
         const blob = await imgResponse.blob()
-        
+
         // Create a blob URL and download
         const blobURL = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
@@ -222,7 +222,7 @@ const ProductCatalog = () => {
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-        
+
         // Clean up the blob URL
         window.URL.revokeObjectURL(blobURL)
         Swal.fire({
@@ -257,7 +257,7 @@ const ProductCatalog = () => {
       e.stopPropagation()
     }
     setOpenDownloadDropdown(null) // Close dropdown
-    
+
     try {
       const token = localStorage.getItem('token')
       if (!token) {
@@ -279,7 +279,7 @@ const ProductCatalog = () => {
       })
 
       const data = await response.json()
-      
+
       if (data.success && data.barcodeURL) {
         try {
           // Try to fetch the barcode image with CORS handling
@@ -287,7 +287,7 @@ const ProductCatalog = () => {
             mode: 'cors',
             credentials: 'omit'
           })
-          
+
           if (!imgResponse.ok) {
             // If direct fetch fails, try opening in new window or using proxy
             const link = document.createElement('a')
@@ -305,9 +305,9 @@ const ProductCatalog = () => {
             })
             return
           }
-          
+
           const blob = await imgResponse.blob()
-          
+
           // Create a blob URL and download
           const blobURL = window.URL.createObjectURL(blob)
           const link = document.createElement('a')
@@ -316,10 +316,10 @@ const ProductCatalog = () => {
           document.body.appendChild(link)
           link.click()
           document.body.removeChild(link)
-          
+
           // Clean up the blob URL
           window.URL.revokeObjectURL(blobURL)
-          
+
           Swal.fire({
             icon: 'success',
             title: 'Barcode Downloaded!',
@@ -379,15 +379,15 @@ const ProductCatalog = () => {
   const handleUpdateProduct = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const code = formData.productCode || generateProductCode()
-      
+
       // Convert keyFeatures string to array if provided
       const keyFeaturesArray = formData.keyFeatures
         ? formData.keyFeatures.split(',').map(f => f.trim()).filter(f => f)
         : []
-      
+
       const productData = {
         name: formData.name,
         productCode: code,
@@ -399,9 +399,9 @@ const ProductCatalog = () => {
         description: formData.description,
         keyFeatures: keyFeaturesArray,
       }
-      
+
       const result = await updateProduct(editingProduct._id || editingProduct.id, productData)
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -538,11 +538,10 @@ const ProductCatalog = () => {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedCategory === category
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === category
                     ? 'bg-[#e9931c] text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {category}
               </button>
@@ -560,11 +559,10 @@ const ProductCatalog = () => {
               <button
                 key={status}
                 onClick={() => setSelectedStatus(status)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedStatus === status
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedStatus === status
                     ? 'bg-[#e9931c] text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {status}
               </button>
@@ -721,45 +719,45 @@ const ProductCatalog = () => {
                 </button>
               </div>
               <div>
-  <label className="block text-sm font-medium text-gray-700 mb-2">Image URL</label>
-  <input
-    type="text"
-    name="imageUrl"
-    value={formData.imageUrl}
-    onChange={handleInputChange}
-    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-    placeholder="Enter image URL"
-  />
-</div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Image URL</label>
+                <input
+                  type="text"
+                  name="imageUrl"
+                  value={formData.imageUrl}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Enter image URL"
+                />
+              </div>
 
-<div className="md:col-span-2">
-  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-  <textarea
-    name="description"
-    value={formData.description}
-    onChange={handleInputChange}
-    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-    placeholder="Enter product description"
-    rows={3}
-  />
-</div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Enter product description"
+                  rows={3}
+                />
+              </div>
 
-<div className="md:col-span-2">
-  <label className="block text-sm font-medium text-gray-700 mb-2">Key Features</label>
-  <textarea
-    name="keyFeatures"
-    value={formData.keyFeatures}
-    onChange={handleInputChange}
-    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-    placeholder="Enter key features separated by commas"
-    rows={2}
-  />
-</div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Key Features</label>
+                <textarea
+                  name="keyFeatures"
+                  value={formData.keyFeatures}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Enter key features separated by commas"
+                  rows={2}
+                />
+              </div>
 
             </form>
           </div>
         </div>
-        
+
       )}
 
       {/* Products Grid */}
@@ -819,7 +817,7 @@ const ProductCatalog = () => {
                         <FaDownload className="w-3 h-3" />
                         <FaChevronDown className={`w-2 h-2 transition-transform ${openDownloadDropdown === product._id ? 'rotate-180' : ''}`} />
                       </button>
-                      
+
                       {/* Dropdown Menu */}
                       {openDownloadDropdown === product._id && (
                         <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px] z-20">
@@ -876,11 +874,10 @@ const ProductCatalog = () => {
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  product.isActive
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${product.isActive
                     ? 'bg-[#e9931c] text-white'
                     : 'bg-gray-200 text-gray-700'
-                }`}>
+                  }`}>
                   {product.isActive ? 'Active' : 'Inactive'}
                 </span>
                 {product.category && (

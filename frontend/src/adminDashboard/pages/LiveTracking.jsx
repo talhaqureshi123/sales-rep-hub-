@@ -440,44 +440,34 @@ const LiveTracking = () => {
         </div>
       </div>
 
-      {/* Start Tracking - Info card: sales reps start tracking from their dashboard */}
-      <div className="mb-4 p-4 bg-[#e9931c]/10 border border-[#e9931c]/30 rounded-lg flex items-center gap-3 flex-shrink-0">
-        <FaLocationArrow className="w-6 h-6 text-[#e9931c]" />
-        <div>
-          <h3 className="font-semibold text-gray-900">Start Tracking</h3>
-          <p className="text-sm text-gray-600">Sales reps start and manage their GPS tracking from the Sales Rep Hub app (Sales Tracking). Their live location will appear here once they start tracking.</p>
-        </div>
-      </div>
-
       {/* Main Content - Map and Sidebar */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0 overflow-hidden">
         {/* Map Section - Takes 2/3 width on large screens */}
         <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: '600px', height: '100%' }}>
-          {/* Map Container */}
+          {/* Map Container - Always show map so it loads; markers appear when salesman locations exist */}
           <div className="flex-1 bg-gray-100 relative" style={{ minHeight: '500px', height: '100%', width: '100%' }}>
-            {mapMarkers.length > 0 ? (
-              <div style={{ height: '100%', width: '100%', position: 'relative' }}>
-                <GoogleMapView
-                  key={`map-${firstLat || 0}-${firstLng || 0}`} // Stable key - only change when first location coordinates change
-                  milestones={[]}
-                  visitTargets={mapMarkers}
-                  userLocation={null}
-                  center={mapCenter}
-                  zoom={mapMarkers.length === 1 ? 16 : 15} // Higher zoom for single salesman (16), multiple salesmen (15)
-                  height="100%"
-                  showUserLocation={false}
-                  showRadius={false}
-                  isTracking={false}
-                  onMarkerClick={handleMarkerClick}
-                />
-              </div>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50" style={{ minHeight: '500px', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-                <div className="text-center">
-                  <FaMapMarkerAlt className="w-24 h-24 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">No Locations Yet</p>
-                  <p className="text-gray-400 text-sm mt-2">
-                    Salesman locations will appear when the app starts sending GPS updates
+            <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+              <GoogleMapView
+                key="live-tracking-map"
+                milestones={[]}
+                visitTargets={mapMarkers}
+                userLocation={null}
+                center={mapCenter}
+                zoom={mapMarkers.length === 1 ? 16 : mapMarkers.length > 1 ? 15 : 10}
+                height="100%"
+                showUserLocation={false}
+                showRadius={false}
+                isTracking={false}
+                onMarkerClick={handleMarkerClick}
+              />
+            </div>
+            {mapMarkers.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-lg shadow-md text-center max-w-xs">
+                  <FaMapMarkerAlt className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600 text-sm font-medium">No rep locations yet</p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    Map will show reps when they share location
                   </p>
                 </div>
               </div>
@@ -513,7 +503,7 @@ const LiveTracking = () => {
 
           {/* Map Attribution */}
           <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500">
-            Leaflet | © OpenStreetMap
+            Google Maps
           </div>
         </div>
 

@@ -25,10 +25,20 @@ export const getMyFollowUps = async (filters = {}) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
       },
+      cache: 'no-store',
     })
 
-    const data = await response.json()
+    const text = await response.text()
+    let data
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch (_) {
+      return { success: false, message: response.ok ? 'Invalid response.' : (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
+    }
+    if (!response.ok) return { success: false, message: data.message || (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
     return data
   } catch (error) {
     console.error('Error fetching follow-ups:', error)

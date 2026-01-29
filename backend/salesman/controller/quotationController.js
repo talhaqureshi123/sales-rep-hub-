@@ -1,6 +1,10 @@
 const Quotation = require('../../database/models/Quotation');
 const Product = require('../../database/models/Product');
 const hubspotService = require('../../services/hubspotService');
+const FollowUp = require('../../database/models/FollowUp');
+const VisitTarget = require('../../database/models/VisitTarget');
+const Customer = require('../../database/models/Customer');
+const { sendQuotationEmail } = require('../../utils/emailService');
 
 // Helper function to generate quotation number
 const generateQuotationNumber = async () => {
@@ -12,13 +16,46 @@ const generateQuotationNumber = async () => {
   return `QT-${year}${month}-${number}`;
 };
 
-// @desc    Get all quotations for salesman
+// Get customer names and emails that belong to this salesman (from tasks + visits)
+const getMyCustomerNamesAndEmails = async (salesmanId) => {
+  const names = new Set();
+  const emails = new Set();
+  const customerIds = new Set();
+
+  const tasks = await FollowUp.find({ salesman: salesmanId }).select('customerName customerEmail customer').lean();
+  tasks.forEach((t) => {
+    if (t.customerName && t.customerName.trim()) names.add(t.customerName.trim());
+    if (t.customerEmail && t.customerEmail.trim()) emails.add(t.customerEmail.trim().toLowerCase());
+    if (t.customer) customerIds.add(t.customer.toString());
+  });
+
+  const visits = await VisitTarget.find({ salesman: salesmanId }).select('customerName customerId').lean();
+  visits.forEach((v) => {
+    if (v.customerName && v.customerName.trim()) names.add(v.customerName.trim());
+    if (v.customerId) customerIds.add(v.customerId.toString());
+  });
+
+  if (customerIds.size > 0) {
+    const customers = await Customer.find({ _id: { $in: Array.from(customerIds) } }).select('name firstName email').lean();
+    customers.forEach((c) => {
+      const n = (c.name || c.firstName || '').trim();
+      if (n) names.add(n);
+      if (c.email && c.email.trim()) emails.add(c.email.trim().toLowerCase());
+    });
+  }
+
+  return { names: Array.from(names), emails: Array.from(emails) };
+};
+
+// @desc    Get all quotations for salesman (only own – admin quotations are hidden)
 // @route   GET /api/salesman/quotations
 // @access  Private/Salesman
 const getQuotations = async (req, res) => {
   try {
     const { status } = req.query;
-    const filter = { salesman: req.user._id };
+    const salesmanId = req.user._id;
+
+    const filter = { salesman: salesmanId, $nor: [{ createdBy: 'admin' }] };
 
     if (status) {
       filter.status = status;
@@ -41,7 +78,7 @@ const getQuotations = async (req, res) => {
   }
 };
 
-// @desc    Get single quotation
+// @desc    Get single quotation (only own – admin quotations are hidden)
 // @route   GET /api/salesman/quotations/:id
 // @access  Private/Salesman
 const getQuotation = async (req, res) => {
@@ -49,6 +86,7 @@ const getQuotation = async (req, res) => {
     const quotation = await Quotation.findOne({
       _id: req.params.id,
       salesman: req.user._id,
+      createdBy: { $ne: 'admin' },
     }).populate('salesman', 'name email').populate('items.product', 'name productCode price');
 
     if (!quotation) {
@@ -132,6 +170,7 @@ const createQuotation = async (req, res) => {
       total,
       notes,
       status: 'Draft',
+      createdBy: 'salesman',
     });
 
     const populatedQuotation = await Quotation.findById(quotation._id)
@@ -330,12 +369,78 @@ const deleteQuotation = async (req, res) => {
   }
 };
 
+// @desc    Send quotation by email to customer (link/details to customer email)
+// @route   POST /api/salesman/quotations/:id/send-email
+// @access  Private/Salesman
+const sendQuotationByEmail = async (req, res) => {
+  try {
+    const quotation = await Quotation.findOne({
+      _id: req.params.id,
+      salesman: req.user._id,
+    }).populate('salesman', 'name email');
+
+    if (!quotation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Quotation not found',
+      });
+    }
+
+    const toEmail = (quotation.customerEmail || '').trim();
+    if (!toEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer email is missing. Add customer email to send quotation.',
+      });
+    }
+
+    const items = (quotation.items || []).map((item) => ({
+      productName: item.productName || item.productCode || '-',
+      productCode: item.productCode,
+      quantity: item.quantity || 0,
+      price: item.price || 0,
+      total: item.total || 0,
+    }));
+
+    const result = await sendQuotationEmail(toEmail, {
+      quotationNumber: quotation.quotationNumber || '',
+      customerName: quotation.customerName || '',
+      total: quotation.total || 0,
+      validUntil: quotation.validUntil || '',
+      items,
+      notes: quotation.notes || '',
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.message || result.error || 'Failed to send email',
+      });
+    }
+
+    quotation.status = 'Sent';
+    await quotation.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Quotation sent to customer email successfully',
+      data: { messageId: result.messageId },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error sending quotation email',
+    });
+  }
+};
+
 module.exports = {
   getQuotations,
   getQuotation,
   createQuotation,
   updateQuotation,
   deleteQuotation,
+  sendQuotationByEmail,
 };
 
 

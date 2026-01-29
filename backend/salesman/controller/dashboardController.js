@@ -2,6 +2,7 @@ const VisitTarget = require('../../database/models/VisitTarget');
 const Quotation = require('../../database/models/Quotation');
 const Customer = require('../../database/models/Customer');
 const Tracking = require('../../database/models/Tracking');
+const SalesOrder = require('../../database/models/SalesOrder');
 
 // @desc    Get dashboard stats for salesman
 // @route   GET /api/salesman/dashboard
@@ -152,10 +153,10 @@ const getDashboardStats = async (req, res) => {
       });
     }
 
-    // Overall Stats
-    const totalSales = await Quotation.aggregate([
-      { $match: { salesman: salesmanId, status: 'Approved' } },
-      { $group: { _id: null, total: { $sum: '$total' } } },
+    // Overall Stats - Calculate Total Sales from Confirmed Sales Orders only
+    const totalSales = await SalesOrder.aggregate([
+      { $match: { salesPerson: salesmanId, orderStatus: 'Confirmed' } },
+      { $group: { _id: null, total: { $sum: '$grandTotal' } } },
     ]);
     const totalSalesAmount = totalSales.length > 0 ? totalSales[0].total : 0;
 

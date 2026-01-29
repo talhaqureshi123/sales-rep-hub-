@@ -4,6 +4,64 @@ import Swal from 'sweetalert2'
 import { getSalesTargets, getSalesTarget, createSalesTarget, updateSalesTarget, deleteSalesTarget } from '../../services/adminservices/salesTargetService'
 import { getUsers } from '../../services/adminservices/userService'
 
+// Local date in YYYY-MM-DD format (avoids UTC timezone shifting)
+const getLocalDateString = (d = new Date()) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Calculate start and end dates based on period (starting from today)
+const calculatePeriodDates = (period) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0) // Set to start of day
+  
+  let startDate = new Date(today)
+  let endDate = new Date(today)
+  
+  switch (period) {
+    case 'Daily':
+      // Today to today
+      endDate = new Date(today)
+      break
+      
+    case 'Weekly':
+      // Today to end of current week (Sunday)
+      const dayOfWeek = today.getDay() // 0 = Sunday, 6 = Saturday
+      const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+      endDate = new Date(today)
+      endDate.setDate(today.getDate() + daysUntilSunday)
+      endDate.setHours(23, 59, 59, 999) // End of day
+      break
+      
+    case 'Monthly':
+      // Today to end of current month
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0) // Last day of current month (day 0 of next month)
+      break
+      
+    case 'Quarterly':
+      // Today to end of current quarter
+      const currentQuarter = Math.floor(today.getMonth() / 3) // 0, 1, 2, or 3
+      const quarterEndMonth = (currentQuarter + 1) * 3 - 1 // Month index (0-11) of last month in quarter
+      endDate = new Date(today.getFullYear(), quarterEndMonth + 1, 0) // Last day of quarter (day 0 of next month)
+      break
+      
+    case 'Yearly':
+      // Today to end of current year (December 31)
+      endDate = new Date(today.getFullYear(), 11, 31) // December 31
+      break
+      
+    default:
+      return { startDate: '', endDate: '' }
+  }
+  
+  return {
+    startDate: getLocalDateString(startDate),
+    endDate: getLocalDateString(endDate)
+  }
+}
+
 const SalesTargets = () => {
   const [targets, setTargets] = useState([])
   const [salesmen, setSalesmen] = useState([])
@@ -11,7 +69,7 @@ const SalesTargets = () => {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedTarget, setSelectedTarget] = useState(null)
-  
+
   const [filters, setFilters] = useState({
     salesman: 'All',
     status: 'All',
@@ -25,6 +83,7 @@ const SalesTargets = () => {
     targetName: '',
     targetType: 'Orders', // Default to Orders
     targetValue: 0,
+    targetAmount: '', // Optional: target amount in £
     period: '',
     startDate: '',
     endDate: '',
@@ -79,10 +138,19 @@ const SalesTargets = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setFormData({
+    const updatedFormData = {
       ...formData,
       [name]: value,
-    })
+    }
+    
+    // Auto-fill dates when period is selected
+    if (name === 'period' && value) {
+      const dates = calculatePeriodDates(value)
+      updatedFormData.startDate = dates.startDate
+      updatedFormData.endDate = dates.endDate
+    }
+    
+    setFormData(updatedFormData)
   }
 
   const handleCreateTarget = async (e) => {
@@ -99,7 +167,10 @@ const SalesTargets = () => {
 
     setLoading(true)
     try {
-      const result = await createSalesTarget(formData)
+      const payload = { ...formData }
+      if (formData.targetAmount === '' || formData.targetAmount == null) delete payload.targetAmount
+      else payload.targetAmount = Number(formData.targetAmount)
+      const result = await createSalesTarget(payload)
       if (result.success) {
         await Swal.fire({
           icon: 'success',
@@ -144,9 +215,10 @@ const SalesTargets = () => {
           targetName: target.targetName || '',
           targetType: target.targetType || '',
           targetValue: target.targetValue || 0,
+          targetAmount: target.targetAmount || '',
           period: target.period || '',
-          startDate: target.startDate ? new Date(target.startDate).toISOString().split('T')[0] : '',
-          endDate: target.endDate ? new Date(target.endDate).toISOString().split('T')[0] : '',
+          startDate: target.startDate ? getLocalDateString(new Date(target.startDate)) : '',
+          endDate: target.endDate ? getLocalDateString(new Date(target.endDate)) : '',
         })
         setShowEditModal(true)
       }
@@ -170,6 +242,7 @@ const SalesTargets = () => {
       // Ensure dates are sent in correct format
       const updateData = {
         ...formData,
+        targetAmount: (formData.targetAmount === '' || formData.targetAmount == null) ? undefined : Number(formData.targetAmount),
         startDate: formData.startDate || undefined,
         endDate: formData.endDate || undefined,
       }
@@ -295,6 +368,7 @@ const SalesTargets = () => {
       targetName: '',
       targetType: 'Orders', // Default to Orders
       targetValue: 0,
+      targetAmount: '',
       period: '',
       startDate: '',
       endDate: '',
@@ -403,11 +477,10 @@ const SalesTargets = () => {
                 <button
                   key={status}
                   onClick={() => setFilters({ ...filters, status })}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    filters.status === status
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filters.status === status
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   {status}
                 </button>
@@ -437,11 +510,10 @@ const SalesTargets = () => {
                 <button
                   key={period}
                   onClick={() => setFilters({ ...filters, period })}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    filters.period === period
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filters.period === period
                       ? 'bg-[#e9931c] text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   {period}
                 </button>
@@ -472,7 +544,7 @@ const SalesTargets = () => {
             const daysRemaining = calculateDaysRemaining(target.endDate)
             const salesmanName = target.salesman?.name || target.salesman?.email || 'N/A'
             const salesmanEmail = target.salesman?.email || ''
-            
+
             return (
               <div
                 key={target._id || target.id}
@@ -489,19 +561,19 @@ const SalesTargets = () => {
                     </span>
                   </div>
                 </div>
-                
+
                 {/* Email */}
                 {salesmanEmail && (
                   <p className="text-sm text-gray-600 mb-3">{salesmanEmail}</p>
                 )}
-                
+
                 {/* Status Badge */}
                 <div className="mb-4">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(target.status)}`}>
                     {target.status}
                   </span>
                 </div>
-                
+
                 {/* Target Type with Icon */}
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -512,13 +584,20 @@ const SalesTargets = () => {
                     {target.targetType}
                   </button>
                 </div>
-                
+
                 {/* Progress */}
                 <div className="mb-4">
                   <p className="text-sm font-semibold text-gray-900 mb-2">
                     {formatProgress(target)}
                   </p>
-                  {target.currentAmount != null && (
+                  {target.targetAmount != null && target.targetAmount > 0 && (
+                    <div className="text-sm space-y-0.5 mb-1">
+                      <p className="font-medium text-gray-700">Target: £{Number(target.targetAmount).toFixed(2)}</p>
+                      <p className="font-medium text-[#e9931c]">Amount: £{Number(target.currentAmount || 0).toFixed(2)}</p>
+                      <p className="font-medium text-blue-600">Remaining: £{Number(target.remainingAmount != null ? target.remainingAmount : Math.max(0, target.targetAmount - (target.currentAmount || 0))).toFixed(2)}</p>
+                    </div>
+                  )}
+                  {(!target.targetAmount || target.targetAmount <= 0) && target.currentAmount != null && (
                     <p className="text-sm font-medium text-[#e9931c] mb-1">
                       Amount: £{Number(target.currentAmount || 0).toFixed(2)}
                     </p>
@@ -527,14 +606,14 @@ const SalesTargets = () => {
                     {progressPercent}% Complete
                   </p>
                 </div>
-                
+
                 {/* Date Range */}
                 {startDate && endDate && (
                   <p className="text-xs text-gray-600 mb-3">
                     {startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 )}
-                
+
                 {/* Remaining Time */}
                 {daysRemaining > 0 && (
                   <div className="mb-4">
@@ -543,7 +622,7 @@ const SalesTargets = () => {
                     </span>
                   </div>
                 )}
-                
+
                 {/* Action Buttons */}
                 <div className="flex gap-2 pt-4 border-t border-gray-200">
                   <button
@@ -608,7 +687,7 @@ const SalesTargets = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Target Name <span className="text-red-500">*</span>
@@ -623,10 +702,10 @@ const SalesTargets = () => {
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                 />
               </div>
-              
+
               {/* Target Type is always Orders - hidden field */}
               <input type="hidden" name="targetType" value="Orders" />
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Target Value <span className="text-red-500">*</span>
@@ -643,7 +722,24 @@ const SalesTargets = () => {
                 />
                 <p className="text-xs text-gray-500 mt-1">Number of orders to achieve</p>
               </div>
-              
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Target Amount (£) <span className="text-gray-400 text-xs">(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  name="targetAmount"
+                  value={formData.targetAmount}
+                  onChange={handleInputChange}
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 5000"
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                />
+                <p className="text-xs text-gray-500 mt-1">Target sales amount in £ – will show Target / Amount / Remaining</p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Period <span className="text-red-500">*</span>
@@ -661,7 +757,7 @@ const SalesTargets = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -679,7 +775,7 @@ const SalesTargets = () => {
                     />
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     End Date <span className="text-red-500">*</span>
@@ -697,7 +793,7 @@ const SalesTargets = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex gap-3 justify-end pt-4">
                 <button
                   type="button"
@@ -759,7 +855,7 @@ const SalesTargets = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Target Name *</label>
                 <input
@@ -771,10 +867,10 @@ const SalesTargets = () => {
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                 />
               </div>
-              
+
               {/* Target Type is always Orders - hidden field */}
               <input type="hidden" name="targetType" value="Orders" />
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Target Value (Number of Orders) *</label>
                 <input
@@ -789,7 +885,7 @@ const SalesTargets = () => {
                 />
                 <p className="text-xs text-gray-500 mt-1">Number of orders to achieve</p>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Period *</label>
                 <select
@@ -805,7 +901,7 @@ const SalesTargets = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
@@ -830,7 +926,7 @@ const SalesTargets = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="flex gap-3 justify-end pt-4">
                 <button
                   type="button"

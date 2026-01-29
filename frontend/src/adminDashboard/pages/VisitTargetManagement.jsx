@@ -481,13 +481,14 @@ const VisitTargetManagement = () => {
       const result = await deleteVisitTarget(id)
       
       if (result.success) {
+        setVisitTargets((prev) => prev.filter((t) => (t._id || t.id)?.toString() !== String(id)))
+        loadVisitTargets()
         Swal.fire({
           icon: 'success',
           title: 'Deleted!',
           text: 'Visit target deleted successfully!',
           confirmButtonColor: '#e9931c',
         })
-        loadVisitTargets()
       } else {
         Swal.fire({
           icon: 'error',
@@ -515,6 +516,8 @@ const VisitTargetManagement = () => {
     try {
       const result = await updateVisitTarget(target._id, { approvalStatus: 'Approved' })
       if (result.success) {
+        // Show approved in list: switch filter to All so approved item doesn't disappear (was Pending-only)
+        setFilterApprovalStatus('')
         loadVisitTargets()
       } else {
         Swal.fire({

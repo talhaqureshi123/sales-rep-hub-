@@ -231,83 +231,88 @@ const ShiftPhotos = () => {
                   )}
                 </div>
 
-                {/* Visited Area Photo(s) - support single and multiple images */}
+                {/* Visited Area Photo(s) - support single and multiple images, no duplicates */}
                 <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center relative group overflow-hidden">
-                  {(Array.isArray(shift.visitedAreaImages) && shift.visitedAreaImages.length >= 1) ? (
-                    <>
-                      <div
-                        className={`w-full h-full cursor-pointer relative ${shift.visitedAreaImages.length === 1 ? '' : shift.visitedAreaImages.length === 2 ? 'grid grid-cols-2 gap-0.5' : shift.visitedAreaImages.length === 3 ? 'grid grid-cols-2 gap-0.5' : 'grid grid-cols-2 grid-rows-2 gap-0.5'}`}
-                        onClick={() => handleViewPhoto(shift)}
-                        title="View"
-                      >
-                        {(shift.visitedAreaImages.length === 1 
-                          ? shift.visitedAreaImages 
-                          : shift.visitedAreaImages.slice(0, 4)
-                        ).map((img, idx) => (
-                          <div key={`${shift._id}-visitimg-${idx}`} className="relative w-full h-full">
-                            <img
-                              src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
-                              alt={`Visited area ${idx + 1}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                if (!img.startsWith('data:')) {
-                                  e.target.src = img
-                                }
-                              }}
-                            />
-                            {/* Show count badge if more than 4 images and this is the 4th */}
-                            {idx === 3 && shift.visitedAreaImages.length > 4 && (
-                              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                                <span className="text-white text-xs font-bold">+{shift.visitedAreaImages.length - 4}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
+                  {(() => {
+                    const uniqueVisitedImages = Array.isArray(shift.visitedAreaImages) ? [...new Set(shift.visitedAreaImages)] : []
+                    const hasMultiple = uniqueVisitedImages.length >= 1
+                    return hasMultiple ? (
+                      <>
+                        <div
+                          className={`w-full h-full cursor-pointer relative ${uniqueVisitedImages.length === 1 ? '' : uniqueVisitedImages.length === 2 ? 'grid grid-cols-2 gap-0.5' : uniqueVisitedImages.length === 3 ? 'grid grid-cols-2 gap-0.5' : 'grid grid-cols-2 grid-rows-2 gap-0.5'}`}
                           onClick={() => handleViewPhoto(shift)}
-                          className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                           title="View"
                         >
-                          <FaEye className="w-3 h-3" />
-                        </button>
-                      </div>
-                      {/* Show total count badge */}
-                      {shift.visitedAreaImages.length > 1 && (
-                        <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                          {shift.visitedAreaImages.length} photos
+                          {(uniqueVisitedImages.length === 1
+                            ? uniqueVisitedImages
+                            : uniqueVisitedImages.slice(0, 4)
+                          ).map((img, idx) => (
+                            <div key={`${shift._id}-visitimg-${idx}`} className="relative w-full h-full">
+                              <img
+                                src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
+                                alt={`Visited area ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  if (!img.startsWith('data:')) {
+                                    e.target.src = img
+                                  }
+                                }}
+                              />
+                              {idx === 3 && uniqueVisitedImages.length > 4 && (
+                                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                                  <span className="text-white text-xs font-bold">+{uniqueVisitedImages.length - 4}</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      )}
-                    </>
-                  ) : shift.visitedAreaImage ? (
-                    <>
-                      <img
-                        src={shift.visitedAreaImage.startsWith('data:') ? shift.visitedAreaImage : `data:image/jpeg;base64,${shift.visitedAreaImage}`}
-                        alt="Visited area"
-                        className="w-full h-full object-cover cursor-pointer"
-                        onClick={() => handleViewPhoto(shift)}
-                        onError={(e) => {
-                          if (!shift.visitedAreaImage.startsWith('data:')) {
-                            e.target.src = shift.visitedAreaImage
-                          }
-                        }}
-                      />
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
+                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleViewPhoto(shift)}
+                            className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                            title="View"
+                          >
+                            <FaEye className="w-3 h-3" />
+                          </button>
+                        </div>
+                        {uniqueVisitedImages.length > 1 && (
+                          <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                            {uniqueVisitedImages.length} photos
+                          </div>
+                        )}
+                      </>
+                    ) : null
+                  })()}
+                  {!(Array.isArray(shift.visitedAreaImages) && shift.visitedAreaImages.length >= 1) && (
+                    shift.visitedAreaImage ? (
+                      <>
+                        <img
+                          src={shift.visitedAreaImage.startsWith('data:') ? shift.visitedAreaImage : `data:image/jpeg;base64,${shift.visitedAreaImage}`}
+                          alt="Visited area"
+                          className="w-full h-full object-cover cursor-pointer"
                           onClick={() => handleViewPhoto(shift)}
-                          className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                          title="View"
-                        >
-                          <FaEye className="w-3 h-3" />
-                        </button>
+                          onError={(e) => {
+                            if (!shift.visitedAreaImage.startsWith('data:')) {
+                              e.target.src = shift.visitedAreaImage
+                            }
+                          }}
+                        />
+                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleViewPhoto(shift)}
+                            className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                            title="View"
+                          >
+                            <FaEye className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center p-2">
+                        <FaCamera className="w-6 h-6 text-gray-300 mx-auto mb-1" />
+                        <p className="text-gray-400 text-xs">No photo</p>
                       </div>
-                    </>
-                  ) : (
-                    <div className="text-center p-2">
-                      <FaCamera className="w-6 h-6 text-gray-300 mx-auto mb-1" />
-                      <p className="text-gray-400 text-xs">No photo</p>
-                    </div>
+                    )
                   )}
                 </div>
 
@@ -360,13 +365,12 @@ const ShiftPhotos = () => {
                     )}
                   </div>
                   {/* Status Badge */}
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    shift.status === 'active' 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${shift.status === 'active'
+                      ? 'bg-green-100 text-green-800'
                       : shift.status === 'stopped' || shift.status === 'completed'
-                      ? 'bg-gray-100 text-gray-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {shift.status === 'active' ? 'Active' : shift.status === 'stopped' ? 'Stopped' : shift.status === 'completed' ? 'Completed' : 'Unknown'}
                   </span>
                 </div>
@@ -389,8 +393,8 @@ const ShiftPhotos = () => {
                 <div className="mb-3">
                   <p className="text-sm text-gray-700">
                     <span className="text-gray-500">End Shift</span> is {
-                      (shift.status === 'stopped' || shift.status === 'completed' || shift.stoppedAt) 
-                        ? formatTime(shift.stoppedAt) 
+                      (shift.status === 'stopped' || shift.status === 'completed' || shift.stoppedAt)
+                        ? formatTime(shift.stoppedAt)
                         : 'Not ended yet.'
                     }
                   </p>
@@ -461,63 +465,67 @@ const ShiftPhotos = () => {
                     />
                   </div>
                 )}
-                {(Array.isArray(selectedShift.visitedAreaImages) && selectedShift.visitedAreaImages.length >= 1) || selectedShift.visitedAreaImage ? (
-                  <div>
-                    <h4 className="font-medium mb-2">
-                      Visited Area Photo{(Array.isArray(selectedShift.visitedAreaImages) && selectedShift.visitedAreaImages.length > 1) ? 's' : ''}:
-                    </h4>
-                    {Array.isArray(selectedShift.visitedAreaImages) && selectedShift.visitedAreaImages.length >= 1 ? (
-                      <div className="space-y-2">
-                        <p className="text-sm text-gray-600">Total: {selectedShift.visitedAreaImages.length} image{selectedShift.visitedAreaImages.length > 1 ? 's' : ''}</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {selectedShift.visitedAreaImages.map((img, idx) => (
-                            <div key={`${selectedShift._id}-modal-visitimg-${idx}`} className="relative">
-                              <img
-                                src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
-                                alt={`Visited area ${idx + 1}`}
-                                className="w-full h-auto rounded-lg object-cover border border-gray-200"
-                                onError={(e) => {
-                                  if (!img.startsWith('data:')) {
-                                    e.target.src = img
-                                  }
-                                }}
-                              />
-                              <div className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-                                {idx + 1}
+                {(() => {
+                  const modalUniqueImages = Array.isArray(selectedShift.visitedAreaImages) ? [...new Set(selectedShift.visitedAreaImages)] : []
+                  const hasModalVisitImages = modalUniqueImages.length >= 1 || selectedShift.visitedAreaImage
+                  return hasModalVisitImages ? (
+                    <div>
+                      <h4 className="font-medium mb-2">
+                        Visited Area Photo{modalUniqueImages.length > 1 ? 's' : ''}:
+                      </h4>
+                      {modalUniqueImages.length >= 1 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-gray-600">Total: {modalUniqueImages.length} image{modalUniqueImages.length > 1 ? 's' : ''}</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {modalUniqueImages.map((img, idx) => (
+                              <div key={`${selectedShift._id}-modal-visitimg-${idx}`} className="relative">
+                                <img
+                                  src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
+                                  alt={`Visited area ${idx + 1}`}
+                                  className="w-full h-auto rounded-lg object-cover border border-gray-200"
+                                  onError={(e) => {
+                                    if (!img.startsWith('data:')) {
+                                      e.target.src = img
+                                    }
+                                  }}
+                                />
+                                <div className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                                  {idx + 1}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <img
-                        src={(selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])).startsWith('data:') ? (selectedShift.visitedAreaImage || selectedShift.visitedAreaImages[0]) : `data:image/jpeg;base64,${selectedShift.visitedAreaImage || selectedShift.visitedAreaImages[0]}`}
-                        alt="Visited area"
-                        className="w-full h-auto rounded-lg"
-                        onError={(e) => {
-                          const src = selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])
-                          if (src && !src.startsWith('data:')) {
-                            e.target.src = src
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                ) : null}
+                      ) : (
+                        <img
+                          src={(selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])).startsWith('data:') ? (selectedShift.visitedAreaImage || selectedShift.visitedAreaImages[0]) : `data:image/jpeg;base64,${selectedShift.visitedAreaImage || selectedShift.visitedAreaImages[0]}`}
+                          alt="Visited area"
+                          className="w-full h-auto rounded-lg"
+                          onError={(e) => {
+                            const src = selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])
+                            if (src && !src.startsWith('data:')) {
+                              e.target.src = src
+                            }
+                          }}
+                        />
+                      )}
+                    </div>
+                  ) : null
+                })()}
               </div>
               {selectedShift.endingMeterImage && (
                 <div className="mt-4">
                   <h4 className="font-medium mb-2">Ending Meter:</h4>
-                    <img
-                      src={selectedShift.endingMeterImage.startsWith('data:') ? selectedShift.endingMeterImage : `data:image/jpeg;base64,${selectedShift.endingMeterImage}`}
-                      alt="Ending meter"
-                      className="w-full h-auto rounded-lg"
-                      onError={(e) => {
-                        if (!selectedShift.endingMeterImage.startsWith('data:')) {
-                          e.target.src = selectedShift.endingMeterImage
-                        }
-                      }}
-                    />
+                  <img
+                    src={selectedShift.endingMeterImage.startsWith('data:') ? selectedShift.endingMeterImage : `data:image/jpeg;base64,${selectedShift.endingMeterImage}`}
+                    alt="Ending meter"
+                    className="w-full h-auto rounded-lg"
+                    onError={(e) => {
+                      if (!selectedShift.endingMeterImage.startsWith('data:')) {
+                        e.target.src = selectedShift.endingMeterImage
+                      }
+                    }}
+                  />
                 </div>
               )}
               <div className="mt-4 space-y-2">

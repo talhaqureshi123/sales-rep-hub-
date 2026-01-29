@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react'
-import { FaFlask, FaSearch, FaEdit, FaEye, FaCheckCircle, FaClock, FaBox, FaPlus } from 'react-icons/fa'
+import { FaFlask, FaSearch, FaEdit, FaEye, FaCheckCircle, FaClock, FaBox, FaPlus, FaListUl, FaTrash } from 'react-icons/fa'
 import { getMySamples, getSample, createSample, updateSample } from '../../services/salemanservices/sampleService'
 import { getMyCustomers } from '../../services/salemanservices/customerService'
 import { getMyProducts } from '../../services/salemanservices/productService'
 import Swal from 'sweetalert2'
+
+// Local date YYYY-MM-DD (avoids UTC shifting visit date)
+const getLocalDateString = (d = new Date()) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 const SampleTracker = () => {
   const [samples, setSamples] = useState([])
@@ -34,14 +42,13 @@ const SampleTracker = () => {
     customerName: '',
     customerEmail: '',
     customerPhone: '',
-    product: '',
-    productName: '',
-    productCode: '',
-    quantity: 1,
-    visitDate: new Date().toISOString().split('T')[0],
+    visitDate: getLocalDateString(),
     expectedDate: '',
     notes: '',
   })
+  const [selectedItems, setSelectedItems] = useState([])
+  const [addItemProduct, setAddItemProduct] = useState('')
+  const [addItemQty, setAddItemQty] = useState(1)
 
   useEffect(() => {
     loadSamples()
@@ -55,6 +62,28 @@ const SampleTracker = () => {
     }, 500)
     return () => clearTimeout(timeoutId)
   }, [searchTerm])
+
+  // Refresh when tab/window focus or periodically so delete on admin reflects everywhere
+  useEffect(() => {
+    const refresh = () => {
+      loadSamples()
+      loadCustomers()
+      loadProducts()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const onWindowFocus = () => refresh()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onWindowFocus)
+    const intervalMs = 90 * 1000
+    const intervalId = setInterval(refresh, intervalMs)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', onWindowFocus)
+      clearInterval(intervalId)
+    }
+  }, [])
 
   const loadCustomers = async () => {
     try {
@@ -86,7 +115,15 @@ const SampleTracker = () => {
         search: searchTerm || undefined,
       })
       if (result.success && result.data) {
-        setSamples(result.data)
+        const raw = Array.isArray(result.data) ? result.data : []
+        const seen = new Set()
+        const unique = raw.filter((s) => {
+          const id = (s._id || s.id)?.toString()
+          if (!id || seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
+        setSamples(unique)
       } else {
         console.error('Error loading samples:', result.message)
         setSamples([])
@@ -143,26 +180,42 @@ const SampleTracker = () => {
       }
     }
 
-    // Auto-fill product details when product is selected
-    if (name === 'product' && value) {
-      const selectedProduct = products.find(p => p._id === value)
-      if (selectedProduct) {
-        setCreateFormData(prev => ({
-          ...prev,
-          productName: selectedProduct.name || '',
-          productCode: selectedProduct.productCode || '',
-        }))
-      }
+  }
+
+  const addItemToSelection = () => {
+    if (!addItemProduct) return
+    const p = products.find(pr => pr._id === addItemProduct)
+    if (!p) return
+    const qty = Math.max(1, parseInt(addItemQty, 10) || 1)
+    if (selectedItems.some(item => item.productId === p._id)) {
+      Swal.fire({ icon: 'info', title: 'Already added', text: 'This product is already in the list.', confirmButtonColor: '#e9931c' })
+      return
     }
+    setSelectedItems(prev => [...prev, { productId: p._id, productName: p.name || '', productCode: p.productCode || '', quantity: qty }])
+    setAddItemProduct('')
+    setAddItemQty(1)
+  }
+
+  const removeItemFromSelection = (index) => {
+    setSelectedItems(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleCreateSample = async (e) => {
     e.preventDefault()
-    if (!createFormData.customerName || !createFormData.productName) {
+    if (!createFormData.customerName) {
       Swal.fire({
         icon: 'warning',
         title: 'Required Fields Missing',
-        text: 'Please fill in all required fields (Customer Name, Product Name)',
+        text: 'Please fill in Customer Name',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    if (selectedItems.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Add at least one item',
+        text: 'Add one product or multiple products using "Add Item", then create sample.',
         confirmButtonColor: '#e9931c',
       })
       return
@@ -170,12 +223,25 @@ const SampleTracker = () => {
 
     setLoading(true)
     try {
-      const result = await createSample(createFormData)
-      if (result.success) {
+      let created = 0
+      let failed = 0
+      for (const item of selectedItems) {
+        const payload = {
+          ...createFormData,
+          product: item.productId,
+          productName: item.productName,
+          productCode: item.productCode || '',
+          quantity: item.quantity,
+        }
+        const result = await createSample(payload)
+        if (result.success) created++
+        else failed++
+      }
+      if (created > 0) {
         Swal.fire({
           icon: 'success',
           title: 'Success!',
-          text: 'Sample created successfully!',
+          text: failed > 0 ? `${created} sample(s) created. ${failed} failed.` : `${created} sample(s) created successfully!`,
           confirmButtonColor: '#e9931c',
         })
         setShowCreateModal(false)
@@ -185,7 +251,7 @@ const SampleTracker = () => {
         Swal.fire({
           icon: 'error',
           title: 'Failed',
-          text: result.message || 'Error creating sample',
+          text: failed > 0 ? `Failed to create ${failed} sample(s).` : 'Error creating samples',
           confirmButtonColor: '#e9931c',
         })
       }
@@ -208,14 +274,13 @@ const SampleTracker = () => {
       customerName: '',
       customerEmail: '',
       customerPhone: '',
-      product: '',
-      productName: '',
-      productCode: '',
-      quantity: 1,
-      visitDate: new Date().toISOString().split('T')[0],
+      visitDate: getLocalDateString(),
       expectedDate: '',
       notes: '',
     })
+    setSelectedItems([])
+    setAddItemProduct('')
+    setAddItemQty(1)
   }
 
   const handleEditSample = async (sampleId) => {
@@ -712,55 +777,59 @@ const SampleTracker = () => {
                     placeholder="Enter customer phone"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Product</label>
-                  <select
-                    name="product"
-                    value={createFormData.product}
-                    onChange={handleCreateInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  >
-                    <option value="">Select Product (Optional)</option>
-                    {products.filter(p => p.isActive).map((product) => (
-                      <option key={product._id} value={product._id}>
-                        {product.name} ({product.productCode})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
-                  <input
-                    type="text"
-                    name="productName"
-                    value={createFormData.productName}
-                    onChange={handleCreateInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter product name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Code</label>
-                  <input
-                    type="text"
-                    name="productCode"
-                    value={createFormData.productCode}
-                    onChange={handleCreateInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter product code"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    value={createFormData.quantity}
-                    onChange={handleCreateInputChange}
-                    min="1"
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  />
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Add Item (one or more products) *</label>
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <select
+                      value={addItemProduct}
+                      onChange={(e) => setAddItemProduct(e.target.value)}
+                      className="flex-1 min-w-[180px] px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    >
+                      <option value="">Select Product</option>
+                      {products.filter(p => p.isActive !== false).map((product) => (
+                        <option key={product._id} value={product._id}>
+                          {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={addItemQty}
+                      onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      min="1"
+                      className="w-20 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      placeholder="Qty"
+                    />
+                    <button
+                      type="button"
+                      onClick={addItemToSelection}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] transition-colors"
+                      title="Add this product to the list"
+                    >
+                      <FaListUl className="w-4 h-4" />
+                      Add Item
+                    </button>
+                  </div>
+                  {selectedItems.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-medium text-gray-600">{selectedItems.length} item(s) selected</p>
+                      <ul className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                        {selectedItems.map((item, index) => (
+                          <li key={index} className="flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100">
+                            <span className="text-sm font-medium text-gray-800">{item.productName} {item.productCode ? `(${item.productCode})` : ''} × {item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeItemFromSelection(index)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              title="Remove"
+                            >
+                              <FaTrash className="w-4 h-4" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Visit Date (Given)</label>

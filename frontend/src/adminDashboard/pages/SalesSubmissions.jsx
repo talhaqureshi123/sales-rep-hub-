@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { 
-  FaCheckCircle, 
-  FaTimesCircle, 
+import {
+  FaCheckCircle,
+  FaTimesCircle,
   FaClock,
   FaFileInvoice,
   FaSpinner,
@@ -116,7 +116,7 @@ const SalesSubmissions = () => {
         const totalAmount = orders
           .filter(o => o.orderStatus === 'Confirmed')
           .reduce((sum, o) => sum + (o.grandTotal || 0), 0)
-        
+
         setStats({
           total: totalOrders,
           approved: confirmedOrders,
@@ -158,8 +158,8 @@ const SalesSubmissions = () => {
   }
 
   const handleSelectRow = (id) => {
-    setSelectedRows(prev => 
-      prev.includes(id) 
+    setSelectedRows(prev =>
+      prev.includes(id)
         ? prev.filter(rowId => rowId !== id)
         : [...prev, id]
     )
@@ -289,7 +289,7 @@ const SalesSubmissions = () => {
 
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null
-    return sortOrder === 'asc' 
+    return sortOrder === 'asc'
       ? <FaChevronUp className="w-3 h-3 ml-1" />
       : <FaChevronDown className="w-3 h-3 ml-1" />
   }
@@ -426,7 +426,7 @@ const SalesSubmissions = () => {
                       className="rounded border-gray-300 text-[#e9931c] focus:ring-[#e9931c]"
                     />
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('approvalStatus')}
                   >
@@ -435,7 +435,7 @@ const SalesSubmissions = () => {
                       <SortIcon field="approvalStatus" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('submissionNumber')}
                   >
@@ -444,7 +444,7 @@ const SalesSubmissions = () => {
                       <SortIcon field="submissionNumber" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('customerName')}
                   >
@@ -456,7 +456,7 @@ const SalesSubmissions = () => {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     SALESMAN
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('salesDate')}
                   >
@@ -465,7 +465,7 @@ const SalesSubmissions = () => {
                       <SortIcon field="salesDate" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('salesAmount')}
                   >
@@ -484,7 +484,7 @@ const SalesSubmissions = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {submissions.map((submission) => (
-                  <tr 
+                  <tr
                     key={submission._id}
                     className="hover:bg-gray-50 transition-colors"
                   >

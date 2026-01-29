@@ -49,6 +49,11 @@ const sampleSchema = new mongoose.Schema({
     enum: ['Pending', 'Received', 'Converted'],
     default: 'Pending',
   },
+  approvalStatus: {
+    type: String,
+    enum: ['Pending', 'Approved', 'Rejected'],
+    default: 'Approved', // Default Approved for backward compatibility (admin-created samples)
+  },
   visitTarget: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VisitTarget',

@@ -1,10 +1,10 @@
-import { 
+import {
   FaHome,
-  FaBox, 
-  FaUsers, 
-  FaUser, 
-  FaLink, 
-  FaBullseye, 
+  FaBox,
+  FaUsers,
+  FaUser,
+  FaLink,
+  FaBullseye,
   FaMapMarkerAlt,
   FaSignOutAlt,
   FaChartLine,
@@ -48,7 +48,7 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{backgroundColor: '#e9931c'}}>
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#e9931c' }}>
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -69,11 +69,10 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
             <button
               key={item.id}
               onClick={() => setActivePage(item.id)}
-              className={`w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 transition-all duration-200 rounded-md mb-2 group ${
-                isActive
+              className={`w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 transition-all duration-200 rounded-md mb-2 group ${isActive
                   ? 'bg-[#e9931c] text-white'
                   : 'text-gray-700 hover:bg-orange-50 hover:text-[#e9931c]'
-              }`}
+                }`}
               title={item.label}
             >
               <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-700 group-hover:text-[#e9931c]'}`} />
@@ -85,7 +84,7 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
 
       {/* Logout Button at Bottom */}
       <div className="p-4 border-t border-gray-200">
-        <button 
+        <button
           onClick={onLogout}
           className="w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 md:gap-3 text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200 group"
           title="Logout"

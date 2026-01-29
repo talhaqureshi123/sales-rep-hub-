@@ -29,7 +29,10 @@ export const getFollowUps = async (filters = {}) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
       },
+      cache: 'no-store',
     })
 
     const data = await response.json()

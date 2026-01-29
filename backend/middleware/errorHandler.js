@@ -1,34 +1,45 @@
-// Error handler middleware
+// Error handler middleware – always send valid JSON so frontend never gets "Unexpected end of JSON input"
 const errorHandler = (err, req, res, next) => {
-  let error = { ...err };
-  error.message = err.message;
+  let statusCode = 500;
+  let message = (err && err.message) ? String(err.message) : "Server Error";
 
   // Log error
   console.error(err);
 
   // Mongoose bad ObjectId
-  if (err.name === 'CastError') {
-    const message = 'Resource not found';
-    error = { message, statusCode: 404 };
+  if (err.name === "CastError") {
+    message = "Resource not found";
+    statusCode = 404;
   }
 
   // Mongoose duplicate key
   if (err.code === 11000) {
-    const message = 'Duplicate field value entered';
-    error = { message, statusCode: 400 };
+    message = "Duplicate field value entered";
+    statusCode = 400;
   }
 
   // Mongoose validation error
-  if (err.name === 'ValidationError') {
-    const message = Object.values(err.errors).map((val) => val.message).join(', ');
-    error = { message, statusCode: 400 };
+  if (err.name === "ValidationError" && err.errors) {
+    try {
+      message = Object.values(err.errors)
+        .map((val) => (val && val.message) ? String(val.message) : "")
+        .filter(Boolean)
+        .join(", ") || "Validation failed";
+    } catch (e) {
+      message = "Validation failed";
+    }
+    statusCode = 400;
   }
 
-  res.status(error.statusCode || 500).json({
+  const payload = {
     success: false,
-    message: error.message || 'Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-  });
+    message,
+  };
+  if (process.env.NODE_ENV === "development" && err && err.stack) {
+    payload.stack = String(err.stack);
+  }
+
+  res.status(statusCode).json(payload);
 };
 
 module.exports = errorHandler;

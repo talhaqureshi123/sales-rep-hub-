@@ -4,7 +4,6 @@ import { getMySalesTargets } from '../../services/salemanservices/salesTargetSer
 import { 
   FaCalendarAlt, 
   FaChartLine, 
-  FaBell, 
   FaMapMarkerAlt,
   FaFileInvoice,
   FaCheckCircle,
@@ -55,6 +54,27 @@ const Dashboard = () => {
   useEffect(() => {
     loadDashboardData()
     loadSalesTargets()
+  }, [])
+
+  // Refresh dashboard when user comes back to tab/window or periodically so visit delete on admin reflects (pending, today schedule)
+  useEffect(() => {
+    const refresh = () => {
+      loadDashboardData()
+      loadSalesTargets()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const onWindowFocus = () => refresh()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onWindowFocus)
+    const intervalMs = 90 * 1000
+    const intervalId = setInterval(refresh, intervalMs)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', onWindowFocus)
+      clearInterval(intervalId)
+    }
   }, [])
 
   const loadDashboardData = async () => {
@@ -136,7 +156,7 @@ const Dashboard = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-5 border border-blue-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs sm:text-sm text-gray-600">Visits Today</p>
@@ -153,24 +173,6 @@ const Dashboard = () => {
           </div>
           <p className="text-2xl sm:text-3xl font-bold text-green-700">{kpis.visitsThisWeek}</p>
           <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Weekly total</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-5 border border-orange-200 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-gray-600">Hot Leads</p>
-            <FaChartLine className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-orange-700">{kpis.hotLeads}</p>
-          <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Active customers</p>
-        </div>
-
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 sm:p-5 border border-red-200 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-gray-600">Follow-ups Due</p>
-            <FaBell className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold text-red-700">{kpis.followUpsDue}</p>
-          <p className="text-[10px] sm:text-xs text-gray-600 mt-1">Pending visits</p>
         </div>
       </div>
 

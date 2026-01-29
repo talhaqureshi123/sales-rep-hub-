@@ -29,10 +29,22 @@ export const getVisitTargets = async (params = {}) => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
       },
+      cache: 'no-store',
     })
 
-    const data = await response.json()
+    const text = await response.text()
+    let data
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch (_) {
+      return { success: false, message: response.ok ? 'Invalid response from server.' : (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
+    }
+    if (!response.ok) {
+      return { success: false, message: data.message || (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
+    }
     return data
   } catch (error) {
     console.error('Error fetching visit targets:', error)
@@ -56,7 +68,14 @@ export const getVisitTarget = async (id) => {
       },
     })
 
-    const data = await response.json()
+    const text = await response.text()
+    let data
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch (_) {
+      return { success: false, message: response.ok ? 'Invalid response.' : (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
+    }
+    if (!response.ok) return { success: false, message: data.message || `Error ${response.status}` }
     return data
   } catch (error) {
     console.error('Error fetching visit target:', error)
@@ -81,7 +100,14 @@ export const updateVisitTargetStatus = async (id, statusData) => {
       body: JSON.stringify(statusData),
     })
 
-    const data = await response.json()
+    const text = await response.text()
+    let data
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch (_) {
+      return { success: false, message: response.ok ? 'Invalid response.' : (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
+    }
+    if (!response.ok) return { success: false, message: data.message || (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
     return data
   } catch (error) {
     console.error('Error updating visit target:', error)
@@ -155,7 +181,14 @@ export const getVisitRequests = async () => {
       },
     })
 
-    const data = await response.json()
+    const text = await response.text()
+    let data
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch (_) {
+      return { success: false, message: response.ok ? 'Invalid response.' : (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
+    }
+    if (!response.ok) return { success: false, message: data.message || (response.status === 500 ? 'Server error. Please try again.' : `Error ${response.status}`) }
     return data
   } catch (error) {
     console.error('Error fetching visit requests:', error)

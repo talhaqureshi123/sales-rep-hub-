@@ -57,8 +57,12 @@ const customerSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
-  // REMOVED: assignedSalesman - Customers and Salesmen are separate entities
-  // Salesmen are assigned to Tasks/FollowUps, not directly to Customers
+  // Simple allotment only (Customer Allotment page) – not a task; just links customer to salesman
+  allottedSalesman: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
   status: {
     type: String,
     enum: ['Active', 'Inactive', 'Not Visited', 'Visited', 'Follow-up Needed', 'Qualified Lead', 'Not Interested'],
@@ -119,9 +123,9 @@ customerSchema.pre('save', async function () {
 });
 
 // Index for efficient queries
-// REMOVED: assignedSalesman index (field removed)
 customerSchema.index({ createdBy: 1 });
 customerSchema.index({ status: 1 });
+customerSchema.index({ allottedSalesman: 1 });
 
 module.exports = mongoose.model('Customer', customerSchema);
 

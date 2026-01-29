@@ -57,11 +57,11 @@ const Achievements = () => {
     }
   }
 
-  const progressPercentage = stats.totalTargets > 0 
-    ? (stats.completedTargets / stats.totalTargets) * 100 
+  const progressPercentage = stats.totalTargets > 0
+    ? (stats.completedTargets / stats.totalTargets) * 100
     : 0
-  const salesProgress = stats.monthlyTarget > 0 
-    ? (stats.monthlySales / stats.monthlyTarget) * 100 
+  const salesProgress = stats.monthlyTarget > 0
+    ? (stats.monthlySales / stats.monthlyTarget) * 100
     : 0
 
   if (loading) {
@@ -77,90 +77,90 @@ const Achievements = () => {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-        <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-2 sm:mb-3">Achievements & Conversion Tracking</h2>
+      <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-2 sm:mb-3">Achievements & Conversion Tracking</h2>
 
-        {/* GRPA Card */}
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 sm:p-4 border border-purple-200 mb-3 sm:mb-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex-1">
-              <h3 className="text-sm sm:text-base font-bold text-purple-800 mb-0.5">GRPA (Group Real Performance Award)</h3>
-              <p className="text-xs text-purple-600">Your performance ranking in the group</p>
-            </div>
-            <div className="text-left sm:text-right w-full sm:w-auto">
-              <div className="text-xl sm:text-2xl font-bold text-purple-700">
-                #{grpa.rank || 'N/A'}
-              </div>
-              <p className="text-xs text-purple-600 mt-0.5">
-                Rank out of {grpa.totalSalesmen || 0}
-              </p>
-              <div className="mt-1.5">
-                <div className="bg-purple-200 rounded-full h-1.5 w-full sm:w-32">
-                  <div
-                    className="bg-purple-600 h-1.5 rounded-full"
-                    style={{ width: `${Math.min(grpa.percentage || 0, 100)}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-purple-600 mt-0.5">{grpa.percentage || 0}% Performance</p>
-              </div>
-            </div>
+      {/* GRPA Card */}
+      <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 sm:p-4 border border-purple-200 mb-3 sm:mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex-1">
+            <h3 className="text-sm sm:text-base font-bold text-purple-800 mb-0.5">GRPA (Group Real Performance Award)</h3>
+            <p className="text-xs text-purple-600">Your performance ranking in the group</p>
           </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-3 sm:mb-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
-            <p className="text-xs sm:text-sm text-gray-600 mb-1">Monthly Sales</p>
-            <p className="text-xl sm:text-2xl font-bold text-blue-700">£{Number(stats.monthlySales || 0).toFixed(2)}</p>
-            <div className="mt-2">
-              <div className="w-full bg-blue-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full"
-                  style={{ width: `${Math.min(salesProgress, 100)}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-gray-600 mt-1">
-                {salesProgress.toFixed(1)}% of £{Number(stats.monthlyTarget || 0).toFixed(2)} target
-              </p>
+          <div className="text-left sm:text-right w-full sm:w-auto">
+            <div className="text-xl sm:text-2xl font-bold text-purple-700">
+              #{grpa.rank || 'N/A'}
             </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-4 border border-green-200">
-            <p className="text-xs sm:text-sm text-gray-600 mb-1">Conversion Rate</p>
-            <p className="text-xl sm:text-2xl font-bold text-green-700">{stats.conversionRate}%</p>
-            <p className="text-[10px] sm:text-xs text-gray-600 mt-2">Average conversion rate</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-4 border border-orange-200">
-            <p className="text-xs sm:text-sm text-gray-600 mb-1">Visit Targets Completed</p>
-            <p className="text-xl sm:text-2xl font-bold text-orange-700">
-              {stats.completedTargets}/{stats.totalTargets}
+            <p className="text-xs text-purple-600 mt-0.5">
+              Rank out of {grpa.totalSalesmen || 0}
             </p>
-            <div className="mt-2">
-              <div className="w-full bg-orange-200 rounded-full h-2">
+            <div className="mt-1.5">
+              <div className="bg-purple-200 rounded-full h-1.5 w-full sm:w-32">
                 <div
-                  className="bg-orange-600 h-2 rounded-full"
-                  style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+                  className="bg-purple-600 h-1.5 rounded-full"
+                  style={{ width: `${Math.min(grpa.percentage || 0, 100)}%` }}
                 ></div>
               </div>
-              <p className="text-xs text-gray-600 mt-1">{progressPercentage.toFixed(1)}% completed</p>
+              <p className="text-xs text-purple-600 mt-0.5">{grpa.percentage || 0}% Performance</p>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Achievements List */}
-        <div>
-          <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-2 sm:mb-3">Recent Achievements</h3>
-          {achievements.length === 0 ? (
-            <div className="bg-white rounded-lg p-8 border border-gray-200 text-center">
-              <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-              <p className="text-gray-600 font-medium">No achievements yet</p>
-              <p className="text-sm text-gray-500 mt-2">Complete visit targets and get quotations approved to see achievements here</p>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-3 sm:mb-4">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
+          <p className="text-xs sm:text-sm text-gray-600 mb-1">Monthly Sales</p>
+          <p className="text-xl sm:text-2xl font-bold text-blue-700">£{Number(stats.monthlySales || 0).toFixed(2)}</p>
+          <div className="mt-2">
+            <div className="w-full bg-blue-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full"
+                style={{ width: `${Math.min(salesProgress, 100)}%` }}
+              ></div>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {achievements.map((achievement) => (
+            <p className="text-xs text-gray-600 mt-1">
+              {salesProgress.toFixed(1)}% of £{Number(stats.monthlyTarget || 0).toFixed(2)} target
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-4 border border-green-200">
+          <p className="text-xs sm:text-sm text-gray-600 mb-1">Conversion Rate</p>
+          <p className="text-xl sm:text-2xl font-bold text-green-700">{stats.conversionRate}%</p>
+          <p className="text-[10px] sm:text-xs text-gray-600 mt-2">Average conversion rate</p>
+        </div>
+
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 sm:p-4 border border-orange-200">
+          <p className="text-xs sm:text-sm text-gray-600 mb-1">Visit Targets Completed</p>
+          <p className="text-xl sm:text-2xl font-bold text-orange-700">
+            {stats.completedTargets}/{stats.totalTargets}
+          </p>
+          <div className="mt-2">
+            <div className="w-full bg-orange-200 rounded-full h-2">
+              <div
+                className="bg-orange-600 h-2 rounded-full"
+                style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-gray-600 mt-1">{progressPercentage.toFixed(1)}% completed</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Achievements List */}
+      <div>
+        <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-2 sm:mb-3">Recent Achievements</h3>
+        {achievements.length === 0 ? (
+          <div className="bg-white rounded-lg p-8 border border-gray-200 text-center">
+            <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+            </svg>
+            <p className="text-gray-600 font-medium">No achievements yet</p>
+            <p className="text-sm text-gray-500 mt-2">Complete visit targets and get quotations approved to see achievements here</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {achievements.map((achievement) => (
               <div
                 key={achievement.id}
                 className="bg-white rounded-lg p-3 border border-gray-200 border-l-4"
@@ -181,24 +181,24 @@ const Achievements = () => {
                 </div>
               </div>
             ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        {/* Performance Chart Placeholder */}
-        <div className="mt-3 sm:mt-4 bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
-          <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-2 sm:mb-3">Performance Chart</h3>
-          <div className="h-48 bg-white rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-            <div className="text-center">
-              <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <p className="text-sm text-gray-600">Conversion & Sales Chart</p>
-              <p className="text-xs text-gray-500">Visual representation of performance</p>
-            </div>
+      {/* Performance Chart Placeholder */}
+      <div className="mt-3 sm:mt-4 bg-white rounded-lg p-3 sm:p-4 border border-gray-200">
+        <h3 className="text-sm sm:text-base font-semibold text-gray-700 mb-2 sm:mb-3">Performance Chart</h3>
+        <div className="h-48 bg-white rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+          <div className="text-center">
+            <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <p className="text-sm text-gray-600">Conversion & Sales Chart</p>
+            <p className="text-xs text-gray-500">Visual representation of performance</p>
           </div>
         </div>
       </div>
+    </div>
   )
 }
 

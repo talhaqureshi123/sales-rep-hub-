@@ -65,6 +65,24 @@ const AdminDashboardPage = () => {
     loadDashboardData()
   }, [])
 
+  // Refresh dashboard when tab/window focus or periodically so visit/task delete reflects (pending count sahi ho)
+  useEffect(() => {
+    const refresh = () => loadDashboardData()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const onWindowFocus = () => refresh()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onWindowFocus)
+    const intervalMs = 90 * 1000
+    const intervalId = setInterval(refresh, intervalMs)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', onWindowFocus)
+      clearInterval(intervalId)
+    }
+  }, [])
+
   const loadDashboardData = async () => {
     try {
       setLoading(true)
@@ -314,7 +332,7 @@ const AdminDashboardPage = () => {
 
         <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-5 border border-red-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-gray-600">Pending Visits</p>
+            <p className="text-sm text-gray-600">Pending Visit Targets</p>
             <FaBell className="w-5 h-5 text-red-600" />
           </div>
           <p className="text-3xl font-bold text-red-700">{kpis.pendingVisits}</p>

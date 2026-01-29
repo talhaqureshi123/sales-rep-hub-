@@ -6,6 +6,7 @@ const {
   createSample,
   updateSample,
   deleteSample,
+  approveSample,
   getSampleStats,
 } = require('../controllers/sampleController');
 const { protect, authorize } = require('../../middleware/auth');
@@ -17,5 +18,6 @@ router.use(authorize('admin'));
 router.get('/stats', getSampleStats);
 router.route('/').get(getSamples).post(createSample);
 router.route('/:id').get(getSample).put(updateSample).delete(deleteSample);
+router.put('/:id/approve', approveSample);
 
 module.exports = router;

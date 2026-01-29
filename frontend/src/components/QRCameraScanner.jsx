@@ -9,9 +9,21 @@ const QRCameraScanner = ({ onScanSuccess, onClose }) => {
   const html5QrCodeRef = useRef(null)
 
   useEffect(() => {
-    // Get available cameras with better error handling
     const initCamera = async () => {
       try {
+        // Request camera permission first (required on many browsers before getCameras works)
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+            stream.getTracks().forEach((track) => track.stop())
+          } catch (permErr) {
+            console.warn('getUserMedia permission:', permErr)
+            if (permErr.name === 'NotAllowedError' || permErr.name === 'PermissionDeniedError') {
+              setError('Camera permission denied. Please allow camera access in browser (lock icon in address bar) and refresh.')
+              return
+            }
+          }
+        }
         const devices = await Html5Qrcode.getCameras()
         console.log('Available cameras:', devices)
         
@@ -322,8 +334,11 @@ const QRCameraScanner = ({ onScanSuccess, onClose }) => {
               <button
                 onClick={async () => {
                   setError('')
-                  // Try to get cameras again
                   try {
+                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+                      stream.getTracks().forEach((track) => track.stop())
+                    }
                     const devices = await Html5Qrcode.getCameras()
                     if (devices && devices.length > 0) {
                       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
@@ -361,28 +376,26 @@ const QRCameraScanner = ({ onScanSuccess, onClose }) => {
             </div>
           )}
 
-          <div 
-            id="qr-reader" 
-            className="w-full rounded-lg overflow-hidden bg-gray-100 min-h-[300px] flex items-center justify-center"
-            style={{ minHeight: '300px', position: 'relative', width: '100%' }}
-          >
-            {!isScanning && !error && (
-              <div className="text-center text-gray-400">
-                <svg className="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <p className="text-sm">Camera preview will appear here</p>
-              </div>
-            )}
-            {isScanning && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                <div className="text-white text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mx-auto mb-2"></div>
-                  <p className="text-sm">Scanning...</p>
+          {/* Scanner container: #qr-reader must be EMPTY so html5-qrcode can inject video */}
+          <div className="w-full rounded-lg overflow-hidden bg-gray-100 relative" style={{ minHeight: '300px' }}>
+            {!isScanning && !error && !cameraId && (
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                <div className="text-center">
+                  <svg className="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <p className="text-sm">Loading camera...</p>
                 </div>
               </div>
             )}
+            {isScanning && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 text-white text-sm">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                <span>Scanning...</span>
+              </div>
+            )}
+            <div id="qr-reader" className="w-full" style={{ minHeight: '300px' }} />
           </div>
 
           {!isScanning && error && (

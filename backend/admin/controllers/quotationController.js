@@ -1,5 +1,6 @@
 const Quotation = require('../../database/models/Quotation');
 const User = require('../../database/models/User');
+const { sendQuotationEmail } = require('../../utils/emailService');
 
 // @desc    Get all quotations (admin view)
 // @route   GET /api/admin/quotations
@@ -172,6 +173,7 @@ const createQuotation = async (req, res) => {
       total,
       notes,
       status: status || 'Draft',
+      createdBy: 'admin',
     });
 
     const populatedQuotation = await Quotation.findById(quotation._id)
@@ -196,7 +198,7 @@ const createQuotation = async (req, res) => {
 // @access  Private/Admin
 const updateQuotation = async (req, res) => {
   try {
-    const { customerName, customerEmail, customerPhone, customerAddress, validUntil, items, tax, discount, notes, status } = req.body;
+    const { customerName, customerEmail, customerPhone, customerAddress, validUntil, items, tax, discount, notes, status, salesman } = req.body;
 
     const quotation = await Quotation.findById(req.params.id);
     if (!quotation) {
@@ -214,6 +216,7 @@ const updateQuotation = async (req, res) => {
     if (validUntil) quotation.validUntil = new Date(validUntil);
     if (notes !== undefined) quotation.notes = notes;
     if (status) quotation.status = status;
+    if (salesman) quotation.salesman = salesman;
 
     // Update items if provided
     if (items && Array.isArray(items) && items.length > 0) {
@@ -311,6 +314,69 @@ const deleteQuotation = async (req, res) => {
   }
 };
 
+// @desc    Send quotation by email to customer
+// @route   POST /api/admin/quotations/:id/send-email
+// @access  Private/Admin
+const sendQuotationByEmail = async (req, res) => {
+  try {
+    const quotation = await Quotation.findById(req.params.id)
+      .populate('salesman', 'name email');
+
+    if (!quotation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Quotation not found',
+      });
+    }
+
+    const toEmail = (quotation.customerEmail || '').trim();
+    if (!toEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer email is missing. Add customer email to send quotation.',
+      });
+    }
+
+    const items = (quotation.items || []).map((item) => ({
+      productName: item.productName || item.productCode || '-',
+      productCode: item.productCode,
+      quantity: item.quantity || 0,
+      price: item.price || 0,
+      total: item.total || 0,
+    }));
+
+    const result = await sendQuotationEmail(toEmail, {
+      quotationNumber: quotation.quotationNumber || '',
+      customerName: quotation.customerName || '',
+      total: quotation.total || 0,
+      validUntil: quotation.validUntil || '',
+      items,
+      notes: quotation.notes || '',
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.message || result.error || 'Failed to send email',
+      });
+    }
+
+    quotation.status = 'Sent';
+    await quotation.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Quotation sent to customer email successfully',
+      data: { messageId: result.messageId },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error sending quotation email',
+    });
+  }
+};
+
 // @desc    Get quotations statistics
 // @route   GET /api/admin/quotations/stats
 // @access  Private/Admin
@@ -357,4 +423,5 @@ module.exports = {
   updateQuotation,
   deleteQuotation,
   getQuotationStats,
+  sendQuotationByEmail,
 };

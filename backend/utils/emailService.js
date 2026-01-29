@@ -528,9 +528,85 @@ Sales Rep Hub
   }
 };
 
+// Send quotation to customer/salesman by email
+const sendQuotationEmail = async (toEmail, quotationDetails) => {
+  try {
+    if (!config.EMAIL_USER || !config.EMAIL_PASS) {
+      console.warn('Email not configured. Skipping quotation email.');
+      return { success: false, message: 'Email not configured. Set EMAIL_USER and EMAIL_PASS in .env' };
+    }
+    const transporter = createTransporter();
+    const {
+      quotationNumber = '',
+      customerName = '',
+      total = 0,
+      validUntil = '',
+      items = [],
+      notes = '',
+    } = quotationDetails;
+
+    const validUntilStr = validUntil
+      ? new Date(validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'N/A';
+    const itemsRows = (Array.isArray(items) ? items : []).map(
+      (item) => `
+        <tr>
+          <td style="padding:8px;border:1px solid #ddd">${item.productName || item.productCode || '-'}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${item.quantity || 0}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.price || 0).toFixed(2)}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.total || 0).toFixed(2)}</td>
+        </tr>`
+    ).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"><style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
+        .header { background: #e9931c; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { padding: 24px; background: #f9f9f9; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background: #f0f0f0; }
+        .total { font-size: 18px; font-weight: bold; color: #e9931c; margin-top: 16px; }
+        .footer { text-align: center; margin-top: 24px; color: #666; font-size: 12px; }
+      </style></head>
+      <body>
+        <div class="header"><h1>Sales Rep Hub – Quotation</h1></div>
+        <div class="content">
+          <p>Dear ${customerName || 'Customer'},</p>
+          <p>Please find your quotation below.</p>
+          <p><strong>Quotation #:</strong> ${quotationNumber}</p>
+          <p><strong>Valid until:</strong> ${validUntilStr}</p>
+          <table>
+            <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+            <tbody>${itemsRows}</tbody>
+          </table>
+          <p class="total">Total: £${Number(total).toFixed(2)}</p>
+          ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+        </div>
+        <div class="footer">This is an automated email from Sales Rep Hub.</div>
+      </body>
+      </html>`;
+
+    const mailOptions = {
+      from: `"Sales Rep Hub" <${config.EMAIL_USER}>`,
+      to: toEmail,
+      subject: `Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
+      html,
+    };
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending quotation email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendPasswordSetupEmail,
   sendOTPEmail,
   sendOrderApprovalEmail,
+  sendQuotationEmail,
 };
 

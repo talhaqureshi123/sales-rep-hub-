@@ -135,6 +135,30 @@ export const createQuotation = async (quotationData) => {
   }
 }
 
+// Send quotation by email to customer
+export const sendQuotationEmail = async (quotationId) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${quotationId}/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error sending quotation email:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Get quotation statistics
 export const getQuotationStats = async () => {
   try {

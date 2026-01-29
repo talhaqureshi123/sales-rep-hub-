@@ -111,8 +111,14 @@ const getCustomers = async (req, res) => {
       ];
     }
 
+    // Filter by allotted salesman (Customer Allotment – simple allotment, not task)
+    if (salesman) {
+      filter.allottedSalesman = salesman;
+    }
+
     const customers = await Customer.find(filter)
       .populate('createdBy', 'name email role')
+      .populate('allottedSalesman', 'name email')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -156,8 +162,8 @@ const getCustomers = async (req, res) => {
 const getCustomer = async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id)
-      // REMOVED: .populate('assignedSalesman', 'name email customerLimit') - field removed
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('allottedSalesman', 'name email');
 
     if (!customer) {
       return res.status(404).json({
@@ -197,7 +203,6 @@ const createCustomer = async (req, res) => {
       company,
       orderPotential,
       monthlySpend,
-      assignedSalesman,
       status,
       notes,
       competitorInfo,
@@ -290,11 +295,11 @@ const updateCustomer = async (req, res) => {
       company,
       orderPotential,
       monthlySpend,
-      // REMOVED: assignedSalesman - Customers and Salesmen are separate
       status,
       notes,
       competitorInfo,
       view,
+      allottedSalesman,
     } = req.body;
 
     let customer = await Customer.findById(req.params.id);
@@ -325,16 +330,17 @@ const updateCustomer = async (req, res) => {
     if (company !== undefined) customer.company = company;
     if (orderPotential !== undefined) customer.orderPotential = orderPotential;
     if (monthlySpend !== undefined) customer.monthlySpend = monthlySpend;
-    // REMOVED: assignedSalesman assignment - field removed
     if (status) customer.status = status;
     if (notes !== undefined) customer.notes = notes;
     if (competitorInfo !== undefined) customer.competitorInfo = competitorInfo;
     if (view !== undefined) customer.view = view;
+    if (allottedSalesman !== undefined) customer.allottedSalesman = allottedSalesman || null;
 
     await customer.save();
 
     const populatedCustomer = await Customer.findById(customer._id)
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('allottedSalesman', 'name email');
 
     res.status(200).json({
       success: true,
@@ -505,8 +511,8 @@ const getCustomersBySalesman = async (req, res) => {
     
     // Get unique customer IDs from tasks
     const tasks = await FollowUp.find({ salesman: salesmanId }).distinct('customer');
-    // Get unique customer IDs from visits
-    const visits = await VisitTarget.find({ salesman: salesmanId }).distinct('customer');
+    // Get unique customer IDs from visits (VisitTarget uses customerId)
+    const visits = await VisitTarget.find({ salesman: salesmanId }).distinct('customerId');
     
     // Combine and get unique customer IDs
     const customerIds = [...new Set([...tasks, ...visits].filter(id => id))];

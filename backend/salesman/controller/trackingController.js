@@ -1,30 +1,32 @@
-const Tracking = require('../../database/models/Tracking');
+const Tracking = require("../../database/models/Tracking");
 
 // @desc    Start tracking session
 // @route   POST /api/salesman/tracking/start
 // @access  Private/Salesman
 const startTracking = async (req, res) => {
   try {
-    const { startingKilometers, speedometerImage, latitude, longitude } = req.body;
+    const { startingKilometers, speedometerImage, latitude, longitude } =
+      req.body;
 
     // Validate required fields
     if (!startingKilometers || !speedometerImage) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide starting kilometers and speedometer image',
+        message: "Please provide starting kilometers and speedometer image",
       });
     }
 
     // Check if there's an active tracking session
     const activeTracking = await Tracking.findOne({
       salesman: req.user._id,
-      status: 'active',
+      status: "active",
     });
 
     if (activeTracking) {
       return res.status(400).json({
         success: false,
-        message: 'You already have an active tracking session. Please stop it first.',
+        message:
+          "You already have an active tracking session. Please stop it first.",
       });
     }
 
@@ -37,19 +39,19 @@ const startTracking = async (req, res) => {
         latitude: latitude || null,
         longitude: longitude || null,
       },
-      status: 'active',
+      status: "active",
     });
 
     res.status(201).json({
       success: true,
-      message: 'Tracking started successfully',
+      message: "Tracking started successfully",
       data: tracking,
     });
   } catch (error) {
-    console.error('Error starting tracking:', error);
+    console.error("Error starting tracking:", error);
     res.status(500).json({
       success: false,
-      message: 'Error starting tracking session',
+      message: "Error starting tracking session",
       error: error.message,
     });
   }
@@ -61,7 +63,13 @@ const startTracking = async (req, res) => {
 const stopTracking = async (req, res) => {
   try {
     const { id } = req.params;
-    const { endingKilometers, endingMeterImage, visitedAreaImage, latitude, longitude } = req.body;
+    const {
+      endingKilometers,
+      endingMeterImage,
+      visitedAreaImage,
+      latitude,
+      longitude,
+    } = req.body;
 
     const tracking = await Tracking.findOne({
       _id: id,
@@ -71,29 +79,26 @@ const stopTracking = async (req, res) => {
     if (!tracking) {
       return res.status(404).json({
         success: false,
-        message: 'Tracking session not found',
+        message: "Tracking session not found",
       });
     }
 
-    if (tracking.status !== 'active') {
+    if (tracking.status !== "active") {
       return res.status(400).json({
         success: false,
-        message: 'Tracking session is not active',
+        message: "Tracking session is not active",
       });
     }
 
-    // Validate required fields (end meter photo is mandatory for shift photos)
-    if (endingKilometers === undefined || endingKilometers === null || endingKilometers === '') {
+    // Validate required fields - ending km required; image optional (manual entry allowed)
+    if (
+      endingKilometers === undefined ||
+      endingKilometers === null ||
+      endingKilometers === ""
+    ) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide ending kilometers',
-      });
-    }
-
-    if (!endingMeterImage) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide ending meter image',
+        message: "Please provide ending kilometers",
       });
     }
 
@@ -102,7 +107,7 @@ const stopTracking = async (req, res) => {
     const totalDistance = endingKmNum - tracking.startingKilometers;
 
     tracking.endingKilometers = endingKmNum;
-    tracking.endingMeterImage = endingMeterImage;
+    tracking.endingMeterImage = endingMeterImage || undefined;
     if (visitedAreaImage !== undefined) {
       tracking.visitedAreaImage = visitedAreaImage;
     }
@@ -111,7 +116,7 @@ const stopTracking = async (req, res) => {
       longitude: longitude || null,
     };
 
-    tracking.status = 'stopped';
+    tracking.status = "stopped";
     tracking.stoppedAt = Date.now();
     tracking.totalDistance = totalDistance > 0 ? totalDistance : 0;
 
@@ -119,14 +124,14 @@ const stopTracking = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Tracking stopped successfully',
+      message: "Tracking stopped successfully",
       data: tracking,
     });
   } catch (error) {
-    console.error('Error stopping tracking:', error);
+    console.error("Error stopping tracking:", error);
     res.status(500).json({
       success: false,
-      message: 'Error stopping tracking session',
+      message: "Error stopping tracking session",
       error: error.message,
     });
   }
@@ -139,13 +144,14 @@ const getActiveTracking = async (req, res) => {
   try {
     const tracking = await Tracking.findOne({
       salesman: req.user._id,
-      status: 'active',
-    }).populate('salesman', 'name email');
+      status: "active",
+    }).populate("salesman", "name email");
 
     if (!tracking) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active tracking session found',
+      return res.status(200).json({
+        success: true,
+        data: null,
+        message: "No active tracking session",
       });
     }
 
@@ -154,10 +160,10 @@ const getActiveTracking = async (req, res) => {
       data: tracking,
     });
   } catch (error) {
-    console.error('Error getting active tracking:', error);
+    console.error("Error getting active tracking:", error);
     res.status(500).json({
       success: false,
-      message: 'Error getting active tracking session',
+      message: "Error getting active tracking session",
       error: error.message,
     });
   }
@@ -172,7 +178,7 @@ const getAllTracking = async (req, res) => {
       salesman: req.user._id,
     })
       .sort({ createdAt: -1 })
-      .populate('salesman', 'name email');
+      .populate("salesman", "name email");
 
     res.status(200).json({
       success: true,
@@ -180,10 +186,10 @@ const getAllTracking = async (req, res) => {
       data: trackingSessions,
     });
   } catch (error) {
-    console.error('Error getting tracking sessions:', error);
+    console.error("Error getting tracking sessions:", error);
     res.status(500).json({
       success: false,
-      message: 'Error getting tracking sessions',
+      message: "Error getting tracking sessions",
       error: error.message,
     });
   }
@@ -195,4 +201,3 @@ module.exports = {
   getActiveTracking,
   getAllTracking,
 };
-

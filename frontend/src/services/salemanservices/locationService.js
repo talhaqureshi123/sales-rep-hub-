@@ -102,12 +102,12 @@ export const isWithinRadius = (userLat, userLon, targetLat, targetLon, radius) =
   return distance <= radius
 }
 
-// Format distance for display
+// Format distance for display (1 decimal for km so 11.5km style)
 export const formatDistance = (distanceInMeters) => {
   if (distanceInMeters < 1000) {
     return `${Math.round(distanceInMeters)}m`
   } else {
-    return `${(distanceInMeters / 1000).toFixed(2)}km`
+    return `${(distanceInMeters / 1000).toFixed(1)}km`
   }
 }
 

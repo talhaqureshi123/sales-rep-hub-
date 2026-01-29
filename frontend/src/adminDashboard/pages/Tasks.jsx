@@ -36,11 +36,20 @@ import { getUsers } from '../../services/adminservices/userService'
 import { getCustomers, getCustomer } from '../../services/adminservices/customerService'
 import { getQuotations, getQuotation } from '../../services/adminservices/quotationService'
 import { importHubSpotTasksToDb } from '../../services/adminservices/hubspotService'
-import { createVisitTarget, getVisitTargets, updateVisitTarget } from '../../services/adminservices/visitTargetService'
+import { getVisitTargets, getVisitTarget, createVisitTarget, updateVisitTarget, deleteVisitTarget } from '../../services/adminservices/visitTargetService'
 import { getSalesTargets } from '../../services/adminservices/salesTargetService'
 import { getSamples, createSample } from '../../services/adminservices/sampleService'
+import { getProducts } from '../../services/adminservices/productService'
 import appTheme from '../../apptheme/apptheme'
 import Swal from 'sweetalert2'
+
+// Local date YYYY-MM-DD (avoids UTC shifting)
+const getLocalDateString = (d = new Date()) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 const TABS = [
   { id: 'All', label: 'All Tasks' },
@@ -54,9 +63,17 @@ const TABS = [
   { id: 'Completed', label: 'Completed' },
 ]
 
-// Task types - Visit Target, Follow-up, Sample Track
+// Task types - Visit Target, Follow-up, Sample Track (linked to Sample Tracker)
 const TASK_TYPES = ['Visit Target', 'Follow-up', 'Sample Track']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
+
+// Map backend task type to display label. Only show "Visit Target" for actual visit target tasks; follow-ups with type Visit show as "Visit".
+const getTaskTypeLabel = (type, isVisitTarget = false) => {
+  if (!type) return '—'
+  const t = String(type).trim()
+  if (t === 'Visit' || t.toLowerCase() === 'visit') return isVisitTarget ? 'Visit Target' : 'Visit'
+  return t
+}
 
 const Tasks = () => {
   const [tasks, setTasks] = useState([])
@@ -93,7 +110,8 @@ const Tasks = () => {
     priority: [],
     salesman: [],
     dueDateRange: null,
-    timeRange: null
+    timeRange: null,
+    myCreationOnly: false
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
@@ -104,7 +122,6 @@ const Tasks = () => {
   const [relatedTasks, setRelatedTasks] = useState([]) // Related tasks for same email/user
   const [hubspotDeals, setHubspotDeals] = useState([]) // HubSpot deals for selected task
   const [salesTargets, setSalesTargets] = useState([]) // Sales targets for selected task
-  const [taskSamples, setTaskSamples] = useState([]) // Samples for selected task
   const [showNoteModal, setShowNoteModal] = useState(false) // Show note creation modal
   const [showMeetingModal, setShowMeetingModal] = useState(false) // Show meeting creation modal
   const [showStartTaskModal, setShowStartTaskModal] = useState(false) // Show start task modal
@@ -125,18 +142,37 @@ const Tasks = () => {
     associatedContactEmail: '',
     associatedCompanyName: '',
     associatedCompanyDomain: '',
-    type: 'Call',
-    followUpType: '', // New field for Follow-up type
+    type: 'Visit Target',
+    followUpType: '', // Follow-up type (Call, Email, etc.)
+    relatedSample: '', // Sample Track: link to Sample Tracker
     priority: 'Medium',
     dueDate: '',
     dueTime: '09:00',
     description: '',
     notes: '',
   })
+  const [samples, setSamples] = useState([]) // For Sample Track dropdown in Create Task
+  const [products, setProducts] = useState([]) // Products for Sample Track Add Item
+  const [selectedItems, setSelectedItems] = useState([]) // Selected products for Sample Track
+  const [addItemProduct, setAddItemProduct] = useState('')
+  const [addItemQty, setAddItemQty] = useState(1)
+  const [sampleVisitDate, setSampleVisitDate] = useState(getLocalDateString()) // Visit date for sample
+  const [sampleExpectedDate, setSampleExpectedDate] = useState('') // Expected date for sample
 
   const filtered = useMemo(() => {
     let list = [...tasks] // Create a copy to avoid mutating original
     
+    // My creation only: show only tasks created by current admin
+    if (activeFilters.myCreationOnly) {
+      const currentUserId = localStorage.getItem('userId')
+      if (currentUserId) {
+        list = list.filter((t) => {
+          const createdById = t.createdBy?._id || t.createdBy || t.createdBy?.id
+          return createdById && String(createdById) === String(currentUserId)
+        })
+      }
+    }
+
     // Apply search filter first (before other filters) for better performance
     if (search.trim()) {
       const s = search.trim().toLowerCase()
@@ -227,68 +263,90 @@ const Tasks = () => {
       list = list.filter((t) => t.status === activeTab)
     }
     // Remove duplicate tasks for same customer - keep only one task per customer
-    // This ensures same customer's tasks show only once in the main list
-    const uniqueTasks = []
-    const seenCustomers = new Set()
-    
-    list.forEach(task => {
-      // Create a unique key for this task based on customer
-      const customerId = task.customer ? (typeof task.customer === 'object' ? task.customer._id : task.customer) : null
-      const taskEmail = task.customerEmail || 
-                       (task.customer && typeof task.customer === 'object' ? task.customer.email : '') || 
-                       task.associatedContactEmail
-      const taskName = task.customerName || 
-                      (task.customer && typeof task.customer === 'object' ? (task.customer.name || task.customer.firstName) : '') || 
-                      task.associatedContactName
+    // BUT: Skip deduplication for Pending tab to show all pending tasks
+    // This ensures same customer's tasks show only once in the main list (except Pending tab)
+    if (activeTab !== 'Pending') {
+      const uniqueTasks = []
+      const seenCustomers = new Set()
       
-      // Create unique identifier
-      const uniqueKey = customerId ? `customer_${customerId}` : 
-                       taskEmail ? `email_${taskEmail.toLowerCase().trim()}` :
-                       taskName ? `name_${taskName.toLowerCase().trim()}` :
-                       `task_${task._id}`
-      
-      // Only add if we haven't seen this customer before
-      // Keep the most recent task (by dueDate or createdAt)
-      if (!seenCustomers.has(uniqueKey)) {
-        seenCustomers.add(uniqueKey)
-        uniqueTasks.push(task)
-      } else {
-        // If we've seen this customer, check if current task is more recent
-        const existingIndex = uniqueTasks.findIndex(t => {
-          const tCustomerId = t.customer ? (typeof t.customer === 'object' ? t.customer._id : t.customer) : null
-          const tEmail = t.customerEmail || 
-                        (t.customer && typeof t.customer === 'object' ? t.customer.email : '') || 
-                        t.associatedContactEmail
-          const tName = t.customerName || 
-                        (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') || 
-                        t.associatedContactName
-          
-          const tUniqueKey = tCustomerId ? `customer_${tCustomerId}` : 
-                            tEmail ? `email_${tEmail.toLowerCase().trim()}` :
-                            tName ? `name_${tName.toLowerCase().trim()}` :
-                            `task_${t._id}`
-          
-          return tUniqueKey === uniqueKey
-        })
+      list.forEach(task => {
+        // Visit requests: har ek alag row (dedupe mat karo)
+        if (task.isVisitTarget || task.visitTargetId) {
+          uniqueTasks.push(task)
+          return
+        }
+        // Create a unique key for this task based on customer
+        const customerId = task.customer ? (typeof task.customer === 'object' ? task.customer._id : task.customer) : null
+        const taskEmail = task.customerEmail || 
+                         (task.customer && typeof task.customer === 'object' ? task.customer.email : '') || 
+                         task.associatedContactEmail
+        const taskName = task.customerName || 
+                        (task.customer && typeof task.customer === 'object' ? (task.customer.name || task.customer.firstName) : '') || 
+                        task.associatedContactName
         
-        if (existingIndex !== -1) {
-          const existingTask = uniqueTasks[existingIndex]
-          const taskDate = new Date(task.dueDate || task.createdAt || 0).getTime()
-          const existingDate = new Date(existingTask.dueDate || existingTask.createdAt || 0).getTime()
+        // Create unique identifier
+        const uniqueKey = customerId ? `customer_${customerId}` : 
+                         taskEmail ? `email_${taskEmail.toLowerCase().trim()}` :
+                         taskName ? `name_${taskName.toLowerCase().trim()}` :
+                         `task_${task._id}`
+        
+        // Only add if we haven't seen this customer before
+        // Keep the most recent task (by dueDate or createdAt)
+        if (!seenCustomers.has(uniqueKey)) {
+          seenCustomers.add(uniqueKey)
+          uniqueTasks.push(task)
+        } else {
+          // If we've seen this customer, check if current task is more recent
+          const existingIndex = uniqueTasks.findIndex(t => {
+            const tCustomerId = t.customer ? (typeof t.customer === 'object' ? t.customer._id : t.customer) : null
+            const tEmail = t.customerEmail || 
+                          (t.customer && typeof t.customer === 'object' ? t.customer.email : '') || 
+                          t.associatedContactEmail
+            const tName = t.customerName || 
+                          (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') || 
+                          t.associatedContactName
+            
+            const tUniqueKey = tCustomerId ? `customer_${tCustomerId}` : 
+                              tEmail ? `email_${tEmail.toLowerCase().trim()}` :
+                              tName ? `name_${tName.toLowerCase().trim()}` :
+                              `task_${t._id}`
+            
+            return tUniqueKey === uniqueKey
+          })
           
-          // Keep the more recent task
-          if (taskDate > existingDate) {
-            uniqueTasks[existingIndex] = task
+          if (existingIndex !== -1) {
+            const existingTask = uniqueTasks[existingIndex]
+            const taskPending = (task.approvalStatus || '').toString() === 'Pending'
+            const existingPending = (existingTask.approvalStatus || '').toString() === 'Pending'
+            // Prefer Pending over Approved so approval-needed tasks stay visible in All view
+            if (taskPending && !existingPending) {
+              uniqueTasks[existingIndex] = task
+            } else if (!taskPending && existingPending) {
+              // keep existing (Pending)
+            } else {
+              const taskDate = new Date(task.dueDate || task.createdAt || 0).getTime()
+              const existingDate = new Date(existingTask.dueDate || existingTask.createdAt || 0).getTime()
+              if (taskDate > existingDate) {
+                uniqueTasks[existingIndex] = task
+              }
+            }
           }
         }
-      }
-    })
-    
-    list = uniqueTasks
+      })
+      
+      list = uniqueTasks
+    }
 
     // Apply active filters
     if (activeFilters.taskType.length > 0) {
       list = list.filter(t => {
+        // Visit requests: type Visit / Visit Target
+        if (t.isVisitTarget || t.visitTargetId) {
+          return activeFilters.taskType.some(filterType => {
+            const f = (filterType || '').toLowerCase().trim()
+            return f === 'visit target' || f === 'visit' || f.includes('visit')
+          })
+        }
         // Prioritize HubSpot type (hs_task_type) over mapped type (type)
         const taskType = (t.hs_task_type || t.type || '').toString().trim()
         if (!taskType) return false
@@ -425,6 +483,11 @@ const Tasks = () => {
     return list
   }, [tasks, search, activeTab, activeFilters])
 
+  // Reset to page 1 when tab changes so list shows first page of that tab
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeTab])
+
   useEffect(() => {
     loadTasks()
     loadSalesmen()
@@ -437,6 +500,25 @@ const Tasks = () => {
     
     return () => clearInterval(intervalId)
   }, [])
+
+  // Load products when Create Task form opens (for Sample Track Add Item)
+  useEffect(() => {
+    if (!showCreateForm) return
+    const loadProducts = async () => {
+      try {
+        const res = await getProducts({})
+        if (res.success && Array.isArray(res.data)) {
+          setProducts(res.data.filter(p => p.isActive !== false))
+        } else {
+          setProducts([])
+        }
+      } catch (error) {
+        console.error('Error loading products:', error)
+        setProducts([])
+      }
+    }
+    loadProducts()
+  }, [showCreateForm])
 
 
   // Close dropdowns when clicking outside
@@ -459,76 +541,81 @@ const Tasks = () => {
   const loadTasks = async () => {
     setLoading(true)
     try {
-      // Fetch all tasks - no tab filtering
-      const res = await getFollowUps({})
-      let allTasks = []
-      
-      if (res.success) {
-        allTasks = res.data || []
-      }
+      // Fetch Follow-ups (tasks) and Visit Target requests – dono admin Tasks mein dikhne chahiye
+      const [followUpRes, visitTargetRes] = await Promise.all([
+        getFollowUps({}),
+        getVisitTargets({})
+      ])
+      let followUpTasks = followUpRes.success ? (followUpRes.data || []) : []
+      const visitTargetsRaw = visitTargetRes.success ? (visitTargetRes.data || []) : []
 
-      // Also fetch pending visit targets and convert them to task-like objects
-      try {
-        const visitTargetsRes = await getVisitTargets({ approvalStatus: 'Pending' })
-        if (visitTargetsRes.success && visitTargetsRes.data) {
-          const pendingVisits = visitTargetsRes.data
-          // Convert visit targets to task-like objects
-          const visitTasks = pendingVisits.map(visit => ({
-            _id: visit._id,
-            followUpNumber: `VT-${visit._id.toString().slice(-6)}`, // Create a follow-up number for display
-            salesman: visit.salesman,
-            customer: visit.customerId,
-            customerName: visit.customerName || visit.name,
-            customerEmail: visit.customer?.email || '',
-            customerPhone: visit.customer?.phone || '',
-            type: 'Visit',
-            priority: visit.priority || 'Medium',
-            status: visit.status === 'Pending' ? 'Upcoming' : visit.status,
-            scheduledDate: visit.visitDate ? new Date(visit.visitDate) : new Date(),
-            dueDate: visit.visitDate ? new Date(visit.visitDate) : new Date(),
-            description: visit.description || `Visit request: ${visit.name}`,
-            notes: visit.notes || '',
-            approvalStatus: visit.approvalStatus || 'Pending',
-            createdBy: visit.createdBy,
-            source: 'app',
-            isVisitTarget: true, // Flag to identify this is a visit target
-            visitTargetId: visit._id, // Store original visit target ID
-            visitTarget: visit, // Store full visit target object
-            // Additional visit-specific fields
-            address: visit.address,
-            city: visit.city,
-            state: visit.state,
-            pincode: visit.pincode,
-            latitude: visit.latitude,
-            longitude: visit.longitude,
-          }))
-          
-          // Merge visit tasks with regular tasks
-          allTasks = [...allTasks, ...visitTasks]
-          
-          console.log(`Loaded ${visitTasks.length} pending visit requests as tasks`)
+      // Visit Target aur Follow-up alag: jo Follow-up type "Visit" hai aur visitTarget se linked hai,
+      // wo already Visit Target list mein dikhega – isliye duplicate na aaye, aise follow-ups ko hatao
+      const isVisitTypeFollowUp = (t) => {
+        const type = (t.type || '').toString().trim()
+        const isVisit = type === 'Visit' || type.toLowerCase() === 'visit' || type === 'Visit Target'
+        const hasLinkedVisitTarget = t.visitTarget != null && (t.visitTarget?._id || t.visitTarget)
+        return isVisit && hasLinkedVisitTarget
+      }
+      followUpTasks = followUpTasks.filter((t) => !isVisitTypeFollowUp(t))
+
+      // Request visits (visit targets) ko task shape mein map karo taake list mein dikhen
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const todayEnd = new Date(todayStart)
+      todayEnd.setDate(todayEnd.getDate() + 1)
+
+      const visitTargetsAsTasks = visitTargetsRaw.map((vt) => {
+        const visitDate = vt.visitDate ? new Date(vt.visitDate) : null
+        let status = vt.status || 'Pending'
+        if (status === 'Pending' && visitDate) {
+          if (visitDate < todayStart) status = 'Overdue'
+          else if (visitDate >= todayStart && visitDate < todayEnd) status = 'Today'
+          else status = 'Upcoming'
         }
-      } catch (visitError) {
-        console.error('Error loading visit targets:', visitError)
-        // Continue even if visit targets fail to load
-      }
+        const rawDesc = (vt.description || vt.notes || '').trim()
+        const salesmanName = vt.salesman?.name || vt.salesman?.email || ''
+        const fallbackDesc = salesmanName ? `Visit Assigned: ${salesmanName}` : `Visit: ${vt.name || vt.customerName || 'Customer'}`
+        const description = rawDesc && rawDesc.toLowerCase() !== 'test' ? rawDesc : fallbackDesc
+        return {
+          _id: vt._id,
+          id: vt._id,
+          isVisitTarget: true,
+          visitTargetId: vt._id,
+          customerName: vt.name || vt.customerName || 'Visit Request',
+          description,
+          dueDate: vt.visitDate || vt.createdAt,
+          visitDate: vt.visitDate,
+          approvalStatus: vt.approvalStatus || 'Pending',
+          status,
+          type: 'Visit',
+          salesman: vt.salesman,
+          createdBy: vt.createdBy,
+          createdAt: vt.createdAt,
+          address: vt.address,
+          city: vt.city,
+          state: vt.state,
+          pincode: vt.pincode,
+          priority: vt.priority || 'Medium',
+          visitTarget: vt.name
+        }
+      })
 
-      // Debug: Log pending tasks
+      const combined = [...followUpTasks, ...visitTargetsAsTasks]
+      const seenIds = new Set()
+      const allTasks = combined.filter((t) => {
+        const id = (t._id || t.id)?.toString()
+        if (!id || seenIds.has(id)) return false
+        seenIds.add(id)
+        return true
+      })
+
       const pendingTasks = allTasks.filter(t => {
         const approvalStatus = t.approvalStatus || 'Pending'
         const createdByRole = t.createdBy?.role
         return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
       })
-      console.log('Total tasks loaded:', allTasks.length)
-      console.log('Pending tasks found:', pendingTasks.length)
-      console.log('Pending tasks details:', pendingTasks.map(t => ({
-        id: t._id,
-        approvalStatus: t.approvalStatus,
-        createdByRole: t.createdBy?.role,
-        customerName: t.customerName,
-        isVisitTarget: t.isVisitTarget || false
-      })))
-      
+
       setTasks(allTasks)
     } catch (e) {
       console.error(e)
@@ -541,9 +628,18 @@ const Tasks = () => {
   const loadSalesmen = async () => {
     try {
       const res = await getUsers({ role: 'salesman' })
-      if (res.success) {
-        setSalesmen(res.data || [])
+      let list = res.success ? (res.data || []) : []
+      const userRole = localStorage.getItem('userRole') || ''
+      const userId = localStorage.getItem('userId')
+      if (userRole === 'admin' && userId) {
+        const alreadyInList = list.some(s => (s._id || s.id).toString() === userId.toString())
+        if (!alreadyInList) {
+          const userName = localStorage.getItem('userName') || 'Me (Admin)'
+          const userEmail = localStorage.getItem('userEmail') || ''
+          list = [{ _id: userId, id: userId, name: userName, email: userEmail }, ...list]
+        }
       }
+      setSalesmen(list)
     } catch (e) {
       console.error(e)
     }
@@ -605,112 +701,171 @@ const Tasks = () => {
       const currentUserRole = localStorage.getItem('userRole') || 'admin'
       // Admin-created tasks are auto-approved, salesman-created need approval
       const approvalStatus = currentUserRole === 'admin' ? 'Approved' : 'Pending'
+      const selectedCustomerForTask = formData.customer ? customers.find(c => c._id === formData.customer) : null
 
+      const taskTypeLower = (formData.type || '').toLowerCase().trim()
+      const isVisitTargetType = taskTypeLower === 'visit target' || taskTypeLower.includes('visit target')
+
+      // Visit Target and Follow-up are separate: Visit Target = only create Visit Target (no Follow-up)
+      if (isVisitTargetType) {
+        try {
+          const selectedCustomer = customers.find(c => c._id === formData.customer)
+          const latitude = selectedCustomer?.latitude || formData.latitude || 24.8607
+          const longitude = selectedCustomer?.longitude || formData.longitude || 67.0011
+          const descInput = (formData.description || '').trim()
+          const selectedSalesman = formData.salesman ? salesmen.find(s => (s._id || s.id) === formData.salesman) : null
+          const defaultDesc = selectedSalesman ? `Visit Assigned: ${selectedSalesman.name || selectedSalesman.email || 'Salesman'}` : `Visit for ${formData.customerName || 'customer'}`
+          const visitTargetData = {
+            name: formData.customerName || formData.description || 'Visit Task',
+            description: descInput && descInput.toLowerCase() !== 'test' ? formData.description : defaultDesc,
+            salesman: formData.salesman,
+            priority: formData.priority || 'Medium',
+            visitDate: formData.dueDate ? new Date(`${formData.dueDate}T${formData.dueTime || '09:00'}`).toISOString() : undefined,
+            notes: formData.notes || '',
+            status: 'Pending',
+            approvalStatus: 'Approved',
+            customerName: formData.customerName || '',
+            customerId: formData.customer || undefined,
+            address: selectedCustomer?.address || formData.address || '',
+            city: selectedCustomer?.city || formData.city || '',
+            state: selectedCustomer?.state || formData.state || '',
+            pincode: selectedCustomer?.postcode || selectedCustomer?.pincode || formData.pincode || '',
+            latitude,
+            longitude,
+          }
+          const visitTargetRes = await createVisitTarget(visitTargetData)
+          if (visitTargetRes.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Visit Target Created!',
+              text: 'Visit Target created. View it in the Visit Targets page.',
+              confirmButtonColor: '#e9931c'
+            })
+            setShowCreateForm(false)
+            resetForm()
+            return
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Failed',
+              text: visitTargetRes.message || 'Failed to create Visit Target',
+              confirmButtonColor: '#e9931c'
+            })
+            return
+          }
+        } catch (visitError) {
+          console.error('Error creating visit target:', visitError)
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error creating Visit Target',
+            confirmButtonColor: '#e9931c'
+          })
+          return
+        } finally {
+          setSubmitting(false)
+        }
+      }
+
+      // Sample Track: Create samples first, then create follow-up task
+      let createdSamplesCount = 0
+      const createdSampleIds = []
+      
+      if (formData.type === 'Sample Track') {
+        const custName = (formData.customerName || '').trim()
+        if (!custName) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Required Fields Missing',
+            text: 'Please fill in Customer Name',
+            confirmButtonColor: '#e9931c',
+          })
+          setSubmitting(false)
+          return
+        }
+        if (selectedItems.length === 0) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Add at least one item',
+            text: 'Select a product and quantity, then click + to add. You can add a single product or multiple products.',
+            confirmButtonColor: '#e9931c',
+          })
+          setSubmitting(false)
+          return
+        }
+
+        // Create samples for each selected item (single or multiple)
+        let created = 0
+        let failed = 0
+        let firstError = ''
+        for (const item of selectedItems) {
+          const payload = {
+            salesman: formData.salesman,
+            customer: formData.customer || undefined,
+            customerName: custName,
+            customerEmail: (formData.customerEmail || '').trim() || undefined,
+            customerPhone: (formData.customerPhone || '').trim() || undefined,
+            product: item.productId,
+            productName: (item.productName || '').trim() || 'Product',
+            productCode: (item.productCode || '').trim() || undefined,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            visitDate: (sampleVisitDate || getLocalDateString()).toString().trim(),
+            expectedDate: (sampleExpectedDate || '').toString().trim() || undefined,
+            notes: (formData.notes || '').trim() || undefined,
+          }
+          const result = await createSample(payload)
+          if (result.success) {
+            created++
+            if (result.data?._id) createdSampleIds.push(result.data._id)
+          } else {
+            failed++
+            if (!firstError && result.message) firstError = result.message
+          }
+        }
+
+        createdSamplesCount = created
+
+        if (created === 0) {
+          const failText = failed === 1 ? 'Failed to create 1 sample.' : `Failed to create ${failed} samples.`
+          const detail = firstError ? ` ${firstError}` : ''
+          await Swal.fire({
+            icon: 'error',
+            title: 'Failed',
+            text: (failed > 0 ? failText : 'Error creating samples') + detail,
+            confirmButtonColor: '#e9931c',
+          })
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // Follow-up / Sample Track: create Follow-up (task)
       const taskData = {
         salesman: formData.salesman,
         customer: formData.customer || undefined,
         customerName: formData.customerName,
         customerEmail: formData.customerEmail || undefined,
         customerPhone: formData.customerPhone || undefined,
-        // Associated Contact (HubSpot-style)
         associatedContactName: formData.associatedContactName || undefined,
         associatedContactEmail: formData.associatedContactEmail || undefined,
-        // Associated Company (HubSpot-style)
         associatedCompanyName: formData.associatedCompanyName || undefined,
         associatedCompanyDomain: formData.associatedCompanyDomain || undefined,
-        // If Follow-up is selected and followUpType is set, use followUpType; otherwise map the type
         type: (formData.type === 'Follow-up' && formData.followUpType) 
           ? formData.followUpType 
-          : mapTaskType(formData.type), // Map to valid enum value
+          : mapTaskType(formData.type),
         priority: formData.priority,
         scheduledDate: dueDateTime,
         dueDate: dueDateTime,
-        description: formData.description || `Follow up with ${formData.customerName}`,
+        description: formData.description || (formData.type === 'Sample Track' ? `Sample follow-up: ${formData.customerName}` : `Follow up with ${formData.customerName}`),
         notes: formData.notes || undefined,
-        approvalStatus: approvalStatus, // Set approval status based on user role
+        approvalStatus: approvalStatus,
+        lastContacted: selectedCustomerForTask?.lastContact ? new Date(selectedCustomerForTask.lastContact).toISOString() : undefined,
+        lastEngagement: selectedCustomerForTask?.lastEngagement ? new Date(selectedCustomerForTask.lastEngagement).toISOString() : undefined,
+        relatedSample: formData.type === 'Sample Track' && createdSampleIds.length > 0 ? createdSampleIds[0] : undefined,
       }
 
       const res = await createFollowUp(taskData)
       if (res.success) {
-        const createdTask = res.data
-        
-        // If task type is Visit Target, also create a visit target
-        const mappedType = mapTaskType(formData.type)
-        const taskTypeLower = (formData.type || '').toLowerCase().trim()
-        if (taskTypeLower === 'visit target' || taskTypeLower.includes('visit target')) {
-          try {
-            // Get customer details for visit target
-            const selectedCustomer = customers.find(c => c._id === formData.customer)
-            
-            // Location is required for visit target - use customer location or default
-            const latitude = selectedCustomer?.latitude || formData.latitude || 24.8607 // Default to Karachi
-            const longitude = selectedCustomer?.longitude || formData.longitude || 67.0011
-            
-            const visitTargetData = {
-              name: formData.customerName || formData.description || 'Visit Task',
-              description: formData.description || `Visit task for ${formData.customerName || 'customer'}`,
-              salesman: formData.salesman,
-              priority: formData.priority || 'Medium',
-              visitDate: formData.dueDate ? new Date(`${formData.dueDate}T${formData.dueTime || '09:00'}`).toISOString() : undefined,
-              notes: formData.notes || `Created from task: ${createdTask._id}`,
-              status: 'Pending',
-              approvalStatus: 'Approved', // Admin-created visit targets are auto-approved
-              // Customer information
-              customerName: formData.customerName || '',
-              customerId: formData.customer || undefined,
-              // Location from customer if available, or use defaults
-              address: selectedCustomer?.address || formData.address || '',
-              city: selectedCustomer?.city || formData.city || '',
-              state: selectedCustomer?.state || formData.state || '',
-              pincode: selectedCustomer?.postcode || selectedCustomer?.pincode || formData.pincode || '',
-              latitude: latitude,
-              longitude: longitude,
-            }
-            
-            const visitTargetRes = await createVisitTarget(visitTargetData)
-            if (visitTargetRes.success) {
-              console.log('Visit target created successfully from task')
-            } else {
-              console.warn('Task created but visit target creation failed:', visitTargetRes.message)
-            }
-          } catch (visitError) {
-            console.error('Error creating visit target from task:', visitError)
-            // Don't fail the task creation if visit target creation fails
-          }
-        }
-        
-        // If task type is Sample Track, also create a sample
-        if (taskTypeLower === 'sample track' || taskTypeLower.includes('sample track') || taskTypeLower.includes('sample')) {
-          try {
-            // Get customer details for sample
-            const selectedCustomer = customers.find(c => c._id === formData.customer)
-            const sampleData = {
-              salesman: formData.salesman,
-              customer: formData.customer || undefined,
-              customerName: formData.customerName || '',
-              customerEmail: formData.customerEmail || selectedCustomer?.email || undefined,
-              customerPhone: formData.customerPhone || selectedCustomer?.phone || undefined,
-              product: formData.product || undefined,
-              productName: formData.productName || 'Sample Product',
-              productCode: formData.productCode || undefined,
-              quantity: formData.quantity || 1,
-              visitDate: formData.dueDate ? new Date(`${formData.dueDate}T${formData.dueTime || '09:00'}`).toISOString() : undefined,
-              expectedDate: formData.expectedDate || undefined,
-              notes: formData.notes || `Created from task: ${createdTask._id}`,
-            }
-            
-            const sampleRes = await createSample(sampleData)
-            if (sampleRes.success) {
-              console.log('Sample created successfully from task')
-            } else {
-              console.warn('Task created but sample creation failed:', sampleRes.message)
-            }
-          } catch (sampleError) {
-            console.error('Error creating sample from task:', sampleError)
-            // Don't fail the task creation if sample creation fails
-          }
-        }
-
         // Wait a bit for async HubSpot sync to complete
         await new Promise(resolve => setTimeout(resolve, 2000))
         
@@ -720,21 +875,12 @@ const Tasks = () => {
           ? 'Task has been automatically approved.' 
           : 'Task is pending approval. It will appear in tasks list once approved by admin.'
         
-        // Determine success message based on task type
-        let successMessage = ''
-        if (taskTypeLower === 'visit target' || taskTypeLower.includes('visit target')) {
-          successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
-            ? `Task and Visit Target created successfully and posted to HubSpot! ${approvalMessage}`
-            : `Task and Visit Target created successfully! You can push it to HubSpot manually if needed. ${approvalMessage}`
-        } else if (taskTypeLower === 'sample track' || taskTypeLower.includes('sample track') || taskTypeLower.includes('sample')) {
-          successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
-            ? `Task and Sample created successfully and posted to HubSpot! ${approvalMessage}`
-            : `Task and Sample created successfully! You can push it to HubSpot manually if needed. ${approvalMessage}`
-        } else {
-          successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
-            ? `Task created successfully and posted to HubSpot! ${approvalMessage}`
-            : `Task created successfully! You can push it to HubSpot manually if needed. ${approvalMessage}`
-        }
+        const sampleMessage = formData.type === 'Sample Track' && createdSamplesCount > 0
+          ? (createdSamplesCount === 1 ? ' 1 sample created.' : ` ${createdSamplesCount} samples created.`)
+          : ''
+        const successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
+          ? `Task created successfully and posted to HubSpot!${sampleMessage} ${approvalMessage}`
+          : `Task created successfully!${sampleMessage} You can push it to HubSpot manually if needed. ${approvalMessage}`
         
         Swal.fire({
           icon: 'success',
@@ -768,6 +914,53 @@ const Tasks = () => {
 
   const handleTaskClick = async (task) => {
     try {
+      // Visit target tasks: fetch visit target by ID (not follow-up)
+      if (task.isVisitTarget || task.visitTargetId) {
+        const vtId = task.visitTargetId || task._id
+        const res = await getVisitTarget(vtId)
+        if (res.success && res.data) {
+          const vt = res.data
+          const taskLike = {
+            _id: vt._id,
+            id: vt._id,
+            isVisitTarget: true,
+            visitTargetId: vt._id,
+            followUpNumber: 'VT-' + String(vt._id).slice(-6),
+            description: vt.description || vt.name || `Visit: ${vt.name || vt.customerName || 'Customer'}`,
+            customerName: vt.name || vt.customerName || 'Visit Request',
+            customerEmail: vt.address ? '' : '',
+            type: 'Visit',
+            approvalStatus: vt.approvalStatus || 'Pending',
+            status: vt.status || 'Pending',
+            dueDate: vt.visitDate || vt.createdAt,
+            visitDate: vt.visitDate,
+            notes: vt.notes || '',
+            address: vt.address,
+            city: vt.city,
+            state: vt.state,
+            pincode: vt.pincode,
+            priority: vt.priority || 'Medium',
+            salesman: vt.salesman,
+            createdBy: vt.createdBy,
+            createdAt: vt.createdAt,
+            customer: vt.customerId || vt.customer,
+            visitTarget: vt.name
+          }
+          setSelectedTask(taskLike)
+          setShowTaskDetail(true)
+          setModalActiveTab('overview')
+          const index = filtered.findIndex(t => (t._id || t.visitTargetId) === vtId)
+          setCurrentTaskIndex(index >= 0 ? index : 0)
+          setTaskActivities([])
+          setTaskCustomerDetails(null)
+          setTaskQuotations([])
+          setRelatedTasks([])
+          return
+        }
+        Swal.fire({ icon: 'error', title: 'Error', text: res.message || 'Visit target not found', confirmButtonColor: '#e9931c' })
+        return
+      }
+
       const res = await getFollowUp(task._id)
       if (res.success) {
         setSelectedTask(res.data)
@@ -999,46 +1192,6 @@ const Tasks = () => {
           setSalesTargets([])
         }
         
-        // Load samples for this customer/salesman
-        try {
-          const salesmanId = res.data.salesman && typeof res.data.salesman === 'object' 
-            ? res.data.salesman._id 
-            : res.data.salesman
-          const customerId = res.data.customer && typeof res.data.customer === 'object' 
-            ? res.data.customer._id 
-            : res.data.customer
-          
-          // Load samples by customer or salesman
-          const samplesRes = await getSamples({
-            salesman: salesmanId || '',
-            search: taskEmail || taskName || ''
-          })
-          if (samplesRes.success && samplesRes.data) {
-            // Filter samples that match customer email, name, or ID
-            const matchingSamples = samplesRes.data.filter(s => {
-              if (customerId && s.customer) {
-                const sampleCustomerId = typeof s.customer === 'object' ? s.customer._id : s.customer
-                if (sampleCustomerId && customerId.toString() === sampleCustomerId.toString()) {
-                  return true
-                }
-              }
-              if (taskEmail && s.customerEmail && taskEmail.toLowerCase() === s.customerEmail.toLowerCase()) {
-                return true
-              }
-              if (taskName && s.customerName && taskName.toLowerCase().includes(s.customerName.toLowerCase())) {
-                return true
-              }
-              return false
-            })
-            setTaskSamples(matchingSamples)
-          } else {
-            setTaskSamples([])
-          }
-        } catch (e) {
-          console.error('Error loading samples:', e)
-          setTaskSamples([])
-        }
-        
         // Load related tasks for same email/user
         try {
           const taskEmail = res.data.customerEmail || 
@@ -1148,25 +1301,38 @@ const Tasks = () => {
         popup: 'swal2-popup-custom'
       },
       didOpen: () => {
-        // Ensure SweetAlert appears on top
         const swalContainer = document.querySelector('.swal2-container')
-        if (swalContainer) {
-          swalContainer.style.zIndex = '99999'
-        }
+        if (swalContainer) swalContainer.style.zIndex = '99999'
       }
     })
     if (!result.isConfirmed) return
-    
+
+    const isVisitTarget = selectedTask?.isVisitTarget || selectedTask?.visitTargetId
     try {
-      const res = await updateFollowUp(taskId, {
-        status: 'Completed',
-        completedDate: new Date(),
-      })
+      let res
+      if (isVisitTarget) {
+        res = await updateVisitTarget(taskId, { status: 'Completed', completedAt: new Date() })
+      } else {
+        res = await updateFollowUp(taskId, {
+          status: 'Completed',
+          completedDate: new Date(),
+        })
+      }
       if (res.success) {
-        // Reload task details to get updated status
-        const updatedRes = await getFollowUp(taskId)
-        if (updatedRes.success) {
-          setSelectedTask(updatedRes.data)
+        if (isVisitTarget) {
+          const updatedRes = await getVisitTarget(taskId)
+          if (updatedRes.success && updatedRes.data) {
+            const vt = updatedRes.data
+            setSelectedTask({
+              ...selectedTask,
+              status: 'Completed',
+              completedAt: vt.completedAt,
+              completedDate: vt.completedAt
+            })
+          }
+        } else {
+          const updatedRes = await getFollowUp(taskId)
+          if (updatedRes.success) setSelectedTask(updatedRes.data)
         }
         await loadTasks()
         // Check if this is the last task
@@ -1245,26 +1411,38 @@ const Tasks = () => {
     }
   }
 
-  const handleDeleteTask = async (taskId) => {
+  const handleDeleteTask = async (taskId, taskFromRow = null) => {
     const result = await Swal.fire({
       title: 'Delete Task?',
-      text: 'Are you sure you want to delete this task? This action cannot be undone.',
+      text: 'Are you sure you want to delete this task? It will be removed everywhere (Admin Tasks, Salesman dashboard, Sales Tracking). This cannot be undone.',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Yes, Delete',
-      cancelButtonText: 'Cancel'
+      confirmButtonText: 'Yes',
+      cancelButtonText: 'No'
     })
     if (!result.isConfirmed) return
-    
+
+    const taskToCheck = taskFromRow || selectedTask
+    const isVisitTarget = taskToCheck?.isVisitTarget || taskToCheck?.visitTargetId
     try {
-      const res = await deleteFollowUp(taskId)
+      const res = isVisitTarget ? await deleteVisitTarget(taskId) : await deleteFollowUp(taskId)
       if (res.success) {
+        if (selectedTask && (selectedTask._id === taskId || selectedTask.id === taskId)) {
+          setSelectedTask(null)
+          setShowTaskDetail(false)
+        }
+        setTasks((prev) => prev.filter((t) => (t._id || t.id)?.toString() !== String(taskId)))
         await loadTasks()
-        setShowTaskDetail(false)
-        // Keep selectedTask for when modal reopens - only reset if needed
-        // setSelectedTask(null)
+        await Swal.fire({
+          icon: 'success',
+          title: 'Task Deleted',
+          text: 'Task has been deleted. It is removed from Admin Tasks, Salesman dashboard, and Sales Tracking.',
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true
+        })
       } else {
         Swal.fire({
           icon: 'error',
@@ -1634,35 +1812,44 @@ const Tasks = () => {
     if (customerId) {
       const customer = customers.find(c => c._id === customerId)
       if (customer) {
-        // Handle both app-created and HubSpot-imported customers
         const isHubSpotCustomer = customer.source === 'hubspot' || customer.isHubSpot
-        
+        const contactName = customer.associatedContactName || customer.contactPerson || customer.name || customer.firstName || ''
+        const contactEmail = customer.email || ''
+        const companyName = customer.associatedCompanyName || customer.company || ''
+
         setFormData({
           ...formData,
-          // Only set customer ObjectId if it's an app-created customer
-          // HubSpot-imported customers don't have a local customer ObjectId link
           customer: isHubSpotCustomer ? '' : customerId,
           customerName: customer.name || customer.firstName || '',
           customerEmail: customer.email || '',
           customerPhone: customer.phone || '',
-          // For HubSpot customers, also set associated contact fields
-          associatedContactName: isHubSpotCustomer ? (customer.name || customer.firstName || '') : formData.associatedContactName,
-          associatedContactEmail: isHubSpotCustomer ? (customer.email || '') : formData.associatedContactEmail,
+          associatedContactName: contactName,
+          associatedContactEmail: contactEmail,
+          associatedCompanyName: companyName,
+          associatedCompanyDomain: customer.associatedCompanyDomain || formData.associatedCompanyDomain || '',
         })
       }
     } else {
-      // Clear customer selection
       setFormData({
         ...formData,
         customer: '',
         customerName: '',
         customerEmail: '',
         customerPhone: '',
+        associatedContactName: '',
+        associatedContactEmail: '',
+        associatedCompanyName: '',
+        associatedCompanyDomain: '',
       })
     }
   }
 
   const resetForm = () => {
+    setSelectedItems([])
+    setAddItemProduct('')
+    setAddItemQty(1)
+    setSampleVisitDate(getLocalDateString())
+    setSampleExpectedDate('')
     setFormData({
       salesman: '',
       customer: '',
@@ -1673,8 +1860,9 @@ const Tasks = () => {
       associatedContactEmail: '',
       associatedCompanyName: '',
       associatedCompanyDomain: '',
-      type: 'Call',
-      followUpType: '', // Reset follow-up type
+      type: 'Visit Target',
+      followUpType: '',
+      relatedSample: '',
       priority: 'Medium',
       dueDate: '',
       dueTime: '09:00',
@@ -1888,6 +2076,9 @@ const Tasks = () => {
 
   const removeFilter = (filterType, value = null) => {
     setActiveFilters(prev => {
+      if (filterType === 'myCreationOnly') {
+        return { ...prev, myCreationOnly: false }
+      }
       if (value !== null) {
         const current = prev[filterType] || []
         return { ...prev, [filterType]: current.filter(v => v !== value) }
@@ -1903,7 +2094,8 @@ const Tasks = () => {
       priority: [],
       salesman: [],
       dueDateRange: null,
-      timeRange: null
+      timeRange: null,
+      myCreationOnly: false
     })
     setSearch('')
     setFilterSearch({
@@ -1920,6 +2112,7 @@ const Tasks = () => {
     activeFilters.salesman.length > 0 || 
     activeFilters.dueDateRange !== null ||
     activeFilters.timeRange !== null ||
+    activeFilters.myCreationOnly ||
     search.trim() !== ''
 
   return (
@@ -1961,6 +2154,35 @@ const Tasks = () => {
         </div>
       </div>
 
+      {/* Tab Bar – All / Pending Approval / Overdue / Today / etc. */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 border-b border-gray-200 pb-2">
+        {TABS.map((tab) => {
+          const count = tabCounts[tab.id] ?? 0
+          const isActive = activeTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.id)
+                setCurrentPage(1)
+              }}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-[#e9931c] text-white border-b-2 border-[#e9931c] -mb-0.5'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-b-2 border-transparent'
+              }`}
+            >
+              {tab.label}
+              {count !== undefined && (
+                <span className={`ml-1.5 ${isActive ? 'text-white/90' : 'text-gray-500'}`}>
+                  ({count})
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Filters Bar */}
       <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-4">
@@ -1993,6 +2215,12 @@ const Tasks = () => {
               <button onClick={() => removeFilter('dueDateRange')} className="hover:bg-gray-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
             </span>
           )}
+          {activeFilters.myCreationOnly && (
+            <span className="inline-flex items-center gap-1 px-3 py-1 bg-[#e9931c]/20 text-gray-800 rounded-full text-xs font-medium">
+              My creation only
+              <button onClick={() => removeFilter('myCreationOnly')} className="hover:bg-gray-200 rounded-full w-4 h-4 flex items-center justify-center">×</button>
+            </span>
+          )}
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
@@ -2005,6 +2233,16 @@ const Tasks = () => {
 
         {/* Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* My creation only */}
+          <label className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={activeFilters.myCreationOnly}
+              onChange={(e) => setActiveFilters(prev => ({ ...prev, myCreationOnly: e.target.checked }))}
+              className="rounded border-gray-300 text-[#e9931c] focus:ring-[#e9931c]"
+            />
+            <span>My creation only</span>
+          </label>
           {/* Task Type Dropdown */}
           <div className="relative">
             <button
@@ -2651,8 +2889,7 @@ const Tasks = () => {
                       </td>
                       <td className="px-4 py-3">
                         {(() => {
-                          // Show last contact date from customer object or task
-                          const lastContact = (task.customer && typeof task.customer === 'object' ? task.customer.lastContact : null);
+                          const lastContact = task.lastContacted || (task.customer && typeof task.customer === 'object' ? task.customer.lastContact : null);
                           if (lastContact) {
                             return (
                               <span className="text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
@@ -2669,8 +2906,7 @@ const Tasks = () => {
                       </td>
                       <td className="px-4 py-3">
                         {(() => {
-                          // Show last engagement date from customer object or task
-                          const lastEngagement = (task.customer && typeof task.customer === 'object' ? task.customer.lastEngagement : null);
+                          const lastEngagement = task.lastEngagement || (task.customer && typeof task.customer === 'object' ? task.customer.lastEngagement : null);
                           if (lastEngagement) {
                             return (
                               <span className="text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
@@ -2687,7 +2923,7 @@ const Tasks = () => {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
-                          {task.hs_task_type || task.type || '—'}
+                          {getTaskTypeLabel(task.hs_task_type || task.type, task.isVisitTarget)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -2883,6 +3119,16 @@ const Tasks = () => {
                           >
                             <FaEdit className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteTask(task._id, task)
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Delete Task"
+                          >
+                            <FaTrash className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -2921,10 +3167,13 @@ const Tasks = () => {
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium ${currentPage === pageNum
-                        ? 'bg-gray-700 text-white'
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${currentPage === pageNum
+                        ? 'text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
                     }`}
+                    style={currentPage === pageNum ? {
+                      backgroundColor: appTheme.primary.main
+                    } : {}}
                   >
                     {pageNum}
                   </button>
@@ -3095,6 +3344,48 @@ const Tasks = () => {
                 />
               </div>
 
+              {/* Last Contact & Last Engagement (auto-filled from selected customer, sent with task) */}
+              {formData.customer && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Last Contact
+                    </label>
+                    <div
+                      className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm"
+                      style={{ borderColor: appTheme.border.medium, color: appTheme.text.secondary }}
+                      title="From customer; will be saved with task"
+                    >
+                      {(() => {
+                        const sel = customers.find(c => c._id === formData.customer)
+                        const lastContact = sel?.lastContact
+                        return lastContact
+                          ? new Date(lastContact).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'
+                      })()}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Last Engagement
+                    </label>
+                    <div
+                      className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm"
+                      style={{ borderColor: appTheme.border.medium, color: appTheme.text.secondary }}
+                      title="From customer; will be saved with task"
+                    >
+                      {(() => {
+                        const sel = customers.find(c => c._id === formData.customer)
+                        const lastEngagement = sel?.lastEngagement
+                        return lastEngagement
+                          ? new Date(lastEngagement).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Associated Contact (Optional) */}
               <div className="border-t pt-4 mt-4" style={{ borderColor: appTheme.border.light }}>
                 <h3 className="text-sm font-semibold mb-3" style={{ color: appTheme.text.primary }}>
@@ -3191,8 +3482,8 @@ const Tasks = () => {
                       setFormData({ 
                         ...formData, 
                         type: newType,
-                        // Reset followUpType when task type changes
-                        followUpType: newType === 'Follow-up' ? formData.followUpType : ''
+                        followUpType: newType === 'Follow-up' ? (formData.followUpType || 'Call') : '',
+                        relatedSample: newType === 'Sample Track' ? formData.relatedSample : ''
                       })
                     }}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
@@ -3251,6 +3542,153 @@ const Tasks = () => {
                     <option value="Visit">Visit</option>
                     <option value="Other">Other</option>
                   </select>
+                </div>
+              )}
+
+              {/* Sample Tracker – Add Item Section – Show only when Sample Track is selected */}
+              {formData.type === 'Sample Track' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Visit Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={sampleVisitDate}
+                        onChange={(e) => setSampleVisitDate(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Expected Date
+                      </label>
+                      <input
+                        type="date"
+                        value={sampleExpectedDate}
+                        onChange={(e) => setSampleExpectedDate(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Add Items Section */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Add Item (one or more products) <span className="text-red-500">*</span>
+                    </label>
+                    <div
+                      className="flex gap-2 mb-2"
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return
+                        e.preventDefault()
+                        if (!addItemProduct) return
+                        const p = products.find(pr => pr._id === addItemProduct)
+                        if (!p) return
+                        const qty = Math.max(1, parseInt(addItemQty, 10) || 1)
+                        if (selectedItems.some(item => item.productId === p._id)) {
+                          Swal.fire({ icon: 'info', title: 'Already added', text: 'This product is already in the list.', confirmButtonColor: '#e9931c' })
+                          return
+                        }
+                        setSelectedItems(prev => [...prev, { productId: p._id, productName: p.name || '', productCode: p.productCode || '', quantity: qty }])
+                        setAddItemProduct('')
+                        setAddItemQty(1)
+                      }}
+                    >
+                      <select
+                        value={addItemProduct}
+                        onChange={(e) => setAddItemProduct(e.target.value)}
+                        className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                      >
+                        <option value="">Select product...</option>
+                        {products.map((product) => (
+                          <option key={product._id} value={product._id}>
+                            {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        value={addItemQty}
+                        onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Qty"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!addItemProduct) return
+                          const p = products.find(pr => pr._id === addItemProduct)
+                          if (!p) return
+                          const qty = Math.max(1, parseInt(addItemQty, 10) || 1)
+                          if (selectedItems.some(item => item.productId === p._id)) {
+                            Swal.fire({ icon: 'info', title: 'Already added', text: 'This product is already in the list.', confirmButtonColor: '#e9931c' })
+                            return
+                          }
+                          setSelectedItems(prev => [...prev, { productId: p._id, productName: p.name || '', productCode: p.productCode || '', quantity: qty }])
+                          setAddItemProduct('')
+                          setAddItemQty(1)
+                        }}
+                        className="px-4 py-2 rounded-lg font-medium text-white transition-all"
+                        style={{ backgroundColor: appTheme.primary.main }}
+                        title="Add this product to the list"
+                      >
+                        <FaPlus className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Hint when no items added */}
+                    {selectedItems.length === 0 && (
+                      <p className="mt-2 text-sm" style={{ color: appTheme.text.secondary }}>
+                        Select a product and quantity above, then click <strong>+</strong> or press <strong>Enter</strong> to add. Add at least one item to enable &quot;Create Task&quot;.
+                      </p>
+                    )}
+
+                    {/* Selected Items List */}
+                    {selectedItems.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Added items ({selectedItems.length}) — add more above if needed
+                        </p>
+                        {selectedItems.map((item, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: appTheme.border.medium }}>
+                            <div className="flex-1">
+                              <p className="font-medium" style={{ color: appTheme.text.primary }}>{item.productName}</p>
+                              <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+                                {item.productCode && `Code: ${item.productCode} | `}Quantity: {item.quantity}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedItems(prev => prev.filter((_, i) => i !== index))}
+                              className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <FaTrash className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -3343,9 +3781,10 @@ const Tasks = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || (formData.type === 'Sample Track' && selectedItems.length === 0)}
                   className="px-5 py-2 rounded-lg font-medium text-white transition-all disabled:opacity-50"
                   style={{ backgroundColor: appTheme.primary.main }}
+                  title={formData.type === 'Sample Track' && selectedItems.length === 0 ? 'Add at least one product using the + button above' : ''}
                 >
                   {submitting ? (
                     <span className="flex items-center gap-2">
@@ -3408,11 +3847,39 @@ const Tasks = () => {
                 {selectedTask.status !== 'Completed' && (
                   <button
                     onClick={() => handleCompleteTask(selectedTask._id)}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                    className="px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-colors"
+                    style={{ 
+                      backgroundColor: appTheme.primary.main,
+                      color: appTheme.text.white
+                    }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = appTheme.primary.dark}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = appTheme.primary.main}
                   >
                     Complete
                   </button>
                 )}
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'live-tracking' }))
+                  }}
+                  className="px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2"
+                  style={{ 
+                    backgroundColor: appTheme.primary.main,
+                    color: appTheme.text.white
+                  }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = appTheme.primary.dark}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = appTheme.primary.main}
+                >
+                  <FaMapMarkerAlt className="w-4 h-4" />
+                  Live Tracking
+                </button>
+                <button
+                  onClick={() => selectedTask && handleDeleteTask(selectedTask._id)}
+                  className="px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 bg-red-600 text-white hover:bg-red-700"
+                >
+                  <FaTrash className="w-4 h-4" />
+                  Delete Task
+                </button>
               <button
                 onClick={() => {
                   setShowTaskDetail(false)
@@ -3679,22 +4146,6 @@ const Tasks = () => {
                           <FaCalendarAlt className="w-4 h-4" />
                           Meeting
                         </button>
-                          <button 
-                            onClick={() => {
-                              setModalActiveTab('overview')
-                              // Scroll to sample tracking section
-                              setTimeout(() => {
-                                const sampleSection = document.getElementById('sample-tracking-section')
-                                if (sampleSection) {
-                                  sampleSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                }
-                              }, 100)
-                            }}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                          >
-                          <FaFlask className="w-4 h-4" />
-                          Sample Track
-                        </button>
                         <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                           <FaEllipsisH className="w-4 h-4" />
                         </button>
@@ -3935,7 +4386,7 @@ const Tasks = () => {
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Task Type</p>
-                            <p className="text-sm font-medium text-gray-900">{selectedTask.hs_task_type || selectedTask.type || '—'}</p>
+                            <p className="text-sm font-medium text-gray-900">{getTaskTypeLabel(selectedTask.hs_task_type || selectedTask.type, selectedTask.isVisitTarget)}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Priority</p>
@@ -4228,72 +4679,6 @@ const Tasks = () => {
                   </div>
                 </div>
               )}
-
-                      {/* Sample Tracking Section */}
-                      <div id="sample-tracking-section" className="bg-white rounded-lg p-4 border border-gray-200">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                          <FaFlask className="w-4 h-4" />
-                          Sample Tracking
-                        </h3>
-                        {taskSamples && taskSamples.length > 0 ? (
-                          <div className="space-y-3">
-                            {taskSamples.map((sample) => (
-                              <div 
-                                key={sample._id || sample.id} 
-                                className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span className="text-sm font-semibold text-gray-900">
-                                        {sample.sampleNumber || `Sample #${sample._id?.slice(-6) || 'N/A'}`}
-                                      </span>
-                                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                        sample.status === 'Converted' ? 'bg-green-100 text-green-800' :
-                                        sample.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                                        sample.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}>
-                                        {sample.status || 'Pending'}
-                                      </span>
-                                    </div>
-                                    {sample.productName && (
-                                      <p className="text-xs text-gray-500 mb-1">
-                                        Product: <span className="text-gray-900">{sample.productName}</span>
-                                      </p>
-                                    )}
-                                    {sample.customerName && (
-                                      <p className="text-xs text-gray-500 mb-1">
-                                        Customer: <span className="text-gray-900">{sample.customerName}</span>
-                                      </p>
-                                    )}
-                                    {sample.createdAt && (
-                                      <p className="text-xs text-gray-500">
-                                        Created: {new Date(sample.createdAt).toLocaleDateString('en-GB', {
-                                          day: '2-digit',
-                                          month: 'short',
-                                          year: 'numeric'
-                                        })} {new Date(sample.createdAt).toLocaleTimeString('en-GB', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: false
-                                        })}
-                                      </p>
-                                    )}
-                                    {sample.notes && (
-                                      <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
-                                        {sample.notes}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500 italic">No samples found for this task/customer</p>
-                        )}
-                      </div>
 
                       {/* Approval Information */}
                       {selectedTask.approvalStatus && (
@@ -5447,15 +5832,19 @@ const Tasks = () => {
                     const currentNotes = selectedTask.notes || ''
                     const activityNote = `[${noteDateTime.toLocaleString('en-GB')}] Note: ${noteContent}`
                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                    
-                    await updateFollowUp(selectedTask._id, {
-                      notes: updatedNotes
-                    })
-                    
-                    // Reload task to get updated push status and refresh activities
-                    const updatedRes = await getFollowUp(selectedTask._id)
-                    if (updatedRes.success) {
-                      setSelectedTask(updatedRes.data)
+
+                    if (selectedTask.isVisitTarget) {
+                      await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
+                      const updatedRes = await getVisitTarget(selectedTask._id)
+                      if (updatedRes.success && updatedRes.data) {
+                        const vt = updatedRes.data
+                        setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
+                      }
+                    } else {
+                      await updateFollowUp(selectedTask._id, { notes: updatedNotes })
+                      const updatedRes = await getFollowUp(selectedTask._id)
+                      if (updatedRes.success) {
+                        setSelectedTask(updatedRes.data)
                       // Re-parse activities from updated notes
                       if (updatedRes.data.notes) {
                         const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
@@ -5495,8 +5884,8 @@ const Tasks = () => {
                       const updatedTask = { ...selectedTask, notes: updatedNotes }
                       setSelectedTask(updatedTask)
                     }
+                    }
                     
-                    // Reload tasks list to update push button status
                     await loadTasks()
                   }
                 } catch (e) {
@@ -5747,21 +6136,25 @@ const Tasks = () => {
                 setTaskActivities(updatedActivities)
                 setShowMeetingModal(false)
                 
-                // Save to backend
+                // Save to backend and create Meeting task (meeting bane – sirf show nahi, actual task create)
                 try {
                   if (selectedTask && selectedTask._id) {
                     const currentNotes = selectedTask.notes || ''
                     const activityNote = `[${meetingDateTime.toLocaleString('en-GB')}] Meeting: ${meetingTitle} - ${googleCalendarLink}`
                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                    
-                    await updateFollowUp(selectedTask._id, {
-                      notes: updatedNotes
-                    })
-                    
-                    // Reload task to get updated push status and refresh activities
-                    const updatedRes = await getFollowUp(selectedTask._id)
-                    if (updatedRes.success) {
-                      setSelectedTask(updatedRes.data)
+
+                    if (selectedTask.isVisitTarget) {
+                      await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
+                      const updatedRes = await getVisitTarget(selectedTask._id)
+                      if (updatedRes.success && updatedRes.data) {
+                        const vt = updatedRes.data
+                        setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
+                      }
+                    } else {
+                      await updateFollowUp(selectedTask._id, { notes: updatedNotes })
+                      const updatedRes = await getFollowUp(selectedTask._id)
+                      if (updatedRes.success) {
+                        setSelectedTask(updatedRes.data)
                       // Re-parse activities from updated notes
                       if (updatedRes.data.notes) {
                         const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
@@ -5810,22 +6203,43 @@ const Tasks = () => {
                         setTaskActivities(parsedActivities)
                       }
                     } else {
-                      // Fallback: Update selectedTask manually
                       const updatedTask = { ...selectedTask, notes: updatedNotes }
                       setSelectedTask(updatedTask)
                     }
-                    
-                    // Reload tasks list to update push button status
+                    }
+
+                    // Create new Meeting follow-up task (meeting bane – actual task list mein aaye)
+                    try {
+                      const salesmanId = selectedTask.salesman?._id || selectedTask.salesman
+                      if (salesmanId) {
+                        await createFollowUp({
+                          salesman: salesmanId,
+                          customer: selectedTask.customer?._id || selectedTask.customer || undefined,
+                          customerName: selectedTask.customerName || 'Contact',
+                          customerEmail: selectedTask.customerEmail || '',
+                          customerPhone: selectedTask.customerPhone || '',
+                          type: 'Meeting',
+                          priority: 'Medium',
+                          scheduledDate: meetingDateTime.toISOString(),
+                          dueDate: meetingDateTime.toISOString(),
+                          description: meetingTitle,
+                          notes: `Meeting: ${googleCalendarLink}`
+                        })
+                      }
+                    } catch (createErr) {
+                      console.error('Error creating meeting task:', createErr)
+                    }
+
                     await loadTasks()
                   }
                 } catch (e) {
                   console.error('Error saving meeting:', e)
                 }
-                
+
                 Swal.fire({
                   icon: 'success',
                   title: 'Meeting Created!',
-                  html: `Google Calendar link opened. Meeting added to activities.<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a>`,
+                  html: `Google Calendar opened. Meeting task created in list.<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a>`,
                   confirmButtonColor: '#e9931c'
                 })
               }}

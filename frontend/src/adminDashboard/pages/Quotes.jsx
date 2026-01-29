@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { FaFileInvoice, FaSearch, FaCheckSquare, FaPlus, FaEdit, FaTrash, FaEye, FaQrcode } from 'react-icons/fa'
-import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation } from '../../services/adminservices/quotationService'
+import { FaFileInvoice, FaSearch, FaCheckSquare, FaPlus, FaEdit, FaTrash, FaEye, FaQrcode, FaPaperPlane, FaDownload, FaWhatsapp } from 'react-icons/fa'
+import Swal from 'sweetalert2'
+import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation, sendQuotationEmail } from '../../services/adminservices/quotationService'
 import { getCustomers } from '../../services/adminservices/customerService'
 import { getProducts } from '../../services/adminservices/productService'
+import { getUsers } from '../../services/adminservices/userService'
 import QRCameraScanner from '../../components/QRCameraScanner'
 
 const Quotes = () => {
@@ -23,19 +25,28 @@ const Quotes = () => {
   ]
 
   const [customers, setCustomers] = useState([])
+  const [salesmen, setSalesmen] = useState([])
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(false)
   const [showQRCamera, setShowQRCamera] = useState(false)
   const [qrScanning, setQrScanning] = useState(false)
   const [editingQuotation, setEditingQuotation] = useState(null)
 
+  // Valid Until = 15 days from today by default
+  const getDefaultValidUntil = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 15)
+    return d.toISOString().split('T')[0]
+  }
+
   const [formData, setFormData] = useState({
     customer: '',
+    salesman: '',
     customerName: '',
     customerEmail: '',
     customerPhone: '',
     customerAddress: '',
-    validUntil: '',
+    validUntil: getDefaultValidUntil(),
     lineItems: [
       {
         id: 1,
@@ -58,8 +69,23 @@ const Quotes = () => {
   useEffect(() => {
     loadQuotes()
     loadCustomers()
+    loadSalesmen()
     loadProducts()
   }, [selectedStatus])
+
+  const loadSalesmen = async () => {
+    try {
+      const result = await getUsers({ role: 'salesman' })
+      if (result.success && result.data) {
+        setSalesmen(result.data)
+      } else {
+        setSalesmen([])
+      }
+    } catch (error) {
+      console.error('Error loading salesmen:', error)
+      setSalesmen([])
+    }
+  }
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -162,6 +188,7 @@ const Quotes = () => {
         customer: value,
         customerName: selectedCustomer?.name || '',
         customerEmail: selectedCustomer?.email || '',
+        customerPhone: selectedCustomer?.phone || '',
       })
     } else {
       setFormData({
@@ -449,7 +476,7 @@ const Quotes = () => {
       const quotationData = {
         customerName: selectedCustomer?.name || formData.customerName || '',
         customerEmail: selectedCustomer?.email || formData.customerEmail || '',
-        customerPhone: formData.customerPhone || '',
+        customerPhone: selectedCustomer?.phone || formData.customerPhone || '',
         customerAddress: formData.customerAddress || '',
         validUntil: formData.validUntil || '',
         items: validLineItems,
@@ -458,21 +485,37 @@ const Quotes = () => {
         total: formData.total,
         notes: formData.notes || '',
         status: formData.status || 'Sent',
+        salesman: formData.salesman || undefined,
       }
 
       const result = await createQuotation(quotationData)
       
       if (result.success) {
-        alert('Quotation created successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Quotation Created!',
+          text: 'Quotation created successfully.',
+          confirmButtonColor: '#e9931c'
+        })
         setShowCreateModal(false)
         resetForm()
         loadQuotes()
       } else {
-        alert(result.message || 'Failed to create quotation')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to create quotation',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error creating quote:', error)
-      alert('Error creating quotation. Please try again.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating quotation. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -491,7 +534,7 @@ const Quotes = () => {
       const quotationData = {
         customerName: selectedCustomer?.name || formData.customerName || '',
         customerEmail: selectedCustomer?.email || formData.customerEmail || '',
-        customerPhone: formData.customerPhone || '',
+        customerPhone: selectedCustomer?.phone || formData.customerPhone || '',
         customerAddress: formData.customerAddress || '',
         validUntil: formData.validUntil || '',
         items: formData.lineItems
@@ -509,21 +552,37 @@ const Quotes = () => {
         total: formData.total,
         notes: formData.notes || '',
         status: 'Draft',
+        salesman: formData.salesman || undefined,
       }
 
       const result = await createQuotation(quotationData)
       
       if (result.success) {
-        alert('Quotation saved as draft!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Draft Saved!',
+          text: 'Quotation saved as draft.',
+          confirmButtonColor: '#e9931c'
+        })
         setShowCreateModal(false)
         resetForm()
         loadQuotes()
       } else {
-        alert(result.message || 'Failed to save draft')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to save draft',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error saving draft:', error)
-      alert('Error saving draft. Please try again.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error saving draft. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -544,6 +603,7 @@ const Quotes = () => {
         
         setFormData({
           customer: customer?.id || customer?._id || '',
+          salesman: quote.salesman?._id || quote.salesman?.id || quote.salesman || '',
           customerName: quote.customerName || '',
           customerEmail: quote.customerEmail || '',
           customerPhone: quote.customerPhone || '',
@@ -624,7 +684,7 @@ const Quotes = () => {
       const quotationData = {
         customerName: selectedCustomer?.name || formData.customerName || '',
         customerEmail: selectedCustomer?.email || formData.customerEmail || '',
-        customerPhone: formData.customerPhone || '',
+        customerPhone: selectedCustomer?.phone || formData.customerPhone || '',
         customerAddress: formData.customerAddress || '',
         validUntil: formData.validUntil || '',
         items: validLineItems,
@@ -633,43 +693,179 @@ const Quotes = () => {
         total: formData.total,
         notes: formData.notes || '',
         status: formData.status || 'Sent',
+        salesman: formData.salesman || undefined,
       }
 
       const result = await updateQuotation(editingQuotation._id || editingQuotation.id, quotationData)
       
       if (result.success) {
-        alert('Quotation updated successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Quotation Updated!',
+          text: 'Quotation updated successfully.',
+          confirmButtonColor: '#e9931c'
+        })
         setShowCreateModal(false)
         resetForm()
         loadQuotes()
       } else {
-        alert(result.message || 'Error updating quote')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Error updating quote',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error updating quote:', error)
-      alert('Error updating quotation. Please try again.')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating quotation. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleDeleteQuote = async (quoteId) => {
-    if (!window.confirm('Are you sure you want to delete this quote?')) {
-      return
-    }
+    const confirm = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Quote?',
+      text: 'Are you sure you want to delete this quote?',
+      showCancelButton: true,
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6b7280'
+    })
+    if (!confirm.isConfirmed) return
 
     setLoading(true)
     try {
       const result = await deleteQuotation(quoteId)
       if (result.success) {
-        alert('Quote deleted successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Quote Deleted!',
+          text: 'Quote deleted successfully.',
+          confirmButtonColor: '#e9931c'
+        })
         loadQuotes()
       } else {
-        alert(result.message || 'Error deleting quote')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Error deleting quote',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error deleting quote:', error)
-      alert('Error deleting quote')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting quote',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Download quotation as text file
+  const handleDownloadQuote = (quote) => {
+    const lines = [
+      `QUOTATION ${quote.quotationNumber || quote.quoteNumber || 'N/A'}`,
+      '----------------------------------------',
+      `Customer: ${quote.customerName || ''}`,
+      `Email: ${quote.customerEmail || ''}`,
+      `Phone: ${quote.customerPhone || quote.phone || ''}`,
+      `Valid Until: ${quote.validUntil || ''}`,
+      '----------------------------------------',
+      'Items:',
+      ...(quote.lineItems || []).map((item, i) =>
+        `${i + 1}. ${item.productName || item.name || 'Item'} - Qty: ${item.quantity || 0} @ £${Number(item.unitPrice || 0).toFixed(2)} = £${Number(item.lineTotal || 0).toFixed(2)}`
+      ),
+      '----------------------------------------',
+      `Subtotal: £${Number(quote.subtotal || 0).toFixed(2)}`,
+      `Tax: £${Number(quote.tax || 0).toFixed(2)}`,
+      `Total: £${Number(quote.total || 0).toFixed(2)}`,
+      quote.notes ? `\nNotes: ${quote.notes}` : '',
+    ].filter(Boolean)
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Quotation-${(quote.quotationNumber || quote.quoteNumber || 'quote').replace(/\s/g, '-')}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Open WhatsApp with customer number and pre-filled message
+  const handleSendQuoteWhatsApp = (quote) => {
+    const phone = (quote.customerPhone || quote.phone || '').replace(/\D/g, '')
+    if (!phone || phone.length < 10) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Phone number missing',
+        text: 'Customer phone number is required to send via WhatsApp. Please edit the quote and add customer phone.',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+    const num = phone.startsWith('0') ? '92' + phone.slice(1) : phone.length === 10 ? '92' + phone : phone
+    const msg = `Hello, your quotation #${quote.quotationNumber || quote.quoteNumber || ''} is ready. Total: £${Number(quote.total || 0).toFixed(2)}. Please contact us for details.`
+    const url = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank')
+  }
+
+  const handleSendQuoteEmail = async (quote) => {
+    if (!quote.customerEmail || !quote.customerEmail.trim()) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Email missing',
+        text: 'Customer email is required to send quotation. Please edit the quote and add customer email.',
+        confirmButtonColor: '#e9931c'
+      })
+      return
+    }
+    const confirm = await Swal.fire({
+      icon: 'question',
+      title: 'Send quotation?',
+      text: `Send quotation #${quote.quotationNumber} to ${quote.customerEmail}?`,
+      showCancelButton: true,
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6b7280'
+    })
+    if (!confirm.isConfirmed) return
+
+    setLoading(true)
+    try {
+      const result = await sendQuotationEmail(quote._id || quote.id)
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Sent!',
+          text: 'Quotation sent to customer email successfully.',
+          confirmButtonColor: '#e9931c'
+        })
+        loadQuotes()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to send quotation email.',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error sending quotation email:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error sending email. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -691,11 +887,12 @@ const Quotes = () => {
   const resetForm = () => {
     setFormData({
       customer: '',
+      salesman: '',
       customerName: '',
       customerEmail: '',
       customerPhone: '',
       customerAddress: '',
-      validUntil: '',
+      validUntil: getDefaultValidUntil(),
       lineItems: [
         {
           id: 1,
@@ -881,6 +1078,27 @@ const Quotes = () => {
                 </div>
                 <div className="flex gap-2">
                   <button
+                    onClick={() => handleDownloadQuote(quote)}
+                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Download quotation"
+                  >
+                    <FaDownload className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleSendQuoteWhatsApp(quote)}
+                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                    title="Send to customer WhatsApp"
+                  >
+                    <FaWhatsapp className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleSendQuoteEmail(quote)}
+                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    title="Send to customer email"
+                  >
+                    <FaPaperPlane className="w-5 h-5" />
+                  </button>
+                  <button
                     onClick={() => handleViewQuote(quote._id || quote.id)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     title="View"
@@ -957,7 +1175,7 @@ const Quotes = () => {
 
             {/* Modal Body */}
             <form onSubmit={editingQuotation ? handleUpdateQuote : handleCreateQuote} className="p-6 space-y-6">
-              {/* Customer Section */}
+              {/* Customer & Salesman Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -979,6 +1197,28 @@ const Quotes = () => {
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Salesman *
+                  </label>
+                  <select
+                    name="salesman"
+                    value={formData.salesman}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                  >
+                    <option value="">Select salesman...</option>
+                    {salesmen.map((s) => (
+                      <option key={s._id || s.id} value={s._id || s.id}>
+                        {s.name || s.email} {s.email ? `(${s.email})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Valid Until

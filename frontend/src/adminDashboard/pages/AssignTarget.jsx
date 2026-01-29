@@ -173,23 +173,27 @@ const AssignTarget = () => {
         try {
           const geocoder = new window.google.maps.Geocoder()
           
-          // Build search query - try multiple formats for better results
+          // Build search query - postcode drives location (75400 vs 75500 = different areas)
           const searchQueries = []
-          
-          // For UK postcodes, add UK prefix
+          // UK-style postcodes
           if (postcode.match(/^[A-Z]{1,2}[0-9]{1,2}[A-Z]?\s?[0-9][A-Z]{2}$/i)) {
             searchQueries.push(`${postcode}, UK`)
             searchQueries.push(postcode)
           } else {
-            // Try with city, state, postcode
+            // Pakistan / numeric postcode: postcode first so 75400 and 75500 get different locations
+            if (city) {
+              searchQueries.push(`${postcode}, ${city}, Pakistan`)
+            }
+            if (state) {
+              searchQueries.push(`${postcode}, ${state}, Pakistan`)
+            }
+            searchQueries.push(`${postcode}, Karachi, Pakistan`)
+            searchQueries.push(`${postcode}, Pakistan`)
             if (city && state) {
               searchQueries.push(`${city}, ${state} ${postcode}`.trim())
             }
             if (city) {
               searchQueries.push(`${city}, ${postcode}`)
-            }
-            if (state) {
-              searchQueries.push(`${state} ${postcode}`.trim())
             }
             searchQueries.push(postcode)
           }
@@ -563,8 +567,9 @@ const AssignTarget = () => {
       const result = await deleteVisitTarget(id)
       
       if (result.success) {
-        alert('Visit target deleted successfully!')
+        setVisitTargets((prev) => prev.filter((t) => (t._id || t.id)?.toString() !== String(id)))
         loadVisitTargets()
+        alert('Visit target deleted successfully!')
       } else {
         alert(result.message || 'Failed to delete visit target')
       }
@@ -585,7 +590,7 @@ const AssignTarget = () => {
         Swal.fire({
           icon: 'success',
           title: 'Approved!',
-          text: 'Visit target has been approved.',
+          text: 'Visit target has been approved. It will remain visible in the list.',
           confirmButtonColor: '#e9931c',
           timer: 2000,
           timerProgressBar: true

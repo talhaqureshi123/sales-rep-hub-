@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getCustomers, updateCustomer, getCustomer } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
-import { createFollowUp, getFollowUps } from '../../services/adminservices/followUpService'
-import { FaUser, FaFilter } from 'react-icons/fa'
+import { FaUser, FaFilter, FaUnlink } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerAllotment = () => {
@@ -15,6 +14,7 @@ const CustomerAllotment = () => {
   const [filterStatus, setFilterStatus] = useState('unassigned') // Show unassigned by default
   const [filterCreatedBy, setFilterCreatedBy] = useState('') // Filter by admin who created customer
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [selectedCustomers, setSelectedCustomers] = useState([])
   const [bulkSalesman, setBulkSalesman] = useState('')
   const [showBulkAllot, setShowBulkAllot] = useState(false)
@@ -29,10 +29,16 @@ const CustomerAllotment = () => {
     loadCustomerSalesmanMapping()
   }, [])
 
-  // Reload when filters change
+  // Debounce search so API is called after user stops typing
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchTerm(searchTerm), 350)
+    return () => clearTimeout(t)
+  }, [searchTerm])
+
+  // Reload when filters change (debounced search used so search works correctly)
   useEffect(() => {
     loadCustomers()
-  }, [filterSalesman, filterStatus, filterCreatedBy, searchTerm])
+  }, [filterSalesman, filterStatus, filterCreatedBy, debouncedSearchTerm])
 
   const loadCustomers = async () => {
     setLoading(true)
@@ -46,7 +52,8 @@ const CustomerAllotment = () => {
           params.status = filterStatus
         }
       }
-      if (searchTerm) params.search = searchTerm
+      const searchTrimmed = (debouncedSearchTerm || '').trim()
+      if (searchTrimmed) params.search = searchTrimmed
 
       const result = await getCustomers(params)
       if (result.success && result.data) {
@@ -67,14 +74,12 @@ const CustomerAllotment = () => {
         
         setCustomers(filteredCustomers)
         
-        // Update selectedSalesmanMap with currently assigned salesmen
+        // Update selectedSalesmanMap from allottedSalesman
         setSelectedSalesmanMap(prev => {
           const newMap = { ...prev }
           raw.forEach(customer => {
-            const assignedSalesmanId = customer.assignedSalesman?._id || customer.assignedSalesman
-            if (assignedSalesmanId) {
-              newMap[customer._id] = assignedSalesmanId
-            }
+            const allottedId = customer.allottedSalesman?._id || customer.allottedSalesman
+            if (allottedId) newMap[customer._id] = allottedId
           })
           return newMap
         })
@@ -120,40 +125,25 @@ const CustomerAllotment = () => {
     }
   }
 
-  // Load customer-salesman mapping from tasks/follow-ups
+  // Load customer-salesman mapping from Customer.allottedSalesman (simple allotment – no task)
   const loadCustomerSalesmanMapping = async () => {
     try {
-      const result = await getFollowUps({})
+      const result = await getCustomers({})
       if (result.success && result.data) {
         const mapping = {}
-        const tasks = Array.isArray(result.data) ? result.data : []
-        
-        // Create mapping: customerId -> {salesmanId, salesmanName}
-        tasks.forEach(task => {
-          if (task.customer) {
-            const customerId = task.customer._id || task.customer
-            const salesmanId = task.salesman?._id || task.salesman
-            const salesmanName = task.salesman?.name || task.hubspot_owner_name || ''
-            
-            // Only update if not already mapped (first task wins) or if this is a more recent allocation
-            if (customerId && salesmanId) {
-              if (!mapping[customerId] || task.createdAt > (mapping[customerId].createdAt || 0)) {
-                mapping[customerId] = {
-                  salesmanId,
-                  salesmanName,
-                  createdAt: task.createdAt
-                }
-              }
+        const list = Array.isArray(result.data) ? result.data : []
+        list.forEach(customer => {
+          const allotted = customer.allottedSalesman?._id || customer.allottedSalesman
+          if (allotted) {
+            mapping[customer._id] = {
+              salesmanId: allotted,
+              salesmanName: customer.allottedSalesman?.name || customer.allottedSalesman?.email || '',
+              allotmentTaskIds: [] // Not used – simple allotment, no tasks
             }
           }
         })
-        
         setCustomerSalesmanMap(mapping)
-        // Reload customers to update filters based on new mapping
-        // Use setTimeout to ensure state is updated before filtering
-        setTimeout(() => {
-          loadCustomers()
-        }, 100)
+        setTimeout(() => loadCustomers(), 100)
       }
     } catch (error) {
       console.error('Error loading customer-salesman mapping:', error)
@@ -171,52 +161,29 @@ const CustomerAllotment = () => {
       return
     }
 
+    // Prevent duplicate: already allotted to this salesman
+    const existing = customerSalesmanMap[customerId]
+    if (existing?.salesmanId?.toString() === salesmanId?.toString()) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Already Allotted',
+        text: 'This customer is already allotted to this salesman.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+
     setLoading(true)
     try {
-      // Get customer details first
-      const customerResult = await getCustomer(customerId)
-      if (!customerResult.success || !customerResult.data) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: 'Failed to load customer details',
-          confirmButtonColor: '#e9931c',
-        })
-        return
-      }
-
-      const customer = customerResult.data
-      const customerName = customer.firstName || customer.name || 'Customer'
-
-      // Create a task (FollowUp) to link customer with salesman
-      // This ensures customer appears in salesman's quotation dropdown
-      const taskResult = await createFollowUp({
-        salesman: salesmanId,
-        customer: customerId,
-        customerName: customerName,
-        customerEmail: customer.email || '',
-        customerPhone: customer.phone || '',
-        type: 'Call',
-        priority: 'Medium',
-        dueDate: new Date().toISOString().split('T')[0],
-        scheduledDate: new Date().toISOString().split('T')[0],
-        description: `Customer allocated: ${customerName}`,
-        notes: 'Customer allocated through Customer Allotment',
-      })
-
-      if (taskResult.success) {
+      const updateResult = await updateCustomer(customerId, { allottedSalesman: salesmanId })
+      if (updateResult.success) {
         Swal.fire({
           icon: 'success',
           title: 'Success!',
-          text: 'Customer allotted successfully! Customer will now appear in salesman\'s quotations.',
+          text: 'Customer allotted successfully! Customer will now appear in salesman\'s list.',
           confirmButtonColor: '#e9931c',
         })
-        // Update the selectedSalesmanMap to show the newly assigned salesman
-        setSelectedSalesmanMap(prev => ({
-          ...prev,
-          [customerId]: salesmanId
-        }))
-        // Reload customer-salesman mapping to reflect new assignment
+        setSelectedSalesmanMap(prev => ({ ...prev, [customerId]: salesmanId }))
         loadCustomerSalesmanMapping()
         loadCustomers()
         setSelectedCustomers([])
@@ -224,7 +191,7 @@ const CustomerAllotment = () => {
         Swal.fire({
           icon: 'error',
           title: 'Failed',
-          text: taskResult.message || 'Failed to allot customer',
+          text: updateResult.message || 'Failed to allot customer',
           confirmButtonColor: '#e9931c',
         })
       }
@@ -234,6 +201,68 @@ const CustomerAllotment = () => {
         icon: 'error',
         title: 'Error',
         text: 'Error allotting customer: ' + (error.message || 'Unknown error'),
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUnassignCustomer = async (customerId) => {
+    const mapping = customerSalesmanMap[customerId]
+    if (!mapping?.salesmanId) {
+      Swal.fire({
+        icon: 'info',
+        title: 'Not Allotted',
+        text: 'This customer is not allotted to any salesman.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+
+    const confirmResult = await Swal.fire({
+      icon: 'question',
+      title: 'Unassign customer?',
+      text: 'This will remove the allotment. The customer will no longer appear in that salesman\'s list.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Unassign',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6b7280',
+    })
+    if (!confirmResult.isConfirmed) return
+
+    setLoading(true)
+    try {
+      const res = await updateCustomer(customerId, { allottedSalesman: null })
+      if (res.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Unassigned',
+          text: 'Customer unassigned successfully. They will no longer appear in the salesman\'s list.',
+          confirmButtonColor: '#e9931c',
+        })
+        setSelectedSalesmanMap(prev => {
+          const next = { ...prev }
+          delete next[customerId]
+          return next
+        })
+        loadCustomerSalesmanMapping()
+        loadCustomers()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: res.message || 'Could not unassign customer.',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (error) {
+      console.error('Error unassigning customer:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error unassigning customer: ' + (error.message || 'Unknown error'),
         confirmButtonColor: '#e9931c',
       })
     } finally {
@@ -284,32 +313,8 @@ const CustomerAllotment = () => {
 
       for (const customerId of selectedCustomers) {
         try {
-          // Get customer details
-          const customerResult = await getCustomer(customerId)
-          if (!customerResult.success || !customerResult.data) {
-            failCount++
-            continue
-          }
-
-          const customer = customerResult.data
-          const customerName = customer.firstName || customer.name || 'Customer'
-
-          // Create a task (FollowUp) to link customer with salesman
-          const taskResult = await createFollowUp({
-            salesman: bulkSalesman,
-            customer: customerId,
-            customerName: customerName,
-            customerEmail: customer.email || '',
-            customerPhone: customer.phone || '',
-            type: 'Call',
-            priority: 'Medium',
-            dueDate: new Date().toISOString().split('T')[0],
-            scheduledDate: new Date().toISOString().split('T')[0],
-            description: `Customer allocated: ${customerName}`,
-            notes: 'Customer allocated through Customer Allotment',
-          })
-
-          if (taskResult.success) {
+          const updateResult = await updateCustomer(customerId, { allottedSalesman: bulkSalesman })
+          if (updateResult.success) {
             successCount++
           } else {
             failCount++
@@ -664,12 +669,11 @@ const CustomerAllotment = () => {
                 <tbody>
                   {customers.map((customer) => {
                     // Check if customer is assigned through tasks
-                    const taskMapping = customerSalesmanMap[customer._id]
-                    const isUnassigned = !taskMapping && !customer.assignedSalesman
+                    const mapping = customerSalesmanMap[customer._id]
+                    const allottedId = customer.allottedSalesman?._id || customer.allottedSalesman
+                    const isUnassigned = !mapping?.salesmanId && !allottedId
                     const isSelected = selectedCustomers.includes(customer._id)
-                    // Get currently assigned salesman ID from tasks or legacy field, or selected one from map
-                    const currentAssignedSalesmanId = taskMapping?.salesmanId?._id || taskMapping?.salesmanId || 
-                                                     customer.assignedSalesman?._id || customer.assignedSalesman
+                    const currentAssignedSalesmanId = mapping?.salesmanId?._id || mapping?.salesmanId || allottedId
                     const selectedSalesman = selectedSalesmanMap[customer._id] || currentAssignedSalesmanId || ''
 
                     return (
@@ -716,9 +720,9 @@ const CustomerAllotment = () => {
                         </td>
                         <td className="py-3 px-3 align-top">
                           {(() => {
-                            // Check customer-salesman mapping from tasks
                             const mapping = customerSalesmanMap[customer._id]
-                            if (mapping && mapping.salesmanId) {
+                            const allotted = customer.allottedSalesman
+                            if (mapping?.salesmanId) {
                               const salesman = getSalesmanInfo(mapping.salesmanId)
                               return (
                                 <div className="font-medium text-gray-800 truncate" title={mapping.salesmanName || salesman?.name || 'Assigned'}>
@@ -726,12 +730,11 @@ const CustomerAllotment = () => {
                                 </div>
                               )
                             }
-                            // Fallback to old assignedSalesman field (for legacy data)
-                            if (customer.assignedSalesman) {
-                              const salesmanName = customer.assignedSalesman.name || getSalesmanInfo(customer.assignedSalesman?._id || customer.assignedSalesman)?.name
+                            if (allotted) {
+                              const name = allotted.name || allotted.email || getSalesmanInfo(allotted._id || allotted)?.name
                               return (
-                                <div className="font-medium text-gray-800 truncate" title={salesmanName}>
-                                  {salesmanName}
+                                <div className="font-medium text-gray-800 truncate" title={name}>
+                                  {name}
                                 </div>
                               )
                             }
@@ -739,7 +742,7 @@ const CustomerAllotment = () => {
                           })()}
                         </td>
                         <td className="py-3 px-3 align-top">
-                          <div className="flex gap-2 items-center">
+                          <div className="flex gap-2 items-center flex-wrap">
                             <select
                               value={selectedSalesman}
                               onChange={(e) => {
@@ -756,7 +759,6 @@ const CustomerAllotment = () => {
                                 const limit = salesman.customerLimit
                                 const remaining = limit !== null && limit !== undefined ? limit - assignedCount : null
                                 const isAtLimit = limit !== null && limit !== undefined && assignedCount >= limit
-                                // Only show count if greater than 0
                                 const countText = assignedCount > 0
                                       ? (limit !== null && limit !== undefined
                                           ? ` (${assignedCount}/${limit}${remaining !== null ? `, ${remaining} remaining` : ''})`
@@ -785,11 +787,20 @@ const CustomerAllotment = () => {
                                   })
                                 }}
                                 className="p-1.5 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors flex-shrink-0"
-                                title="Allot Customer"
+                                title="Allot this customer only (not all selected)"
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
+                              </button>
+                            )}
+                            {currentAssignedSalesmanId && customerSalesmanMap[customer._id]?.salesmanId && (
+                              <button
+                                onClick={() => handleUnassignCustomer(customer._id)}
+                                className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex-shrink-0"
+                                title="Unassign customer (remove allotment)"
+                              >
+                                <FaUnlink className="w-4 h-4" />
                               </button>
                             )}
                           </div>

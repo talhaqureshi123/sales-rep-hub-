@@ -102,6 +102,9 @@ const getMySalesTargets = async (req, res) => {
       if (needsSave) await target.save();
       const obj = target.toObject ? target.toObject() : { ...target };
       obj.currentAmount = currentAmount;
+      obj.remainingAmount = (target.targetAmount != null && target.targetAmount > 0)
+        ? Math.max(0, Number(target.targetAmount) - currentAmount)
+        : null;
       data.push(obj);
     }
 
@@ -156,6 +159,9 @@ const getMySalesTarget = async (req, res) => {
     const currentAmount = await calculateOrderAmount(target);
     const responseData = target.toObject ? target.toObject() : { ...target };
     responseData.currentAmount = currentAmount;
+    responseData.remainingAmount = (target.targetAmount != null && target.targetAmount > 0)
+      ? Math.max(0, Number(target.targetAmount) - currentAmount)
+      : null;
 
     res.status(200).json({
       success: true,

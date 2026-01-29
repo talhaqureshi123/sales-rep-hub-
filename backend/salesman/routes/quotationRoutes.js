@@ -6,6 +6,7 @@ const {
   createQuotation,
   updateQuotation,
   deleteQuotation,
+  sendQuotationByEmail,
 } = require('../controller/quotationController');
 const { protect, authorize } = require('../../middleware/auth');
 
@@ -15,6 +16,7 @@ router.use(authorize('salesman'));
 
 router.route('/').get(getQuotations).post(createQuotation);
 router.route('/:id').get(getQuotation).put(updateQuotation).delete(deleteQuotation);
+router.post('/:id/send-email', sendQuotationByEmail);
 
 module.exports = router;
 

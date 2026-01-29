@@ -23,6 +23,12 @@ const salesTargetSchema = new mongoose.Schema(
       required: [true, 'Please provide target value'],
       min: 0,
     },
+    // Optional: target amount in £ (for display + remaining)
+    targetAmount: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
     period: {
       type: String,
       enum: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'],

@@ -26,12 +26,7 @@ router
   .put(updateSalesOrder)
   .delete(deleteSalesOrder);
 
-router
-  .route('/:id/approve')
-  .put(approveSalesOrder);
-
-router
-  .route('/:id/reject')
-  .put(rejectSalesOrder);
+router.put('/:id/approve', authorize('admin'), approveSalesOrder);
+router.put('/:id/reject', authorize('admin'), rejectSalesOrder);
 
 module.exports = router;

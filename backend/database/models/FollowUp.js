@@ -124,7 +124,7 @@ const followUpSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['Call', 'Visit', 'Email', 'Quote Follow-up', 'Sample Feedback', 'Order Check'],
+    enum: ['Call', 'Visit', 'Email', 'Meeting', 'WhatsApp', 'Other', 'Quote Follow-up', 'Sample Feedback', 'Order Check'],
     required: true,
   },
   priority: {
@@ -321,10 +321,16 @@ followUpSchema.pre('save', async function () {
 });
 
 // Generate follow-up number before validation (so required validation passes)
+// Use max existing numeric part + 1 so we never reuse numbers after deletions (avoids E11000 duplicate key)
 followUpSchema.pre('validate', async function () {
   if (this.isNew && !this.followUpNumber) {
-    const count = await mongoose.model('FollowUp').countDocuments();
-    this.followUpNumber = `FU${String(count + 1).padStart(6, '0')}`;
+    const FollowUpModel = mongoose.model('FollowUp');
+    const result = await FollowUpModel.aggregate([
+      { $project: { num: { $convert: { input: { $substr: [{ $ifNull: ['$followUpNumber', 'FU0'] }, 2, 10] }, to: 'int', onError: 0 } } } },
+      { $group: { _id: null, maxNum: { $max: '$num' } } },
+    ]);
+    const nextNum = (result[0] && result[0].maxNum != null) ? result[0].maxNum + 1 : 1;
+    this.followUpNumber = `FU${String(nextNum).padStart(6, '0')}`;
   }
 });
 

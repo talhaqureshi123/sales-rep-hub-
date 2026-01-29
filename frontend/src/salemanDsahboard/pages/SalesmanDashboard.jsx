@@ -102,9 +102,15 @@ const SalesmanDashboard = ({ onLogout }) => {
           </button>
         </div>
 
-        {/* Main Content */}
-        <div className={`flex-1 overflow-y-auto ${activeTab === 'quotation' ? 'p-0' : 'p-2 sm:p-4'} pb-20 md:pb-24 lg:pb-4`}>
-          {renderContent()}
+        {/* Main Content - full height for Sales Tracking map */}
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${activeTab === 'sales-tracking' ? 'p-0 h-full' : ''} ${activeTab === 'sales-tracking' ? '' : 'overflow-y-auto'} ${activeTab === 'quotation' ? 'p-0' : activeTab === 'sales-tracking' ? '' : 'p-2 sm:p-4'} ${activeTab === 'sales-tracking' ? '' : 'pb-20 md:pb-24 lg:pb-4'}`}>
+          {activeTab === 'sales-tracking' ? (
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              {renderContent()}
+            </div>
+          ) : (
+            renderContent()
+          )}
         </div>
 
         {/* Bottom Navbar - Mobile and Tablet Only */}

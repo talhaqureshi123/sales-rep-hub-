@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getMyCustomers, createCustomer } from '../../services/salemanservices/customerService'
 import { FaWhatsapp, FaEnvelope } from 'react-icons/fa'
+import Swal from 'sweetalert2'
 
 const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [customers, setCustomers] = useState([])
@@ -13,6 +14,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [formData, setFormData] = useState({
     firstName: '',
     contactPerson: '',
+    company: '',
     email: '',
     phone: '',
     address: '',
@@ -22,7 +24,11 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     status: 'Not Visited',
     notes: '',
     competitorInfo: '',
-    view: 'admin_salesman', // View access: 'admin', 'salesman', 'admin_salesman'
+    associatedContactName: '',
+    associatedCompanyName: '',
+    lastContact: '',
+    lastEngagement: '',
+    view: 'admin_salesman',
   })
 
   // Load data on mount
@@ -90,8 +96,9 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     try {
       const customerData = {
         firstName: formData.firstName,
-        name: formData.firstName, // Keep name for backward compatibility
+        name: formData.firstName,
         contactPerson: formData.contactPerson,
+        company: formData.company,
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
@@ -101,16 +108,26 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
         status: formData.status,
         notes: formData.notes,
         competitorInfo: formData.competitorInfo,
+        associatedContactName: formData.associatedContactName,
+        associatedCompanyName: formData.associatedCompanyName,
+        lastContact: formData.lastContact || undefined,
+        lastEngagement: formData.lastEngagement || undefined,
         view: formData.view || 'admin_salesman',
       }
 
       const result = await createCustomer(customerData)
-      
+
       if (result.success) {
-        alert('Customer created successfully!')
+        Swal.fire({
+          icon: 'success',
+          title: 'Customer Added!',
+          text: 'Customer created successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         setFormData({
           firstName: '',
           contactPerson: '',
+          company: '',
           email: '',
           phone: '',
           address: '',
@@ -120,16 +137,30 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
           status: 'Not Visited',
           notes: '',
           competitorInfo: '',
+          associatedContactName: '',
+          associatedCompanyName: '',
+          lastContact: '',
+          lastEngagement: '',
           view: 'admin_salesman',
         })
         handleCloseForm()
         loadCustomers()
       } else {
-        alert(result.message || 'Failed to create customer')
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to create customer',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error creating customer:', error)
-      alert('Error creating customer')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating customer',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -237,6 +268,19 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+                  <input
+                    type="text"
+                    name="company"
+                    value={formData.company}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter company name"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
@@ -284,9 +328,9 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     onChange={handleInputChange}
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="e.g., LE4 0JP, SW1A 1AA"
+                    placeholder="e.g., 75400, 75500 (used for map location)"
                   />
-                  <p className="mt-1 text-xs text-gray-500">UK postcode for accurate directions</p>
+                  <p className="mt-1 text-xs text-gray-500">Postcode for accurate map location and directions</p>
                 </div>
 
                 <div>
@@ -299,10 +343,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value="">Select potential</option>
-                    <option value="Very High">Very High</option>
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
                     <option value="Low">Low</option>
+                    <option value="Very High">Very High</option>
                   </select>
                 </div>
 
@@ -366,40 +410,71 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                   />
                 </div>
 
-                {/* View Access Dropdown - Only for Admin or Salesman */}
-                {(userRole === 'admin' || userRole === 'salesman') && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">View Access *</label>
-                    <select
-                      name="view"
-                      value={formData.view}
-                      onChange={handleInputChange}
-                      disabled={loading}
-                      required
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="admin_salesman">Admin and Salesman</option>
-                      <option value="admin">Admin Only</option>
-                      <option value="salesman">Salesman Only</option>
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">Select who can view this customer</p>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Associated Contact</label>
+                  <input
+                    type="text"
+                    name="associatedContactName"
+                    value={formData.associatedContactName}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter associated contact name"
+                  />
+                </div>
 
-                <div className="flex gap-3 pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Associated Company</label>
+                  <input
+                    type="text"
+                    name="associatedCompanyName"
+                    value={formData.associatedCompanyName}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter associated company name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Contact</label>
+                  <input
+                    type="date"
+                    name="lastContact"
+                    value={formData.lastContact}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Engagement</label>
+                  <input
+                    type="date"
+                    name="lastEngagement"
+                    value={formData.lastEngagement}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="flex gap-3 justify-end pt-4">
                   <button
                     type="button"
                     onClick={handleCloseForm}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-semibold"
+                    disabled={loading}
+                    className="px-6 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 px-4 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading ? 'Creating...' : 'Create Customer'}
+                    {loading ? 'Processing...' : 'Add Customer'}
                   </button>
                 </div>
               </form>

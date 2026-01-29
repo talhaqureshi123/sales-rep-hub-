@@ -97,6 +97,11 @@ const quotationSchema = new mongoose.Schema({
     enum: ['Draft', 'Sent', 'Approved', 'Rejected'],
     default: 'Draft',
   },
+  createdBy: {
+    type: String,
+    enum: ['admin', 'salesman'],
+    default: 'salesman',
+  },
   notes: {
     type: String,
     trim: true,

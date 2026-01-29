@@ -234,6 +234,39 @@ export const getQuotation = async (quotationId) => {
   }
 }
 
+// Send quotation link/details to customer email
+export const sendQuotationEmail = async (quotationId) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${quotationId}/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (response.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('isAuthenticated')
+      localStorage.removeItem('userRole')
+      localStorage.removeItem('userId')
+      window.location.href = '/'
+      return { success: false, message: 'Session expired. Please login again.' }
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error sending quotation email:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Delete quotation
 export const deleteQuotation = async (quotationId) => {
   try {
@@ -274,5 +307,6 @@ export default {
   createQuotation,
   updateQuotation,
   deleteQuotation,
+  sendQuotationEmail,
 }
 

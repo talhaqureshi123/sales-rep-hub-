@@ -115,6 +115,9 @@ const getSalesTargets = async (req, res) => {
       if (needsSave) await target.save();
       const obj = target.toObject ? target.toObject() : { ...target };
       obj.currentAmount = currentAmount;
+      obj.remainingAmount = (target.targetAmount != null && target.targetAmount > 0)
+        ? Math.max(0, Number(target.targetAmount) - currentAmount)
+        : null;
       data.push(obj);
     }
 
@@ -174,6 +177,9 @@ const getSalesTarget = async (req, res) => {
     const currentAmount = await calculateOrderAmount(target);
     const responseData = target.toObject ? target.toObject() : { ...target };
     responseData.currentAmount = currentAmount;
+    responseData.remainingAmount = (target.targetAmount != null && target.targetAmount > 0)
+      ? Math.max(0, Number(target.targetAmount) - currentAmount)
+      : null;
 
     res.status(200).json({
       success: true,
@@ -197,6 +203,7 @@ const createSalesTarget = async (req, res) => {
       targetName,
       targetType,
       targetValue,
+      targetAmount,
       period,
       startDate,
       endDate,
@@ -273,6 +280,7 @@ const createSalesTarget = async (req, res) => {
       targetName,
       targetType,
       targetValue,
+      targetAmount: (targetAmount != null && targetAmount !== '') ? Number(targetAmount) : undefined,
       period,
       startDate: start,
       endDate: end,
@@ -308,6 +316,7 @@ const updateSalesTarget = async (req, res) => {
       targetName,
       targetType,
       targetValue,
+      targetAmount,
       period,
       startDate,
       endDate,
@@ -354,6 +363,7 @@ const updateSalesTarget = async (req, res) => {
     if (targetName !== undefined) target.targetName = targetName;
     if (targetType !== undefined) target.targetType = targetType;
     if (targetValue !== undefined) target.targetValue = targetValue;
+    if (targetAmount !== undefined) target.targetAmount = (targetAmount === '' || targetAmount == null) ? undefined : Number(targetAmount);
     if (period !== undefined) target.period = period;
     // Always update dates if provided (even if empty string, convert to null)
     if (startDate !== undefined) {

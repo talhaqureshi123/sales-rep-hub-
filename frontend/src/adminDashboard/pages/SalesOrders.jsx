@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle, FaEye } from 'react-icons/fa'
-import { getSalesOrders, getSalesOrder, deleteSalesOrder } from '../../services/adminservices/salesOrderService'
+import { getSalesOrders, getSalesOrder, deleteSalesOrder, approveSalesOrder, rejectSalesOrder } from '../../services/adminservices/salesOrderService'
 import SalesOrderForm from './SalesOrderForm'
 import Swal from 'sweetalert2'
 
@@ -43,23 +43,23 @@ const SalesOrders = () => {
 
   useEffect(() => {
     loadOrders()
-    
+
     // Check if form should be opened from achievement click or sales submission
     const shouldOpenForm = localStorage.getItem('openSalesOrderForm') === 'true'
     const editOrderId = localStorage.getItem('editSalesOrderId')
-    
+
     if (shouldOpenForm) {
       setShowForm(true)
       setEditingOrderId(null) // Ensure it's a new form
       localStorage.removeItem('openSalesOrderForm')
     }
-    
+
     if (editOrderId) {
       setEditingOrderId(editOrderId)
       setShowForm(true)
       localStorage.removeItem('editSalesOrderId')
     }
-    
+
   }, [])
 
   useEffect(() => {
@@ -82,17 +82,17 @@ const SalesOrders = () => {
           salesman: o.salesPerson?.name || 'N/A'
         })))
         setOrders(result.data)
-        
+
         // Check if salesman should be redirected after admin approval
         // Check for orders that were Pending and are now Confirmed
         if (user.role === 'salesman' && previousOrders.length > 0) {
           const newlyApproved = result.data.filter(newOrder => {
             const oldOrder = previousOrders.find(o => (o._id || o.id) === (newOrder._id || newOrder.id))
-            return oldOrder && 
-                   oldOrder.orderStatus === 'Pending' && 
-                   newOrder.orderStatus === 'Confirmed'
+            return oldOrder &&
+              oldOrder.orderStatus === 'Pending' &&
+              newOrder.orderStatus === 'Confirmed'
           })
-          
+
           if (newlyApproved.length > 0) {
             Swal.fire({
               icon: 'success',
@@ -106,7 +106,7 @@ const SalesOrders = () => {
             })
           }
         }
-        
+
         // Also check localStorage flag (for immediate redirect after admin approval)
         const shouldRedirect = localStorage.getItem('orderApprovedRedirect') === 'true'
         if (shouldRedirect && user.role === 'salesman') {
@@ -282,15 +282,63 @@ const SalesOrders = () => {
     setViewOrderDetail(null)
   }
 
+  const user = JSON.parse(localStorage.getItem('user') || '{}')
+  const isAdmin = user.role === 'admin'
+  const isSalesman = user.role === 'salesman'
+
+  const handleApproveOrder = async (orderId) => {
+    try {
+      const result = await approveSalesOrder(orderId)
+      if (result.success) {
+        Swal.fire({ icon: 'success', title: 'Approved', text: 'Sales order approved successfully.', confirmButtonColor: '#e9931c' })
+        loadOrders()
+        if (viewOrderId === orderId) { setViewOrderDetail(null); setViewOrderId(null) }
+      } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: result.message || 'Failed to approve order', confirmButtonColor: '#e9931c' })
+      }
+    } catch (err) {
+      console.error(err)
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to approve order', confirmButtonColor: '#e9931c' })
+    }
+  }
+
+  const handleRejectOrder = async (orderId) => {
+    const swalResult = await Swal.fire({
+      title: 'Reject order?',
+      text: 'Optional: Enter rejection reason',
+      input: 'text',
+      inputPlaceholder: 'Reason (optional)',
+      showCancelButton: true,
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Reject'
+    })
+    if (!swalResult.isConfirmed) return
+    const reason = swalResult.value || ''
+    try {
+      const result = await rejectSalesOrder(orderId, reason)
+      if (result.success) {
+        Swal.fire({ icon: 'success', title: 'Rejected', text: 'Sales order has been rejected.', confirmButtonColor: '#e9931c' })
+        loadOrders()
+        if (viewOrderId === orderId) { setViewOrderDetail(null); setViewOrderId(null) }
+      } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: result.message || 'Failed to reject order', confirmButtonColor: '#e9931c' })
+      }
+    } catch (err) {
+      console.error(err)
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to reject order', confirmButtonColor: '#e9931c' })
+    }
+  }
+
   return (
     <div className="w-full">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <FaShoppingCart className="w-8 h-8 text-[#e9931c]" />
-          <h1 className="text-3xl font-bold text-gray-900">Sales Orders</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{isSalesman ? 'My Sales Orders' : 'Sales Orders'}</h1>
         </div>
-        <p className="text-gray-600">Create and manage customer orders</p>
+        <p className="text-gray-600">{isSalesman ? 'View and manage your sales orders' : 'Create and manage customer orders'}</p>
       </div>
 
       {/* Create Order Button */}
@@ -315,11 +363,10 @@ const SalesOrders = () => {
             <button
               key={status}
               onClick={() => setSelectedStatus(status)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                selectedStatus === status
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedStatus === status
                   ? 'bg-[#e9931c] text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               {status}
             </button>
@@ -399,10 +446,17 @@ const SalesOrders = () => {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
                     <h3 className="text-xl font-semibold text-gray-900">Order #{order.soNumber}</h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.orderStatus)}`}>
                       {order.orderStatus}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      order.approvalStatus === 'Pending' ? 'bg-amber-100 text-amber-800' :
+                      order.approvalStatus === 'Approved' ? 'bg-green-100 text-green-800' :
+                      order.approvalStatus === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {order.approvalStatus || '—'}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -425,7 +479,25 @@ const SalesOrders = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
+                  {isAdmin && order.approvalStatus === 'Pending' && (
+                    <>
+                      <button
+                        onClick={() => handleApproveOrder(order._id || order.id)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Approve"
+                      >
+                        <FaCheckCircle className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleRejectOrder(order._id || order.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Reject"
+                      >
+                        <FaTimesCircle className="w-5 h-5" />
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => handleViewOrder(order._id || order.id)}
                     className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -570,7 +642,17 @@ const SalesOrders = () => {
                       <p className="text-sm text-gray-600"><span className="font-medium">Notes:</span> {viewOrderDetail.notes}</p>
                     </div>
                   )}
-                  <div className="mt-4 flex justify-end gap-2">
+                  <div className="mt-4 flex justify-end gap-2 flex-wrap">
+                    {isAdmin && viewOrderDetail.approvalStatus === 'Pending' && (
+                      <>
+                        <button onClick={() => handleApproveOrder(viewOrderDetail._id)} className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center gap-2">
+                          <FaCheckCircle className="w-4 h-4" /> Approve
+                        </button>
+                        <button onClick={() => handleRejectOrder(viewOrderDetail._id)} className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center gap-2">
+                          <FaTimesCircle className="w-4 h-4" /> Reject
+                        </button>
+                      </>
+                    )}
                     <button onClick={() => { closeViewModal(); setEditingOrderId(viewOrderDetail._id); setShowForm(true); }} className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a]">Edit Order</button>
                     <button onClick={closeViewModal} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium hover:bg-gray-300">Close</button>
                   </div>

@@ -1,4 +1,5 @@
 const VisitTarget = require("../../database/models/VisitTarget");
+const FollowUp = require("../../database/models/FollowUp");
 const hubspotService = require("../../services/hubspotService");
 const Customer = require("../../database/models/Customer");
 
@@ -62,6 +63,42 @@ const createVisitRequest = async (req, res) => {
     // visitDate is required by model; if not provided, default to today.
     const finalVisitDate = visitDate ? new Date(visitDate) : new Date();
 
+    // Same time: same salesman cannot have two visits or a visit and a task at the same time (same minute)
+    if (!Number.isNaN(finalVisitDate.getTime())) {
+      const startOfMinute = new Date(
+        finalVisitDate.getFullYear(),
+        finalVisitDate.getMonth(),
+        finalVisitDate.getDate(),
+        finalVisitDate.getHours(),
+        finalVisitDate.getMinutes(),
+        0,
+        0
+      );
+      const endOfMinute = new Date(startOfMinute.getTime() + 60000);
+      const visitConflict = await VisitTarget.findOne({
+        salesman: req.user._id,
+        status: { $in: ["Pending", "In Progress"] },
+        visitDate: { $gte: startOfMinute, $lt: endOfMinute },
+      });
+      if (visitConflict) {
+        return res.status(400).json({
+          success: false,
+          message: "A visit is already scheduled at this time. Please choose a different time.",
+        });
+      }
+      const taskConflict = await FollowUp.findOne({
+        salesman: req.user._id,
+        status: { $ne: "Completed" },
+        dueDate: { $gte: startOfMinute, $lt: endOfMinute },
+      });
+      if (taskConflict) {
+        return res.status(400).json({
+          success: false,
+          message: "A task is already scheduled at this time. Please choose a different time.",
+        });
+      }
+    }
+
     const vt = await VisitTarget.create({
       name,
       targetName: targetName || name, // Store target name if provided
@@ -109,7 +146,8 @@ const getMyVisitRequests = async (req, res) => {
     const requests = await VisitTarget.find(filter)
       .populate("salesman", "name email")
       .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -117,7 +155,11 @@ const getMyVisitRequests = async (req, res) => {
       data: requests,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("getMyVisitRequests error:", error);
+    return res.status(500).json({
+      success: false,
+      message: (error && error.message) ? String(error.message) : "Error fetching visit requests",
+    });
   }
 };
 
@@ -143,7 +185,8 @@ const getVisitTargets = async (req, res) => {
     const visitTargets = await VisitTarget.find(filter)
       .populate("salesman", "name email")
       .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     // 🔁 HUBSPOT SYNC (NON-BLOCKING)
     (async () => {
@@ -188,7 +231,11 @@ const getVisitTargets = async (req, res) => {
       data: visitTargets,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("getVisitTargets error:", error);
+    res.status(500).json({
+      success: false,
+      message: (error && error.message) ? String(error.message) : "Error fetching visit targets",
+    });
   }
 };
 
@@ -200,7 +247,8 @@ const getVisitTarget = async (req, res) => {
       salesman: req.user._id,
     })
       .populate("salesman", "name email")
-      .populate("createdBy", "name email");
+      .populate("createdBy", "name email")
+      .lean();
 
     if (!visitTarget) {
       return res
@@ -210,7 +258,11 @@ const getVisitTarget = async (req, res) => {
 
     res.status(200).json({ success: true, data: visitTarget });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("getVisitTarget error:", error);
+    res.status(500).json({
+      success: false,
+      message: (error && error.message) ? String(error.message) : "Error fetching visit target",
+    });
   }
 };
 
@@ -307,10 +359,10 @@ const updateVisitTargetStatus = async (req, res) => {
 
     if (meterImage !== undefined) visitTarget.meterImage = meterImage;
     
-    // Handle multiple visited area images
+    // Handle multiple visited area images (dedupe so no duplicate images)
     if (visitedAreaImages !== undefined && Array.isArray(visitedAreaImages)) {
-      // If array is provided, use it and also set first image as visitedAreaImage for backward compatibility
-      visitTarget.visitedAreaImages = visitedAreaImages.filter(img => img && img.trim() !== '');
+      const filtered = visitedAreaImages.filter(img => img && img.trim() !== '');
+      visitTarget.visitedAreaImages = [...new Set(filtered)];
       visitTarget.visitedAreaImage = visitTarget.visitedAreaImages[0] || null;
     } else if (visitedAreaImage !== undefined) {
       // If single image is provided, add it to array and set as primary
@@ -354,6 +406,9 @@ const updateVisitTargetStatus = async (req, res) => {
 
     await visitTarget.save();
 
+    // Return plain object to avoid serialization issues
+    const data = visitTarget.toObject ? visitTarget.toObject() : visitTarget;
+
     // HUBSPOT COMPLETION NOTE
     if (status === "Completed" && previousStatus !== "Completed") {
       (async () => {
@@ -389,10 +444,14 @@ const updateVisitTargetStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Visit target updated successfully",
-      data: visitTarget,
+      data,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("updateVisitTargetStatus error:", error);
+    res.status(500).json({
+      success: false,
+      message: (error && error.message) ? String(error.message) : "Error updating visit target",
+    });
   }
 };
 

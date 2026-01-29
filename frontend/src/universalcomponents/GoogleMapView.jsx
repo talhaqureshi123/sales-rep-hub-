@@ -21,9 +21,40 @@ const GoogleMapView = ({
   const [directionsService, setDirectionsService] = useState(null)
   const [directionsRenderer, setDirectionsRenderer] = useState(null)
   const [routeInfo, setRouteInfo] = useState(null)
+  const [showRouteInfoCard, setShowRouteInfoCard] = useState(true) // close button hides the route info card
   const [mapError, setMapError] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const markersRef = useRef([])
+  const lastBoundsKeyRef = useRef('')
+  const trackingCenterSetRef = useRef(false) // When tracking, set center only once to avoid map blinking
+  const prevIsTrackingRef = useRef(false)
+  const userMarkerRef = useRef(null) // Keep user marker ref to update position in place during tracking (avoids blink)
+  const markerLibraryRef = useRef(null) // Cache Advanced Marker library
+
+  const getMarkerLibrary = async () => {
+    if (!window.google?.maps?.importLibrary) return null
+    if (!markerLibraryRef.current) {
+      markerLibraryRef.current = await window.google.maps.importLibrary('marker')
+    }
+    return markerLibraryRef.current
+  }
+
+  const createCircleMarkerContent = (fillColor, size = 14) => {
+    const div = document.createElement('div')
+    div.style.width = `${size}px`
+    div.style.height = `${size}px`
+    div.style.borderRadius = '50%'
+    div.style.background = fillColor
+    div.style.border = '3px solid white'
+    div.style.boxShadow = '0 1px 3px rgba(0,0,0,0.3)'
+    div.style.pointerEvents = 'none'
+    return div
+  }
+
+  // Reset show route card when route is cleared so next route shows the card again
+  useEffect(() => {
+    if (!routeToMilestone) setShowRouteInfoCard(true)
+  }, [routeToMilestone])
 
   // Initialize Google Maps
   useEffect(() => {
@@ -110,10 +141,11 @@ const GoogleMapView = ({
           }
         ]
 
-        // Create map instance with custom styling
+        // Create map instance with custom styling. mapId required for Advanced Markers (DEMO_MAP_ID for testing).
         const mapInstance = new window.google.maps.Map(mapRef.current, {
           center: center,
           zoom: zoom,
+          mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement; use your Map ID in production
           mapTypeId: 'roadmap',
           styles: customMapStyle,
           disableDefaultUI: false,
@@ -178,8 +210,8 @@ const GoogleMapView = ({
         // Initialize Directions Renderer
         const directionsRendererInstance = new window.google.maps.DirectionsRenderer({
           map: mapInstance,
-          suppressMarkers: false,
-          preserveViewport: false,
+          suppressMarkers: true, // Hide Google A/B/C markers – we use our own markers
+          preserveViewport: true, // We call fitBounds ourselves – avoids double zoom/blink
           polylineOptions: {
             strokeColor: '#e9931c', // Orange color matching app theme
             strokeWeight: 6, // Clean line thickness
@@ -269,51 +301,90 @@ const GoogleMapView = ({
   // Minimum zoom so map never goes too far out (avoids grey blank map when sidebar selection has far-apart points)
   const MIN_ZOOM = 12
 
-  // Update map center - Show both user location and selected target
+  // Update map center - Show both user location and selected target (debounce bounds to reduce blinking)
+  // When tracking is on: set center only ONCE so map does not blink/shiver on every GPS update
+  const centerTimeoutRef = useRef(null)
   useEffect(() => {
     if (!map) return
+    if (!isTracking) {
+      trackingCenterSetRef.current = false
+      prevIsTrackingRef.current = false
+    }
+    // When user just clicked Start Tracking (false -> true), allow one center update so map sets correctly, then no blink
+    if (isTracking && !prevIsTrackingRef.current) {
+      trackingCenterSetRef.current = false
+      prevIsTrackingRef.current = true
+    }
+    // Once center is set during tracking, do not run any branch – keeps map completely stable (no blink)
+    if (isTracking && trackingCenterSetRef.current) {
+      if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
+      centerTimeoutRef.current = null
+      return
+    }
 
-    // Priority 1: If we have both user location and selected target - center on selected target with fixed zoom (don't fit bounds if they're far apart)
+    // Priority 1: If we have both user location and selected target - center on selected target with fixed zoom
     if (userLocation && selectedTarget && selectedTarget.latitude && selectedTarget.longitude) {
+      if (isTracking && trackingCenterSetRef.current) return () => {} // No re-center on every GPS update – avoids blink
+      if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
       const selLat = parseFloat(selectedTarget.latitude)
       const selLng = parseFloat(selectedTarget.longitude)
       map.setCenter({ lat: selLat, lng: selLng })
-      map.setZoom(MIN_ZOOM) // Fixed zoom so selecting from sidebar doesn't zoom out too much
+      map.setZoom(MIN_ZOOM)
+      if (isTracking) trackingCenterSetRef.current = true
       const t = setTimeout(() => {
         if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
       }, 150)
       return () => clearTimeout(t)
     }
-    // Priority 2: If we have both user location and route to target, fit bounds to show both
+    // Priority 2: Route is active – set center once when tracking to avoid blinking
     else if (userLocation && routeToMilestone) {
-      const bounds = new window.google.maps.LatLngBounds()
-      bounds.extend({ lat: userLocation.latitude, lng: userLocation.longitude })
-      bounds.extend({ lat: routeToMilestone.to.lat, lng: routeToMilestone.to.lng })
-      map.fitBounds(bounds, { padding: 100 })
-      const t = setTimeout(() => {
-        if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
-      }, 150)
-      return () => clearTimeout(t)
+      if (isTracking && trackingCenterSetRef.current) return () => {}
+      if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
+      const to = routeToMilestone.to
+      if (to && to.lat != null && to.lng != null) {
+        map.setCenter({ lat: to.lat, lng: to.lng })
+        map.setZoom(MIN_ZOOM)
+      } else {
+        map.setCenter({ lat: userLocation.latitude, lng: userLocation.longitude })
+        map.setZoom(MIN_ZOOM)
+      }
+      if (isTracking) trackingCenterSetRef.current = true
+      return () => {}
     }
-    // Priority 3: If user location and visit targets, fit bounds to show user and all targets
+    // Priority 3: User + visit targets – when tracking set bounds only once to avoid map shivering
     else if (userLocation && visitTargets.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds()
-      bounds.extend({ lat: userLocation.latitude, lng: userLocation.longitude })
-      visitTargets.forEach((target) => {
-        if (target.latitude && target.longitude) {
-          bounds.extend({ lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) })
-        }
-      })
-      map.fitBounds(bounds, { padding: 100 })
-      const t = setTimeout(() => {
-        if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
-      }, 150)
-      return () => clearTimeout(t)
-    } 
-    // Priority 4: Only user location available
+      if (isTracking && trackingCenterSetRef.current) return () => {}
+      if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
+      centerTimeoutRef.current = setTimeout(() => {
+        centerTimeoutRef.current = null
+        if (!map) return
+        if (isTracking && trackingCenterSetRef.current) return
+        const bounds = new window.google.maps.LatLngBounds()
+        bounds.extend({ lat: userLocation.latitude, lng: userLocation.longitude })
+        visitTargets.forEach((target) => {
+          if (target.latitude && target.longitude) {
+            bounds.extend({ lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) })
+          }
+        })
+        const key = bounds.toSpan?.() ? `${bounds.getNorthEast().lat()}-${bounds.getSouthWest().lat()}` : ''
+        if (key && key === lastBoundsKeyRef.current) return
+        lastBoundsKeyRef.current = key
+        map.fitBounds(bounds, { padding: 100 })
+        setTimeout(() => {
+          if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
+        }, 150)
+        if (isTracking) trackingCenterSetRef.current = true
+      }, 550)
+      return () => {
+        if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
+      }
+    }
+    // Priority 4: Only user location – when tracking set center only once so map stays stable
     else if (userLocation) {
+      if (isTracking && trackingCenterSetRef.current) return
       map.setCenter({ lat: userLocation.latitude, lng: userLocation.longitude })
       map.setZoom(11) // Reduced from 13 - wider view to show more area around user
+      if (isTracking) trackingCenterSetRef.current = true
     } 
     // Priority 5: Only targets available
     else if (milestones.length > 0 || visitTargets.length > 0) {
@@ -353,254 +424,248 @@ const GoogleMapView = ({
       map.setCenter(center)
       map.setZoom(zoom || 11) // Reduced from 13 - wider default view
     }
-  }, [map, userLocation, milestones, visitTargets, center, zoom, routeToMilestone, selectedTarget])
+  }, [map, userLocation, milestones, visitTargets, center, zoom, routeToMilestone, selectedTarget, isTracking])
 
-  // Add user location marker with blinking effect
+  // Add user location marker (Advanced Marker API) – when tracking, update position in place to avoid blink
   useEffect(() => {
     if (!map || !showUserLocation || !userLocation) return
 
-    // Remove existing user marker
-    markersRef.current.forEach((marker) => {
-      if (marker.type === 'user') {
-        marker.marker.setMap(null)
+    const pos = { lat: userLocation.latitude, lng: userLocation.longitude }
+    const existing = userMarkerRef.current
+
+    const applyUserMarker = async () => {
+      const lib = await getMarkerLibrary()
+      if (!lib?.AdvancedMarkerElement) {
+        // Fallback: legacy Marker if Advanced Marker library not available
+        const userMarker = new window.google.maps.Marker({
+          position: pos,
+          map: map,
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: isTracking ? 14 : 12,
+            fillColor: isTracking ? '#10b981' : '#4285F4',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3,
+          },
+          title: isTracking ? '📍 Tracking Active - Your Location' : 'Your Location',
+          zIndex: 1000,
+        })
+        userMarkerRef.current = userMarker
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: `<div style="padding: 12px;"><strong>${isTracking ? '📍 Tracking Active' : '📍 Your Location'}</strong><div style="font-size: 12px; color: #6b7280;">Lat: ${userLocation.latitude.toFixed(6)}<br>Lng: ${userLocation.longitude.toFixed(6)}</div></div>`,
+        })
+        userMarker.addListener('click', () => infoWindow.open(map, userMarker))
+        markersRef.current.push({ type: 'user', marker: userMarker })
+        return
       }
-    })
-    markersRef.current = markersRef.current.filter((m) => m.type !== 'user')
 
-    // Create user marker with blue circular icon (like Google Maps)
-    const userMarker = new window.google.maps.Marker({
-      position: { lat: userLocation.latitude, lng: userLocation.longitude },
-      map: map,
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: isTracking ? 14 : 12,
-        fillColor: isTracking ? '#10b981' : '#4285F4', // Google Maps blue
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 3,
-      },
-      title: isTracking ? '📍 Tracking Active - Your Location' : 'Your Location',
-      animation: null, // No bounce for user location
-      zIndex: 1000,
-    })
+      const { AdvancedMarkerElement } = lib
 
-    // Add info window with clean styling
-    const infoWindow = new window.google.maps.InfoWindow({
-      content: `
-        <div style="padding: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          <strong style="font-size: 14px; color: #1f2937; display: block; margin-bottom: 8px;">${isTracking ? '📍 Tracking Active' : '📍 Your Location'}</strong>
-          <div style="font-size: 12px; color: #6b7280; line-height: 1.6;">
-            <div>Lat: <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${userLocation.latitude.toFixed(6)}</code></div>
-            <div style="margin-top: 4px;">Lng: <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${userLocation.longitude.toFixed(6)}</code></div>
-          </div>
-        </div>
-      `,
-    })
-
-    userMarker.addListener('click', () => {
-      // Open info window
-      infoWindow.open(map, userMarker)
-    })
-
-    markersRef.current.push({ type: 'user', marker: userMarker })
-  }, [map, userLocation, showUserLocation, isTracking, onUserLocationClick])
-
-  // Add milestone markers
-  useEffect(() => {
-    if (!map) return
-
-    // Remove existing milestone markers
-    markersRef.current.forEach((marker) => {
-      if (marker.type === 'milestone') {
-        marker.marker.setMap(null)
+      // During tracking: update existing Advanced Marker position in place
+      if (isTracking && existing && existing.map === map) {
+        existing.position = pos
+        if (existing.content) {
+          existing.content.style.background = '#10b981'
+          existing.content.style.width = '28px'
+          existing.content.style.height = '28px'
+        }
+        existing.title = '📍 Tracking Active - Your Location'
+        const idx = markersRef.current.findIndex((m) => m.type === 'user')
+        if (idx >= 0) markersRef.current[idx] = { type: 'user', marker: existing }
+        return
       }
-    })
-    markersRef.current = markersRef.current.filter((m) => m.type !== 'milestone')
 
-    // Remove existing circles
-    markersRef.current.forEach((marker) => {
-      if (marker.type === 'circle') {
-        marker.circle.setMap(null)
+      // Remove existing user marker
+      if (existing) {
+        existing.map = null
+        userMarkerRef.current = null
       }
-    })
-    markersRef.current = markersRef.current.filter((m) => m.type !== 'circle')
-
-    // Add milestone markers with red teardrop pin icon (like Google Maps destination)
-    milestones.forEach((milestone) => {
-      const isPending = milestone.status === 'pending'
-      const isCompleted = milestone.status === 'completed'
-      
-      // Use red teardrop pin for pending milestones (like destination in Google Maps)
-      // Use green pin for completed milestones
-      const color = isCompleted ? '#10b981' : '#EA4335' // Green for completed, Red for pending
-      
-      // Use Google Maps default pin icons (red teardrop for destination)
-      const milestoneMarker = new window.google.maps.Marker({
-        position: { lat: milestone.latitude, lng: milestone.longitude },
-        map: map,
-        // Default Google Maps red pin (teardrop shape) for pending milestones
-        // Green pin for completed milestones
-        icon: isCompleted 
-          ? {
-              url: 'http://maps.google.com/mapfiles/ms/icons/green.png',
-              scaledSize: new window.google.maps.Size(32, 32),
-            }
-          : {
-              // Red teardrop pin (Google Maps destination style)
-              url: 'http://maps.google.com/mapfiles/ms/icons/red.png',
-              scaledSize: new window.google.maps.Size(isPending ? 40 : 32, isPending ? 40 : 32),
-            },
-        title: milestone.name,
-        animation: isPending ? window.google.maps.Animation.BOUNCE : null, // Bounce for pending milestones
-        zIndex: isPending ? 2000 : 1500, // Higher z-index for pending
+      markersRef.current.forEach((m) => {
+        if (m.type === 'user') {
+          if (m.marker.setMap) m.marker.setMap(null)
+          else m.marker.map = null
+        }
       })
+      markersRef.current = markersRef.current.filter((m) => m.type !== 'user')
 
-      // Add info window with clean styling
+      const fillColor = isTracking ? '#10b981' : '#4285F4'
+      const userMarker = new AdvancedMarkerElement({
+        map,
+        position: pos,
+        title: isTracking ? '📍 Tracking Active - Your Location' : 'Your Location',
+        content: createCircleMarkerContent(fillColor, isTracking ? 14 : 12),
+      })
+      userMarkerRef.current = userMarker
+
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
-          <div style="padding: 12px; min-width: 220px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-            <strong style="font-size: 15px; color: #1f2937; display: block; margin-bottom: 8px;">${milestone.name}</strong>
-            <div style="font-size: 12px; color: #6b7280; line-height: 1.6;">
-              ${milestone.address ? `<div style="margin-bottom: 6px;">📍 ${milestone.address}</div>` : ''}
-              <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-                <div style="margin-bottom: 4px;"><strong>Status:</strong> <span style="color: ${color}">${milestone.status}</span></div>
-                <div style="margin-top: 6px; font-size: 11px; color: #9ca3af;">
-                  <div>Lat: <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${milestone.latitude.toFixed(6)}</code></div>
-                  <div style="margin-top: 2px;">Lng: <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${milestone.longitude.toFixed(6)}</code></div>
-                </div>
-              </div>
-              <button 
-                onclick="window.dispatchEvent(new CustomEvent('milestoneClick', { detail: ${JSON.stringify(milestone)} }))"
-                style="margin-top: 10px; padding: 8px 16px; background: #e9931c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; width: 100%; transition: background 0.2s;"
-                onmouseover="this.style.background='#d17a0f'"
-                onmouseout="this.style.background='#e9931c'"
-              >
-                View Details
-              </button>
-            </div>
+          <div style="padding: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <strong style="font-size: 14px; color: #1f2937;">${isTracking ? '📍 Tracking Active' : '📍 Your Location'}</strong>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">Lat: ${userLocation.latitude.toFixed(6)}<br>Lng: ${userLocation.longitude.toFixed(6)}</div>
           </div>
         `,
       })
+      userMarker.addListener('click', () => infoWindow.open(map, userMarker))
 
-      milestoneMarker.addListener('click', () => {
-        infoWindow.open(map, milestoneMarker)
-        if (onMarkerClick) {
-          onMarkerClick(milestone)
+      markersRef.current.push({ type: 'user', marker: userMarker })
+    }
+
+    applyUserMarker()
+  }, [map, userLocation, showUserLocation, isTracking, onUserLocationClick])
+
+  // Add milestone markers (Advanced Marker API with PinElement, or legacy Marker fallback)
+  useEffect(() => {
+    if (!map) return
+
+    const cleanup = () => {
+      markersRef.current.forEach((m) => {
+        if (m.type === 'milestone') {
+          if (m.marker.map != null) m.marker.map = null
+          else if (m.marker.setMap) m.marker.setMap(null)
+        }
+        if (m.type === 'circle') m.circle?.setMap(null)
+      })
+      markersRef.current = markersRef.current.filter((m) => m.type !== 'milestone' && m.type !== 'circle')
+    }
+    cleanup()
+
+    const apply = async () => {
+      const lib = await getMarkerLibrary()
+      const useAdvanced = lib?.AdvancedMarkerElement && lib?.PinElement
+
+      milestones.forEach((milestone) => {
+        const isPending = milestone.status === 'pending'
+        const isCompleted = milestone.status === 'completed'
+        const color = isCompleted ? '#10b981' : '#EA4335'
+        const position = { lat: milestone.latitude, lng: milestone.longitude }
+
+        if (useAdvanced) {
+          const pin = new lib.PinElement({
+            background: color,
+            borderColor: '#fff',
+            scale: isPending ? 1.2 : 1,
+          })
+          const milestoneMarker = new lib.AdvancedMarkerElement({
+            map,
+            position,
+            title: milestone.name,
+            content: pin.element,
+          })
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 12px; min-width: 220px;">
+                <strong style="font-size: 15px; color: #1f2937;">${milestone.name}</strong>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
+                  ${milestone.address ? `<div>📍 ${milestone.address}</div>` : ''}
+                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                    <strong>Status:</strong> <span style="color: ${color}">${milestone.status}</span>
+                    <div style="margin-top: 6px; font-size: 11px;">Lat: ${milestone.latitude.toFixed(6)}<br>Lng: ${milestone.longitude.toFixed(6)}</div>
+                  </div>
+                  <button onclick="window.dispatchEvent(new CustomEvent('milestoneClick', { detail: ${JSON.stringify(milestone).replace(/</g, '\\u003c')} }))" style="margin-top: 10px; padding: 8px 16px; background: #e9931c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; width: 100%;">View Details</button>
+                </div>
+              </div>
+            `,
+          })
+          milestoneMarker.addListener('click', () => {
+            infoWindow.open(map, milestoneMarker)
+            if (onMarkerClick) onMarkerClick(milestone)
+          })
+          markersRef.current.push({ type: 'milestone', marker: milestoneMarker })
+        } else {
+          const milestoneMarker = new window.google.maps.Marker({
+            position,
+            map,
+            icon: {
+              url: isCompleted ? 'http://maps.google.com/mapfiles/ms/icons/green.png' : 'http://maps.google.com/mapfiles/ms/icons/red.png',
+              scaledSize: new window.google.maps.Size(isPending ? 40 : 32, isPending ? 40 : 32),
+            },
+            title: milestone.name,
+            zIndex: isPending ? 2000 : 1500,
+          })
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `<div style="padding: 12px;"><strong>${milestone.name}</strong><div style="font-size: 12px; margin-top: 8px;">Status: ${milestone.status}</div><button onclick="window.dispatchEvent(new CustomEvent('milestoneClick', { detail: ${JSON.stringify(milestone).replace(/</g, '\\u003c')} }))" style="margin-top: 10px; padding: 8px 16px; background: #e9931c; color: white; border: none; border-radius: 6px; cursor: pointer;">View Details</button></div>`,
+          })
+          milestoneMarker.addListener('click', () => {
+            infoWindow.open(map, milestoneMarker)
+            if (onMarkerClick) onMarkerClick(milestone)
+          })
+          markersRef.current.push({ type: 'milestone', marker: milestoneMarker })
+        }
+
+        if (showRadius && milestone.status === 'pending' && milestone.radius) {
+          const circle = new window.google.maps.Circle({
+            strokeColor: color,
+            strokeOpacity: 0.3,
+            strokeWeight: 2,
+            fillColor: color,
+            fillOpacity: 0.1,
+            map,
+            center: position,
+            radius: milestone.radius,
+          })
+          markersRef.current.push({ type: 'circle', circle })
         }
       })
+    }
 
-      markersRef.current.push({ type: 'milestone', marker: milestoneMarker })
+    apply()
 
-      // Add radius circle for pending milestones
-      if (showRadius && milestone.status === 'pending' && milestone.radius) {
-        const circle = new window.google.maps.Circle({
-          strokeColor: color,
-          strokeOpacity: 0.3,
-          strokeWeight: 2,
-          fillColor: color,
-          fillOpacity: 0.1,
-          map: map,
-          center: { lat: milestone.latitude, lng: milestone.longitude },
-          radius: milestone.radius, // in meters
-        })
-
-        markersRef.current.push({ type: 'circle', circle: circle })
-      }
-    })
-
-    // Listen for custom milestone click event
     const handleMilestoneClick = (event) => {
-      if (onMarkerClick) {
-        onMarkerClick(event.detail)
-      }
+      if (onMarkerClick) onMarkerClick(event.detail)
     }
     window.addEventListener('milestoneClick', handleMilestoneClick)
 
     return () => {
+      cleanup()
       window.removeEventListener('milestoneClick', handleMilestoneClick)
     }
   }, [map, milestones, showRadius, onMarkerClick])
 
-  // Add visit target markers
+  // Add visit target markers (Advanced Marker API, or legacy Marker fallback; debounce to avoid blink)
+  const visitTargetsTimeoutRef = useRef(null)
   useEffect(() => {
-    if (!map) {
-      // Silently return if map not ready
-      return
+    if (!map) return
+
+    const removeVisitMarkers = () => {
+      markersRef.current.forEach((m) => {
+        if (m.type === 'visitTarget') {
+          if (m.marker.map != null) m.marker.map = null
+          else if (m.marker.setMap) m.marker.setMap(null)
+        }
+        if (m.type === 'visitTargetCircle') m.circle?.setMap(null)
+      })
+      markersRef.current = markersRef.current.filter((m) => m.type !== 'visitTarget' && m.type !== 'visitTargetCircle')
     }
 
     if (!visitTargets || visitTargets.length === 0) {
-      // Silently return if no targets
-      // Still clean up existing markers
-      markersRef.current.forEach((marker) => {
-        if (marker.type === 'visitTarget') {
-          marker.marker.setMap(null)
-        }
-        if (marker.type === 'visitTargetCircle') {
-          marker.circle.setMap(null)
-        }
-      })
-      markersRef.current = markersRef.current.filter((m) => m.type !== 'visitTarget' && m.type !== 'visitTargetCircle')
+      if (visitTargetsTimeoutRef.current) clearTimeout(visitTargetsTimeoutRef.current)
+      removeVisitMarkers()
       return
     }
 
-    console.log('Rendering visit targets on map:', visitTargets.length)
+    if (visitTargetsTimeoutRef.current) clearTimeout(visitTargetsTimeoutRef.current)
+    visitTargetsTimeoutRef.current = setTimeout(async () => {
+      visitTargetsTimeoutRef.current = null
+      if (!map) return
+      removeVisitMarkers()
 
-    // Remove existing visit target markers
-    markersRef.current.forEach((marker) => {
-      if (marker.type === 'visitTarget') {
-        marker.marker.setMap(null)
-      }
-    })
-    markersRef.current = markersRef.current.filter((m) => m.type !== 'visitTarget')
+      const lib = await getMarkerLibrary()
+      const useAdvanced = !!lib?.AdvancedMarkerElement
+      const validTargets = visitTargets.filter(target =>
+        target.latitude && target.longitude &&
+        !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
+      )
 
-    // Remove existing visit target circles
-    markersRef.current.forEach((marker) => {
-      if (marker.type === 'visitTargetCircle') {
-        marker.circle.setMap(null)
-      }
-    })
-    markersRef.current = markersRef.current.filter((m) => m.type !== 'visitTargetCircle')
+      validTargets.forEach((target, index) => {
+        const isCompleted = target.status === 'Completed' || target.status === 'completed'
+        const isPending = target.status === 'Pending' || target.status === 'In Progress'
+        const fillColor = isCompleted ? '#6b7280' : '#e9931c'
+        const lat = parseFloat(target.latitude)
+        const lng = parseFloat(target.longitude)
+        const position = { lat, lng }
 
-    // Add visit target markers with orange/yellow pin icon
-    // Filter out completed targets - only show pending/in-progress targets on map
-    const activeTargets = visitTargets.filter(target => 
-      target.status !== 'Completed' && target.status !== 'completed'
-    )
-    
-    console.log('GoogleMapView - Processing visit targets:', activeTargets.length, '(filtered from', visitTargets.length, 'total)')
-    activeTargets.forEach((target) => {
-      console.log('GoogleMapView - Target:', target.name, 'Coords:', target.latitude, target.longitude)
-      // Validate coordinates
-      if (!target.latitude || !target.longitude || 
-          isNaN(parseFloat(target.latitude)) || 
-          isNaN(parseFloat(target.longitude))) {
-        console.warn('Invalid coordinates for visit target:', target.name, target)
-        return
-      }
-
-      const isPending = target.status === 'Pending' || target.status === 'In Progress'
-      // Completed targets are already filtered out, so no need to check isCompleted
-      
-      // Use custom styled pin for visit targets (clean, professional look)
-      const visitTargetMarker = new window.google.maps.Marker({
-        position: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-        map: map,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: isPending ? 10 : 8,
-          fillColor: '#e9931c', // Orange for active targets (completed are filtered out)
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 3,
-        },
-        title: target.name || 'Visit Target',
-        animation: null, // No animation for cleaner look
-        zIndex: isPending ? 1900 : 1400,
-      })
-
-      // Add info window
-      const infoWindow = new window.google.maps.InfoWindow({
-        content: `
+        const infoContent = `
           <div style="padding: 8px; min-width: 200px;">
             <strong style="font-size: 14px; color: #333;">🎯 ${target.name || 'Visit Target'}</strong>
             <p style="margin: 4px 0 0 0; font-size: 12px; color: #666;">
@@ -612,20 +677,48 @@ const GoogleMapView = ({
               ${target.visitDate ? `<br>Visit Date: ${new Date(target.visitDate).toLocaleDateString()}` : ''}
             </p>
           </div>
-        `,
-      })
+        `
+        const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
 
-      visitTargetMarker.addListener('click', () => {
-        infoWindow.open(map, visitTargetMarker)
-        if (onMarkerClick) {
-          onMarkerClick(target)
+        if (useAdvanced) {
+          const visitTargetMarker = new lib.AdvancedMarkerElement({
+            map,
+            position,
+            title: target.name || 'Visit Target',
+            content: createCircleMarkerContent(fillColor, isPending ? 10 : 8),
+          })
+          visitTargetMarker.addListener('click', () => {
+            infoWindow.open(map, visitTargetMarker)
+            if (onMarkerClick) onMarkerClick(target)
+          })
+          markersRef.current.push({ type: 'visitTarget', marker: visitTargetMarker })
+        } else {
+          const visitTargetMarker = new window.google.maps.Marker({
+            position,
+            map,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: isPending ? 10 : 8,
+              fillColor,
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 3,
+            },
+            title: target.name || 'Visit Target',
+            zIndex: (isPending ? 1900 : 1400) + index,
+          })
+          visitTargetMarker.addListener('click', () => {
+            infoWindow.open(map, visitTargetMarker)
+            if (onMarkerClick) onMarkerClick(target)
+          })
+          markersRef.current.push({ type: 'visitTarget', marker: visitTargetMarker })
         }
       })
+    }, 450)
 
-      markersRef.current.push({ type: 'visitTarget', marker: visitTargetMarker })
-
-      // Proximity radius circle REMOVED - Not needed for visit targets
-    })
+    return () => {
+      if (visitTargetsTimeoutRef.current) clearTimeout(visitTargetsTimeoutRef.current)
+    }
   }, [map, visitTargets, showRadius, onMarkerClick])
 
   // Calculate and display route to milestone
@@ -648,8 +741,8 @@ const GoogleMapView = ({
     if (!directionsRenderer) {
       const directionsRendererInstance = new window.google.maps.DirectionsRenderer({
         map: map,
-        suppressMarkers: false,
-        preserveViewport: false,
+        suppressMarkers: true, // Don't show Google A/B/C – show only our visit markers (dono visits + user)
+        preserveViewport: true, // We call fitBounds ourselves – single zoom update, no double blink
         polylineOptions: {
           strokeColor: '#e9931c', // Orange color matching app theme
           strokeWeight: 7, // Thicker line for better visibility
@@ -676,8 +769,8 @@ const GoogleMapView = ({
     const currentDirectionsService = directionsService || new window.google.maps.DirectionsService()
     const currentDirectionsRenderer = directionsRenderer || new window.google.maps.DirectionsRenderer({
       map: map,
-      suppressMarkers: false,
-      preserveViewport: false,
+      suppressMarkers: true,
+      preserveViewport: true, // We call fitBounds ourselves – single zoom update
       polylineOptions: {
         strokeColor: '#e9931c', // Orange color matching app theme
         strokeWeight: 7, // Thicker line for better visibility
@@ -702,45 +795,65 @@ const GoogleMapView = ({
       origin: { lat: routeToMilestone.from.lat, lng: routeToMilestone.from.lng },
       destination: { lat: routeToMilestone.to.lat, lng: routeToMilestone.to.lng },
       travelMode: window.google.maps.TravelMode.DRIVING,
-      optimizeWaypoints: false, // No waypoints to optimize
-      provideRouteAlternatives: false, // Get best route only
+      provideRouteAlternatives: false,
       avoidHighways: false,
       avoidTolls: false,
-      // Request the best route (shortest/fastest based on traffic)
       unitSystem: window.google.maps.UnitSystem.METRIC,
+    }
+
+    // Add waypoints for multi-stop route (max 25 - Google limit)
+    if (routeToMilestone.waypoints && Array.isArray(routeToMilestone.waypoints) && routeToMilestone.waypoints.length > 0) {
+      request.waypoints = routeToMilestone.waypoints
+        .slice(0, 25)
+        .map((wp) => ({
+          location: new window.google.maps.LatLng(wp.lat, wp.lng),
+          stopover: true,
+        }))
+      request.optimizeWaypoints = false
+    } else {
+      request.optimizeWaypoints = false
     }
 
     currentDirectionsService.route(request, (result, status) => {
       if (status === window.google.maps.DirectionsStatus.OK) {
         currentDirectionsRenderer.setDirections(result)
 
-        // Extract route information
         const route = result.routes[0]
-        const leg = route.legs[0]
-        
+        const legs = route.legs || []
+        const totalDistanceValue = legs.reduce((sum, leg) => sum + (leg.distance?.value || 0), 0)
+        const totalDurationValue = legs.reduce((sum, leg) => sum + (leg.duration?.value || 0), 0)
+        const distanceText = legs.length > 1
+          ? `${(totalDistanceValue / 1000).toFixed(1)} km`
+          : (legs[0]?.distance?.text || '0 km')
+        const durationText = legs.length > 1
+          ? `${Math.round(totalDurationValue / 60)} min`
+          : (legs[0]?.duration?.text || '0 min')
+
         const routeInfoData = {
-          distance: leg.distance.text,
-          duration: leg.duration.text,
-          distanceValue: leg.distance.value, // in meters
-          durationValue: leg.duration.value, // in seconds
-          distanceKm: (leg.distance.value / 1000).toFixed(2), // in km
+          distance: distanceText,
+          duration: durationText,
+          distanceValue: totalDistanceValue,
+          durationValue: totalDurationValue,
+          distanceKm: (totalDistanceValue / 1000).toFixed(2),
         }
         setRouteInfo(routeInfoData)
-        
-        // Pass route info to parent component
+
         if (onRouteInfoChange) {
           onRouteInfoChange(routeInfoData)
         }
 
-        // Fit map to show route with padding
         const bounds = new window.google.maps.LatLngBounds()
         result.routes[0].overview_path.forEach((point) => {
           bounds.extend(point)
         })
-        // Add origin and destination to bounds for better view
         bounds.extend({ lat: routeToMilestone.from.lat, lng: routeToMilestone.from.lng })
         bounds.extend({ lat: routeToMilestone.to.lat, lng: routeToMilestone.to.lng })
-        map.fitBounds(bounds, { padding: 50 })
+        map.fitBounds(bounds, { padding: 80 })
+        const minZoom = 12
+        setTimeout(() => {
+          if (map.getZoom() > 16) map.setZoom(16)
+          if (map.getZoom() < minZoom) map.setZoom(minZoom)
+        }, 100)
       } else {
         console.error('Directions request failed:', status)
         setRouteInfo(null)
@@ -850,25 +963,24 @@ const GoogleMapView = ({
   // DEVELOPMENT PURPOSE ONLY - Console warning (only in development)
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
-      // Only show once, not on every render
       if (!window.__mapsWarningShown) {
         console.warn(
           '%c⚠️ DEVELOPMENT PURPOSE ONLY ⚠️',
           'color: #facc15; font-size: 14px; font-weight: bold; background: #000; padding: 4px;'
         )
         console.warn('Google Maps setup is for DEVELOPMENT/TESTING PURPOSE ONLY.')
-        console.warn('Billing & deprecated Marker API are used temporarily.')
-        console.warn('Will migrate to production-ready setup before deployment.')
+        console.warn('Uses Advanced Marker API (mapId: DEMO_MAP_ID). For production, create your Map ID in Cloud Console.')
         window.__mapsWarningShown = true
       }
     }
   }, [])
 
-  // Convert height prop to proper CSS value
+  // Convert height prop to proper CSS value; when 100% use minHeight 0 so map fills flex area
   const mapHeight = height === '100%' ? '100%' : (typeof height === 'string' ? height : `${height}px`)
+  const wrapperMinHeight = height === '100%' ? 0 : '400px'
   
   return (
-    <div style={{ height: mapHeight, width: '100%', position: 'relative', minHeight: '400px' }} className="rounded-lg overflow-hidden border-2 border-gray-200">
+    <div style={{ height: mapHeight, width: '100%', position: 'relative', minHeight: wrapperMinHeight, display: 'flex', flexDirection: 'column' }} className="rounded-lg overflow-hidden border-2 border-gray-200">
       {/* Loading State */}
       {isLoading && !mapError && (
         <div className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10">
@@ -902,21 +1014,40 @@ const GoogleMapView = ({
         </div>
       )}
       
-      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: '400px', position: 'relative' }}></div>
+      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: 0, flex: 1, position: 'relative' }} />
       
-      {/* Route Info Display */}
-      {routeInfo && routeToMilestone && (
-        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 z-10 border-2 border-[#e9931c]">
+      {/* Route Info Display - with close button */}
+      {routeInfo && routeToMilestone && showRouteInfoCard && (
+        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 pr-10 z-10 border-2 border-[#e9931c] max-w-sm">
+          <button
+            type="button"
+            onClick={() => setShowRouteInfoCard(false)}
+            className="absolute top-2 right-2 p-1 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-2xl">📍</span>
             <div>
-              <h3 className="font-bold text-gray-800 text-sm">Route to {routeToMilestone.milestone.name}</h3>
-              <p className="text-xs text-gray-600">{routeToMilestone.milestone.address}</p>
+              <h3 className="font-bold text-gray-800 text-sm">
+                {routeToMilestone.waypoints && routeToMilestone.waypoints.length > 0
+                  ? `Route – ${(routeToMilestone.waypoints.length + 1)} stops`
+                  : `Route to ${routeToMilestone.milestone?.name || 'target'}`}
+              </h3>
+              <p className="text-xs text-gray-600" title="Destination (last stop)">
+                {(() => {
+                  const d = routeToMilestone.destinationTarget || routeToMilestone.milestone
+                  return d?.name || d?.address || (d?.city && d?.state ? `${d.city}, ${d.state}` : '') || 'Destination'
+                })()}
+              </p>
             </div>
           </div>
           <div className="flex gap-4 mt-3 pt-3 border-t border-gray-200">
             <div>
-              <p className="text-xs text-gray-500">Distance</p>
+              <p className="text-xs text-gray-500">Distance (route)</p>
               <p className="text-lg font-bold text-[#e9931c]">{routeInfo.distance}</p>
             </div>
             <div>
@@ -926,7 +1057,9 @@ const GoogleMapView = ({
           </div>
           <div className="mt-2 pt-2 border-t border-gray-200">
             <p className="text-xs text-gray-500">
-              Coordinates: {routeToMilestone.to.lat.toFixed(6)}, {routeToMilestone.to.lng.toFixed(6)}
+              Destination: {routeToMilestone.to?.lat != null && routeToMilestone.to?.lng != null
+                ? `${Number(routeToMilestone.to.lat).toFixed(6)}, ${Number(routeToMilestone.to.lng).toFixed(6)}`
+                : '—'}
             </p>
           </div>
         </div>

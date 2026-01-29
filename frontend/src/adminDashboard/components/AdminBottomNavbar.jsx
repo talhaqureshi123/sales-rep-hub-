@@ -1,11 +1,11 @@
-import { 
+import {
   FaHome,
   FaBox,
   FaVideo,
   FaShoppingCart,
-  FaUsers, 
-  FaUser, 
-  FaLink, 
+  FaUsers,
+  FaUser,
+  FaLink,
   FaBullseye,
   FaChartLine,
   FaCheckCircle,
@@ -43,11 +43,10 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center flex-1 min-w-[60px] h-full transition-colors ${
-                isActive
+              className={`flex flex-col items-center justify-center flex-1 min-w-[60px] h-full transition-colors ${isActive
                   ? 'text-[#e9931c]'
                   : 'text-gray-600'
-              }`}
+                }`}
               title={tab.label}
             >
               <Icon className={`w-5 h-5 sm:w-6 sm:h-6 mb-0.5 ${isActive ? 'text-[#e9931c]' : 'text-gray-600'}`} />

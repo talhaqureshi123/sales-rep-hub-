@@ -22,13 +22,22 @@ import {
   FaStickyNote,
   FaChevronRight,
   FaEllipsisH,
-  FaFlask
+  FaSyncAlt,
 } from 'react-icons/fa'
 import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp } from '../../services/salemanservices/followUpService'
 import { getMyCustomers, getCustomer } from '../../services/salemanservices/customerService'
-import { getMySamples } from '../../services/salemanservices/sampleService'
+import { createSample } from '../../services/salemanservices/sampleService'
+import { getMyProducts } from '../../services/salemanservices/productService'
 import appTheme from '../../apptheme/apptheme'
 import Swal from 'sweetalert2'
+
+// Local date YYYY-MM-DD (avoids UTC shifting)
+const getLocalDateString = (d = new Date()) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 const TABS = [
   { id: 'All', label: 'All' },
@@ -38,7 +47,7 @@ const TABS = [
   { id: 'Completed', label: 'Completed' },
 ]
 
-// Task types for salesman - only Follow-up and Sample Track
+// Task types for salesman - Follow-up and Sample Track
 const TASK_TYPES = ['Follow-up', 'Sample Track']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
 
@@ -68,27 +77,46 @@ const Tasks = () => {
   const [itemsPerPage, setItemsPerPage] = useState(25)
   const [taskCustomerDetails, setTaskCustomerDetails] = useState(null) // Full customer details for selected task
   const [taskActivities, setTaskActivities] = useState([]) // Activities/notes for selected task
-  const [taskSamples, setTaskSamples] = useState([]) // Samples for selected task
   const [noteInput, setNoteInput] = useState('') // Input for quick note typing
   const noteInputRef = useRef(null) // Ref for note input field
   const [activitiesSearch, setActivitiesSearch] = useState('') // Search filter for activities
 
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [products, setProducts] = useState([]) // Products for sample tracker
+  const [selectedItems, setSelectedItems] = useState([]) // Selected products for sample
+  const [addItemProduct, setAddItemProduct] = useState('')
+  const [addItemQty, setAddItemQty] = useState(1)
+  
   const [formData, setFormData] = useState({
     customer: '',
     customerName: '',
     customerEmail: '',
     customerPhone: '',
+    contactPerson: '',
+    billingAddress: '',
+    deliveryAddress: '',
     type: 'Follow-up',
+    followUpType: 'Call', // Follow-up type (Call, Email, Meeting, etc.)
     priority: 'Medium',
     dueDate: '',
     dueTime: '09:00',
     description: '',
     notes: '',
+    visitDate: getLocalDateString(), // For sample tracker
+    expectedDate: '', // For sample tracker
+    expectedTime: '09:00', // For sample tracker – time for expected date
   })
 
   const filtered = useMemo(() => {
-    let list = tasks
-    
+    const seenIds = new Set()
+    let list = tasks.filter((t) => {
+      const id = (t._id || t.id)?.toString()
+      if (!id || seenIds.has(id)) return false
+      seenIds.add(id)
+      return true
+    })
+
     // Get current salesman's assigned customer IDs
     const assignedCustomerIds = customers.map(c => c._id || c.id).filter(id => id)
     const assignedCustomerEmails = customers.map(c => (c.email || '').toLowerCase()).filter(email => email)
@@ -103,33 +131,29 @@ const Tasks = () => {
       
       if (isHubSpotImported) return false
       
-      // Only show tasks that are:
-      // 1. Created by admin (admin assigned) AND approved AND customer is assigned to salesman
-      // 2. OR created by salesman but approved
+      // Show tasks that are:
+      // 1. Created by salesman – show all (Pending + Approved) so he sees his tasks before and after admin approval
+      // 2. Created by admin AND approved AND customer is assigned to this salesman
       const createdByRole = t.createdBy?.role
       const isAdminCreated = createdByRole === 'admin'
       const isApproved = t.approvalStatus === 'Approved'
-      
-      // Check if task's customer is assigned to this salesman
+
       const taskCustomerId = t.customer?._id || t.customer || null
       const taskCustomerEmail = (t.customerEmail || '').toLowerCase()
       const taskCustomerName = (t.customerName || '').toLowerCase()
-      
-      const isCustomerAssigned = 
+
+      const isCustomerAssigned =
         (taskCustomerId && assignedCustomerIds.some(id => id.toString() === taskCustomerId.toString())) ||
         (taskCustomerEmail && assignedCustomerEmails.includes(taskCustomerEmail)) ||
         (taskCustomerName && assignedCustomerNames.some(name => taskCustomerName.includes(name) || name.includes(taskCustomerName)))
-      
-      // Show if:
-      // - Admin created, approved, AND customer is assigned to salesman
-      // - OR salesman created and approved
+
+      if (createdByRole === 'salesman') {
+        return true
+      }
       if (isAdminCreated && isApproved) {
         return isCustomerAssigned
       }
-      if (createdByRole === 'salesman' && isApproved) {
-        return true
-      }
-      
+
       return false
     })
     
@@ -185,12 +209,53 @@ const Tasks = () => {
         }
       })
     }
+    // Dedupe by business key (same customer + same type + same due date day) so "Call Call" do bar na dikhe
+    const businessKeySeen = new Set()
+    list = list.filter((t) => {
+      const cust = (t.customer?._id || t.customer || t.customerName || '').toString()
+      const type = (t.type || '').toString()
+      const dueDay = t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : ''
+      const key = `${cust}|${type}|${dueDay}`
+      if (businessKeySeen.has(key)) return false
+      businessKeySeen.add(key)
+      return true
+    })
     return list
   }, [tasks, activeTab, search, activeFilters])
 
   useEffect(() => {
     loadTasks()
     loadCustomers()
+    loadProducts()
+  }, [])
+
+  const loadProducts = async () => {
+    try {
+      const result = await getMyProducts()
+      if (result.success && result.data) {
+        setProducts(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error loading products:', error)
+    }
+  }
+
+  // Refresh tasks when user comes back to tab/window or periodically (so admin-deleted task disappears everywhere)
+  useEffect(() => {
+    const refresh = () => loadTasks()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const onWindowFocus = () => refresh()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onWindowFocus)
+    const intervalMs = 90 * 1000
+    const intervalId = setInterval(refresh, intervalMs)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', onWindowFocus)
+      clearInterval(intervalId)
+    }
   }, [])
 
   // Close dropdowns when clicking outside
@@ -211,7 +276,15 @@ const Tasks = () => {
     try {
       const res = await getMyFollowUps({ status: 'All' })
       if (res.success) {
-        setTasks(res.data || [])
+        const raw = res.data || []
+        const seenIds = new Set()
+        const unique = raw.filter((t) => {
+          const id = (t._id || t.id)?.toString()
+          if (!id || seenIds.has(id)) return false
+          seenIds.add(id)
+          return true
+        })
+        setTasks(unique)
       } else {
         setTasks([])
       }
@@ -238,6 +311,118 @@ const Tasks = () => {
     e.preventDefault()
     setSubmitting(true)
     try {
+      const typeLower = (formData.type || '').toLowerCase().trim()
+      
+      // Handle Sample Track - create sample instead of task
+      if (typeLower === 'sample track' || typeLower.includes('sample')) {
+        const custName = (formData.customerName || '').trim()
+        if (!custName) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Required Fields Missing',
+            text: 'Please fill in Customer Name',
+            confirmButtonColor: '#e9931c',
+          })
+          setSubmitting(false)
+          return
+        }
+        if (selectedItems.length === 0) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Add at least one item',
+            text: 'Select a product and quantity, then click + to add. You can add a single product or multiple products.',
+            confirmButtonColor: '#e9931c',
+          })
+          setSubmitting(false)
+          return
+        }
+
+        // Create samples for each selected item (single or multiple)
+        // Only send customer ID if it's in assigned list; otherwise sample is created with name only
+        const customerId = formData.customer && customers.some(c => (c._id || c.id)?.toString() === (formData.customer || '').toString())
+          ? formData.customer
+          : undefined
+        let created = 0
+        let failed = 0
+        let firstError = ''
+        const createdSampleIds = []
+        for (const item of selectedItems) {
+          const payload = {
+            customer: customerId,
+            customerName: custName,
+            customerEmail: (formData.customerEmail || '').trim() || undefined,
+            customerPhone: (formData.customerPhone || '').trim() || undefined,
+            product: item.productId,
+            productName: (item.productName || '').trim() || 'Product',
+            productCode: (item.productCode || '').trim() || undefined,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            visitDate: (formData.visitDate || getLocalDateString()).trim(),
+            expectedDate: (formData.expectedDate || '').trim() || undefined,
+            notes: (formData.notes || '').trim() || undefined,
+          }
+          const result = await createSample(payload)
+          if (result.success) {
+            created++
+            if (result.data?._id) createdSampleIds.push(result.data._id)
+          } else {
+            failed++
+            if (!firstError && result.message) firstError = result.message
+          }
+        }
+
+        if (created > 0) {
+          // Create a follow-up task (Sample Feedback) so it appears in admin Tasks Pending/Approved
+          if (createdSampleIds.length > 0) {
+            const datePart = (formData.expectedDate || formData.visitDate || getLocalDateString()).trim()
+            const timePart = (formData.expectedTime || '09:00').trim().slice(0, 5) // HH:MM
+            const dueDateTime = datePart.includes('T') ? datePart : `${datePart}T${timePart || '09:00'}:00`
+            const taskData = {
+              customer: customerId,
+              customerName: custName,
+              customerEmail: (formData.customerEmail || '').trim() || undefined,
+              customerPhone: (formData.customerPhone || '').trim() || undefined,
+              type: 'Sample Feedback',
+              priority: formData.priority || 'Medium',
+              dueDate: dueDateTime,
+              scheduledDate: dueDateTime,
+              description: `Sample follow-up: ${custName}`,
+              notes: (formData.notes || '').trim() || undefined,
+              relatedSample: createdSampleIds[0],
+            }
+            const taskRes = await createFollowUp(taskData)
+            if (!taskRes.success) {
+              console.warn('Sample task (admin Tasks) could not be created:', taskRes.message)
+            }
+          }
+          const successText = failed > 0
+            ? `${created} ${created === 1 ? 'sample' : 'samples'} created. ${failed} ${failed === 1 ? 'sample' : 'samples'} failed.`
+            : created === 1
+              ? '1 sample created successfully!'
+              : `${created} samples created successfully!`
+          await Swal.fire({
+            icon: 'success',
+            title: 'Success!',
+            text: successText + ' Task is pending admin approval and will appear in admin Tasks.',
+            confirmButtonColor: '#e9931c',
+          })
+          setShowCreateForm(false)
+          resetForm()
+          await loadTasks()
+        } else {
+          const failText = failed === 1 ? 'Failed to create 1 sample.' : `Failed to create ${failed} samples.`
+          const detail = firstError ? ` ${firstError}` : ''
+          await Swal.fire({
+            icon: 'error',
+            title: 'Failed',
+            text: (failed > 0 ? failText : 'Error creating samples') + detail,
+            confirmButtonColor: '#e9931c',
+          })
+        }
+        setSubmitting(false)
+        return
+      }
+
+      // Handle Follow-up - create task
       // Combine date and time for dueDate
       const dueDateTime = formData.dueDate && formData.dueTime
         ? new Date(`${formData.dueDate}T${formData.dueTime}`)
@@ -246,22 +431,34 @@ const Tasks = () => {
       // Map task type to backend enum values
       const mapTaskType = (type) => {
         const typeLower = (type || '').toLowerCase().trim()
-        if (typeLower === 'follow-up' || typeLower === 'follow up' || typeLower.includes('follow')) return 'Call'
-        if (typeLower === 'sample track' || typeLower.includes('sample')) return 'Sample Feedback'
+        if (typeLower === 'follow-up' || typeLower === 'follow up' || typeLower.includes('follow')) {
+          // Use selected follow-up type if available
+          return formData.followUpType || 'Call'
+        }
         return 'Call' // Default fallback
       }
+
+      // Combine notes with customer details (like admin sales form)
+      const notesParts = []
+      if (formData.contactPerson) notesParts.push(`Contact Person: ${formData.contactPerson}`)
+      if (formData.billingAddress) notesParts.push(`Billing Address: ${formData.billingAddress}`)
+      if (formData.deliveryAddress) notesParts.push(`Delivery Address: ${formData.deliveryAddress}`)
+      if (formData.notes) notesParts.push(formData.notes)
+      const combinedNotes = notesParts.length > 0 ? notesParts.join('\n\n') : undefined
 
       const taskData = {
         customer: formData.customer || undefined,
         customerName: formData.customerName,
         customerEmail: formData.customerEmail || undefined,
         customerPhone: formData.customerPhone || undefined,
-        type: mapTaskType(formData.type), // Map to backend enum value
+        type: formData.type === 'Follow-up' && formData.followUpType 
+          ? formData.followUpType 
+          : mapTaskType(formData.type), // Map to backend enum value
         priority: formData.priority,
         scheduledDate: dueDateTime,
         dueDate: dueDateTime,
         description: formData.description || `Follow up with ${formData.customerName}`,
-        notes: formData.notes || undefined,
+        notes: combinedNotes,
         approvalStatus: 'Pending', // Salesman-created tasks need admin approval
       }
 
@@ -285,6 +482,24 @@ const Tasks = () => {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const addItemToSelection = () => {
+    if (!addItemProduct) return
+    const p = products.find(pr => pr._id === addItemProduct)
+    if (!p) return
+    const qty = Math.max(1, parseInt(addItemQty, 10) || 1)
+    if (selectedItems.some(item => item.productId === p._id)) {
+      Swal.fire({ icon: 'info', title: 'Already added', text: 'This product is already in the list.', confirmButtonColor: '#e9931c' })
+      return
+    }
+    setSelectedItems(prev => [...prev, { productId: p._id, productName: p.name || '', productCode: p.productCode || '', quantity: qty }])
+    setAddItemProduct('')
+    setAddItemQty(1)
+  }
+
+  const removeItemFromSelection = (index) => {
+    setSelectedItems(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleTaskClick = async (task) => {
@@ -365,28 +580,6 @@ const Tasks = () => {
           setTaskActivities([])
         }
         
-        // Load samples for this customer
-        try {
-          const customerId = typeof res.data.customer === 'object' ? res.data.customer._id : res.data.customer
-          if (customerId) {
-            const samplesRes = await getMySamples({})
-            if (samplesRes.success && samplesRes.data) {
-              // Filter samples that match customer
-              const matchingSamples = samplesRes.data.filter(s => {
-                const sampleCustomerId = typeof s.customer === 'object' ? s.customer._id : s.customer
-                return sampleCustomerId && customerId.toString() === sampleCustomerId.toString()
-              })
-              setTaskSamples(matchingSamples)
-            } else {
-              setTaskSamples([])
-            }
-          } else {
-            setTaskSamples([])
-          }
-        } catch (e) {
-          console.error('Error loading samples:', e)
-          setTaskSamples([])
-        }
       }
     } catch (e) {
       console.error(e)
@@ -509,18 +702,38 @@ const Tasks = () => {
     }
   }
 
-  const handleCustomerSelect = (customerId) => {
-    const customer = customers.find(c => c._id === customerId)
-    if (customer) {
-      setFormData({
-        ...formData,
-        customer: customerId,
-        customerName: customer.name || '',
-        customerEmail: customer.email || '',
-        customerPhone: customer.phone || '',
-      })
+  const handleCustomerSelect = (customer) => {
+    if (typeof customer === 'string') {
+      // If string ID, find customer
+      const found = customers.find(c => c._id === customer)
+      if (found) customer = found
+      else return
     }
+    setFormData(prev => ({
+      ...prev,
+      customer: customer._id || customer.id,
+      customerName: customer.name || customer.firstName || '',
+      customerEmail: customer.email || '',
+      customerPhone: customer.phone || '',
+      contactPerson: customer.contactPerson || customer.name || customer.firstName || '',
+      billingAddress: customer.address || customer.billingAddress || '',
+      deliveryAddress: customer.address || customer.deliveryAddress || '',
+    }))
+    setCustomerSearch(customer.name || customer.firstName || '')
+    setShowCustomerDropdown(false)
   }
+
+  // Filter customers for dropdown search
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return customers.slice(0, 10)
+    const searchLower = customerSearch.toLowerCase()
+    return customers.filter(c => {
+      const name = (c.name || c.firstName || '').toLowerCase()
+      const email = (c.email || '').toLowerCase()
+      const phone = (c.phone || '').toLowerCase()
+      return name.includes(searchLower) || email.includes(searchLower) || phone.includes(searchLower)
+    }).slice(0, 10)
+  }, [customers, customerSearch])
 
   const resetForm = () => {
     setFormData({
@@ -528,13 +741,25 @@ const Tasks = () => {
       customerName: '',
       customerEmail: '',
       customerPhone: '',
+      contactPerson: '',
+      billingAddress: '',
+      deliveryAddress: '',
       type: 'Follow-up',
+      followUpType: 'Call',
       priority: 'Medium',
       dueDate: '',
       dueTime: '09:00',
       description: '',
       notes: '',
+      visitDate: getLocalDateString(),
+      expectedDate: '',
+      expectedTime: '09:00',
     })
+    setCustomerSearch('')
+    setShowCustomerDropdown(false)
+    setSelectedItems([])
+    setAddItemProduct('')
+    setAddItemQty(1)
   }
 
   const getStatusColor = (status) => {
@@ -736,14 +961,25 @@ const Tasks = () => {
             {loading ? 'Loading...' : `${sortedTasks.length} records`}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-semibold text-white transition-all w-full sm:w-auto justify-center"
-          style={{ backgroundColor: '#ff7a59' }}
-        >
-          <FaPlus className="w-4 h-4" />
-          <span>Create task</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => loadTasks()}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all"
+            title="Refresh list (e.g. after admin deleted a task)"
+          >
+            <FaSyncAlt className="w-4 h-4" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-semibold text-white transition-all flex-1 sm:flex-initial justify-center"
+            style={{ backgroundColor: '#ff7a59' }}
+          >
+            <FaPlus className="w-4 h-4" />
+            <span>Create task</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -1282,197 +1518,480 @@ const Tasks = () => {
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
-              {/* Customer Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer (Optional)
-                </label>
-                <select
-                  value={formData.customer}
-                  onChange={(e) => handleCustomerSelect(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                >
-                  <option value="">Select a customer...</option>
-                  {customers.map((customer) => (
-                    <option key={customer._id} value={customer._id}>
-                      {customer.name} {customer.email ? `(${customer.email})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Customer Name */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.customerName}
-                  onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Enter customer name"
-                />
-              </div>
-
-              {/* Customer Email */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.customerEmail}
-                  onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Enter customer email"
-                />
-              </div>
-
-              {/* Customer Phone */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.customerPhone}
-                  onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Enter customer phone"
-                />
-              </div>
-
-              {/* Type and Priority */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Task Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{
-                      borderColor: appTheme.border.medium,
-                      focusRingColor: appTheme.primary.main
-                    }}
-                  >
-                    {TASK_TYPES.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Priority <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{
-                      borderColor: appTheme.border.medium,
-                      focusRingColor: appTheme.primary.main
-                    }}
-                  >
-                    {PRIORITIES.map((priority) => (
-                      <option key={priority} value={priority}>{priority}</option>
-                    ))}
-                  </select>
+            <form onSubmit={handleCreateTask} className="p-6 space-y-6">
+              {/* Section A: Task Information */}
+              <div className="border-b pb-6">
+                <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section A: Task Information</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Task Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.type}
+                      onChange={(e) => {
+                        const newType = e.target.value
+                        const updates = {
+                          ...formData,
+                          type: newType,
+                          followUpType: newType === 'Follow-up' ? formData.followUpType : 'Call'
+                        }
+                        if (newType === 'Sample Track') {
+                          if (!updates.visitDate) updates.visitDate = getLocalDateString()
+                          if (!updates.expectedDate) updates.expectedDate = ''
+                        }
+                        setFormData(updates)
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    >
+                      {TASK_TYPES.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Priority <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.priority}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    >
+                      {PRIORITIES.map((priority) => (
+                        <option key={priority} value={priority}>{priority}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Follow-up Type - Show only when Follow-up is selected */}
+                  {formData.type === 'Follow-up' && (
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Follow-up Type <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.followUpType}
+                        onChange={(e) => setFormData({ ...formData, followUpType: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                      >
+                        <option value="Call">Call</option>
+                        <option value="Email">Email</option>
+                        <option value="Meeting">Meeting</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="Visit">Visit</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  )}
+                  {formData.type !== 'Sample Track' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Due Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={formData.dueDate}
+                          onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Due Time
+                        </label>
+                        <input
+                          type="time"
+                          value={formData.dueTime}
+                          onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Due Date and Time */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Due Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.dueDate}
-                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{
-                      borderColor: appTheme.border.medium,
-                      focusRingColor: appTheme.primary.main
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Due Time
-                  </label>
-                  <input
-                    type="time"
-                    value={formData.dueTime}
-                    onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{
-                      borderColor: appTheme.border.medium,
-                      focusRingColor: appTheme.primary.main
-                    }}
-                  />
+              {/* Section B: Customer Details */}
+              <div className="border-b pb-6">
+                <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section B: Customer Details</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2 relative">
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Customer <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={customerSearch || formData.customerName}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value)
+                        setShowCustomerDropdown(true)
+                        if (!e.target.value) {
+                          setFormData(prev => ({ ...prev, customer: '', customerName: '', customerEmail: '', customerPhone: '', contactPerson: '', billingAddress: '', deliveryAddress: '' }))
+                        }
+                      }}
+                      onFocus={() => {
+                        setShowCustomerDropdown(true)
+                        if (!customerSearch && formData.customerName) {
+                          setCustomerSearch(formData.customerName)
+                        }
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => setShowCustomerDropdown(false), 200)
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Search customers by name, email, or phone..."
+                      required
+                    />
+                    {showCustomerDropdown && filteredCustomers.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border-2 rounded-lg shadow-lg max-h-60 overflow-y-auto" style={{ borderColor: appTheme.border.medium }}>
+                        {filteredCustomers.map(customer => (
+                          <div
+                            key={customer._id || customer.id}
+                            onClick={() => handleCustomerSelect(customer)}
+                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b"
+                            style={{ borderColor: appTheme.border.light }}
+                          >
+                            <p className="font-medium" style={{ color: appTheme.text.primary }}>{customer.name || customer.firstName}</p>
+                            <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+                              {customer.email && `Email: ${customer.email}`}
+                              {customer.phone && ` | Phone: ${customer.phone}`}
+                            </p>
+                            {customer.address && (
+                              <p className="text-xs mt-1" style={{ color: appTheme.text.secondary }}>{customer.address}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Customer Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.customerName}
+                      onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Enter customer name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Contact Person
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.contactPerson}
+                      onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Contact person name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Customer Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.customerEmail}
+                      onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Enter customer email"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Customer Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.customerPhone}
+                      onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Enter customer phone"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Billing Address
+                    </label>
+                    <textarea
+                      value={formData.billingAddress}
+                      onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
+                      rows="3"
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Enter billing address"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Delivery Address
+                    </label>
+                    <textarea
+                      value={formData.deliveryAddress}
+                      onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
+                      rows="3"
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                      placeholder="Enter delivery address"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="e.g., Follow up with sample tracker for salesman"
-                />
-              </div>
+              {/* Section C: Task Details or Sample Tracker */}
+              {formData.type === 'Sample Track' ? (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section C: Sample Details</h2>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Visit Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={formData.visitDate}
+                          onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Expected Date
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.expectedDate}
+                          onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Expected Time
+                        </label>
+                        <input
+                          type="time"
+                          value={formData.expectedTime || '09:00'}
+                          onChange={(e) => setFormData({ ...formData, expectedTime: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                    </div>
 
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Notes
-                </label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={4}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
-                  style={{
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Add any additional notes..."
-                />
-              </div>
+                    {/* Add Items Section */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Add Item (one or more products) <span className="text-red-500">*</span>
+                      </label>
+                      <div
+                        className="flex gap-2 mb-2"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addItemToSelection()
+                          }
+                        }}
+                      >
+                        <select
+                          value={addItemProduct}
+                          onChange={(e) => setAddItemProduct(e.target.value)}
+                          className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        >
+                          <option value="">Select product...</option>
+                          {products.map((product) => (
+                            <option key={product._id} value={product._id}>
+                              {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={addItemQty}
+                          onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-20 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                          placeholder="Qty"
+                        />
+                        <button
+                          type="button"
+                          onClick={addItemToSelection}
+                          className="px-4 py-2 rounded-lg font-medium text-white transition-all"
+                          style={{ backgroundColor: appTheme.primary.main }}
+                          title="Add this product to the list"
+                        >
+                          <FaPlus className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Hint when no items added */}
+                      {selectedItems.length === 0 && (
+                        <p className="mt-2 text-sm" style={{ color: appTheme.text.secondary }}>
+                          Select a product and quantity above, then click <strong>+</strong> or press <strong>Enter</strong> to add. Add at least one item to enable &quot;Create Sample&quot;.
+                        </p>
+                      )}
+
+                      {/* Selected Items List */}
+                      {selectedItems.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Added items ({selectedItems.length}) — add more above if needed
+                          </p>
+                          {selectedItems.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: appTheme.border.medium }}>
+                              <div className="flex-1">
+                                <p className="font-medium" style={{ color: appTheme.text.primary }}>{item.productName}</p>
+                                <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+                                  {item.productCode && `Code: ${item.productCode} | `}Quantity: {item.quantity}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeItemFromSelection(index)}
+                                className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <FaTrash className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Notes
+                      </label>
+                      <textarea
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        rows={4}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Add any additional notes..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section C: Task Details</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Description
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="e.g., Follow up with sample tracker for salesman"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Notes
+                      </label>
+                      <textarea
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        rows={4}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Add any additional notes..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Form Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t" style={{ borderColor: appTheme.border.light }}>
@@ -1492,17 +2011,18 @@ const Tasks = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || (formData.type === 'Sample Track' && selectedItems.length === 0)}
                   className="px-5 py-2 rounded-lg font-medium text-white transition-all disabled:opacity-50"
                   style={{ backgroundColor: appTheme.primary.main }}
+                  title={formData.type === 'Sample Track' && selectedItems.length === 0 ? 'Add at least one product using the + button above' : ''}
                 >
                   {submitting ? (
                     <span className="flex items-center gap-2">
                       <FaSpinner className="animate-spin" />
-                      Creating...
+                      {formData.type === 'Sample Track' ? 'Creating Sample...' : 'Creating...'}
                     </span>
                   ) : (
-                    'Create Task'
+                    formData.type === 'Sample Track' ? 'Create Sample' : 'Create Task'
                   )}
                 </button>
               </div>
@@ -1789,22 +2309,6 @@ const Tasks = () => {
                         >
                           <FaCalendarAlt className="w-4 h-4" />
                           Meeting
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setModalActiveTab('overview')
-                            // Scroll to sample tracking section
-                            setTimeout(() => {
-                              const sampleSection = document.getElementById('sample-tracking-section')
-                              if (sampleSection) {
-                                sampleSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                              }
-                            }, 100)
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <FaFlask className="w-4 h-4" />
-                          Sample Track
                         </button>
                         <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                           <FaEllipsisH className="w-4 h-4" />
@@ -2168,71 +2672,6 @@ const Tasks = () => {
                         </div>
                       </div>
                       
-                      {/* Sample Tracking Section */}
-                      <div id="sample-tracking-section" className="bg-white rounded-lg p-4 border border-gray-200">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                          <FaFlask className="w-4 h-4" />
-                          Sample Tracking
-                        </h3>
-                        {taskSamples && taskSamples.length > 0 ? (
-                          <div className="space-y-3">
-                            {taskSamples.map((sample) => (
-                              <div 
-                                key={sample._id || sample.id} 
-                                className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span className="text-sm font-semibold text-gray-900">
-                                        {sample.sampleNumber || `Sample #${sample._id?.slice(-6) || 'N/A'}`}
-                                      </span>
-                                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                        sample.status === 'Converted' ? 'bg-green-100 text-green-800' :
-                                        sample.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                                        sample.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}>
-                                        {sample.status || 'Pending'}
-                                      </span>
-                                    </div>
-                                    {sample.productName && (
-                                      <p className="text-xs text-gray-500 mb-1">
-                                        Product: <span className="text-gray-900">{sample.productName}</span>
-                                      </p>
-                                    )}
-                                    {sample.customerName && (
-                                      <p className="text-xs text-gray-500 mb-1">
-                                        Customer: <span className="text-gray-900">{sample.customerName}</span>
-                                      </p>
-                                    )}
-                                    {sample.createdAt && (
-                                      <p className="text-xs text-gray-500">
-                                        Created: {new Date(sample.createdAt).toLocaleDateString('en-GB', {
-                                          day: '2-digit',
-                                          month: 'short',
-                                          year: 'numeric'
-                                        })} {new Date(sample.createdAt).toLocaleTimeString('en-GB', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: false
-                                        })}
-                                      </p>
-                                    )}
-                                    {sample.notes && (
-                                      <p className="text-xs text-gray-600 mt-2 pt-2 border-t border-gray-100">
-                                        {sample.notes}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500 italic">No samples found for this task/customer</p>
-                        )}
-                      </div>
                     </div>
                   )}
 

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { getMySalesTargets, getMySalesTargetStats } from '../../services/salemanservices/salesTargetService'
-import { 
-  FaBullseye, 
-  FaTrophy, 
-  FaChartLine, 
+import {
+  FaBullseye,
+  FaTrophy,
+  FaChartLine,
   FaCalendarAlt,
   FaCheckCircle,
   FaTimesCircle,
@@ -279,11 +279,10 @@ const SalesTargets = () => {
             return (
               <div
                 key={target._id}
-                className={`bg-white rounded-lg p-2 border shadow-sm hover:shadow-md transition-all ${
-                  isExceeded 
-                    ? 'border-green-400 bg-gradient-to-br from-green-50 to-white' 
+                className={`bg-white rounded-lg p-2 border shadow-sm hover:shadow-md transition-all ${isExceeded
+                    ? 'border-green-400 bg-gradient-to-br from-green-50 to-white'
                     : 'border-gray-200'
-                }`}
+                  }`}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between mb-1.5">
@@ -325,7 +324,7 @@ const SalesTargets = () => {
                         {formatTargetValue(target.targetValue || 0, target.targetType)}
                       </p>
                     </div>
-                    
+
                     {/* Current Progress */}
                     <div className="bg-white rounded-lg p-1.5 border border-gray-200">
                       <p className="text-xs text-gray-600 mb-0.5 font-medium">
@@ -345,7 +344,7 @@ const SalesTargets = () => {
                         </p>
                       </div>
                     )}
-                    
+
                     {/* Remaining Target or Exceeded */}
                     {isExceeded ? (
                       <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
@@ -379,9 +378,8 @@ const SalesTargets = () => {
                 <div className="mb-1.5">
                   <div className="flex items-center justify-between text-xs mb-0.5">
                     <span className="text-gray-600 font-medium">Progress</span>
-                    <span className={`font-bold text-xs ${
-                      isExceeded ? 'text-green-600' : 'text-gray-800'
-                    }`}>
+                    <span className={`font-bold text-xs ${isExceeded ? 'text-green-600' : 'text-gray-800'
+                      }`}>
                       {isExceeded ? (
                         <span className="flex items-center gap-0.5">
                           {progressPercentage.toFixed(1)}%
@@ -394,17 +392,16 @@ const SalesTargets = () => {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-1.5 relative overflow-hidden">
                     <div
-                      className={`h-1.5 rounded-full transition-all ${
-                        isExceeded
+                      className={`h-1.5 rounded-full transition-all ${isExceeded
                           ? 'bg-gradient-to-r from-green-500 to-green-600'
                           : isCompleted
-                          ? 'bg-green-500'
-                          : progressPercentage >= 75
-                          ? 'bg-blue-500'
-                          : progressPercentage >= 50
-                          ? 'bg-yellow-500'
-                          : 'bg-orange-500'
-                      }`}
+                            ? 'bg-green-500'
+                            : progressPercentage >= 75
+                              ? 'bg-blue-500'
+                              : progressPercentage >= 50
+                                ? 'bg-yellow-500'
+                                : 'bg-orange-500'
+                        }`}
                       style={{ width: `${Math.min(progressPercentage, 100)}%` }}
                     />
                     {isExceeded && (

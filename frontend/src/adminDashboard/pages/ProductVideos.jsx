@@ -17,6 +17,7 @@ import {
   FaLink
 } from 'react-icons/fa'
 import { getProductVideos, createProductVideo, updateProductVideo, deleteProductVideo } from '../../services/adminservices/productVideoService'
+import Swal from 'sweetalert2'
 
 const ProductVideos = () => {
   const [videos, setVideos] = useState([])
@@ -71,17 +72,28 @@ const ProductVideos = () => {
       const result = await getProductVideos()
       if (result.success && result.data) {
         setVideos(result.data)
-        // Initialize filtered videos
         setFilteredVideos(result.data)
       } else {
         console.error('Failed to load videos:', result.message)
         setVideos([])
         setFilteredVideos([])
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to Load',
+          text: result.message || 'Unable to load product videos. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error loading videos:', error)
       setVideos([])
       setFilteredVideos([])
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'An error occurred while loading videos. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -117,16 +129,33 @@ const ProductVideos = () => {
       }
 
       if (result.success) {
-        alert(editingVideo ? 'Video updated successfully!' : 'Video uploaded successfully!')
+        await Swal.fire({
+          icon: 'success',
+          title: editingVideo ? 'Video Updated!' : 'Video Uploaded!',
+          text: editingVideo ? 'Video has been updated successfully.' : 'Video has been uploaded successfully.',
+          confirmButtonColor: '#e9931c',
+          timer: 2500,
+          timerProgressBar: true
+        })
         setShowUploadModal(false)
         resetForm()
         loadVideos()
       } else {
-        alert(result.message || 'Failed to save video')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to Save',
+          text: result.message || 'Failed to save video. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error saving video:', error)
-      alert('Error saving video')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error saving video. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }
@@ -147,22 +176,46 @@ const ProductVideos = () => {
   }
 
   const handleDeleteVideo = async (videoId) => {
-    if (!window.confirm('Are you sure you want to delete this video?')) {
-      return
-    }
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Video?',
+      text: 'Are you sure you want to delete this video? This action cannot be undone.',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete it'
+    })
+    if (!confirmResult.isConfirmed) return
 
     setLoading(true)
     try {
       const result = await deleteProductVideo(videoId)
       if (result.success) {
-        alert('Video deleted successfully!')
+        await Swal.fire({
+          icon: 'success',
+          title: 'Deleted!',
+          text: 'Video has been deleted successfully.',
+          confirmButtonColor: '#e9931c',
+          timer: 2500,
+          timerProgressBar: true
+        })
         loadVideos()
       } else {
-        alert(result.message || 'Failed to delete video')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed to Delete',
+          text: result.message || 'Failed to delete video. Please try again.',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error deleting video:', error)
-      alert('Error deleting video')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting video. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     } finally {
       setLoading(false)
     }

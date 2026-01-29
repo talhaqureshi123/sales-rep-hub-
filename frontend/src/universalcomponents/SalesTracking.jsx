@@ -9,8 +9,14 @@ import { startTracking, stopTracking, getActiveTracking } from '../services/sale
 import { getMyFollowUps } from '../services/salemanservices/followUpService'
 import { getMyCustomers } from '../services/salemanservices/customerService'
 import { createWorker } from 'tesseract.js'
-import { FaPlay, FaStop, FaPause, FaMapMarkerAlt, FaClock, FaCheckCircle, FaCalendarAlt, FaExclamationTriangle, FaArrowRight, FaTimes, FaTasks, FaFlask } from 'react-icons/fa'
+import { FaPlay, FaStop, FaPause, FaMapMarkerAlt, FaClock, FaCheckCircle, FaCalendarAlt, FaExclamationTriangle, FaArrowRight, FaTimes, FaTasks, FaFlask, FaSyncAlt } from 'react-icons/fa'
 import Swal from 'sweetalert2'
+
+const SHIFT_STARTED_DATE_KEY = 'salesTracking_shiftStartedDate'
+const DEFAULT_MAP_CENTER = { lat: 28.6139, lng: 77.2090 } // Fallback when no user location/visits (India)
+const ODOMETER_MIN = 1000
+const ODOMETER_MAX = 999999
+const SWAL_TIMER_SHORT = 3000
 
 const SalesTracking = () => {
   // const [milestones, setMilestones] = useState([]) // COMMENTED OUT - Using Visit Targets only
@@ -24,6 +30,8 @@ const SalesTracking = () => {
   const [rightPanelTab, setRightPanelTab] = useState('visits') // 'visits', 'tasks', 'samples'
   const [showAchievementModal, setShowAchievementModal] = useState(false)
   const [showVisitTargetModal, setShowVisitTargetModal] = useState(false)
+  // Snapshot when modal opens – so modal content doesn't change on parent re-renders (stable modal, no blink)
+  const [visitTargetModalSnapshot, setVisitTargetModalSnapshot] = useState(null) // { distance, routeDistanceKm }
   const [meterReading, setMeterReading] = useState('')
   const [capturedImage, setCapturedImage] = useState(null)
   const [isTracking, setIsTracking] = useState(false)
@@ -43,6 +51,8 @@ const SalesTracking = () => {
   const [shiftEndingMeterImage, setShiftEndingMeterImage] = useState(null) // Ending meter image for shift end
   const [isExtractingShiftEnd, setIsExtractingShiftEnd] = useState(false)
   const [showShiftPhotoCollage, setShowShiftPhotoCollage] = useState(false) // Show shift photo collage
+  // Remaining today pending visits computed at completion time – so modal shows Next visit vs End shift correctly
+  const [remainingPendingAfterComplete, setRemainingPendingAfterComplete] = useState(null)
   const [routeDistanceKm, setRouteDistanceKm] = useState(null) // Route distance from Google Maps
   const [countdown, setCountdown] = useState(null)
   const [showCountdown, setShowCountdown] = useState(false)
@@ -82,43 +92,65 @@ const SalesTracking = () => {
   const [samples, setSamples] = useState([])
   const [selectedFollowUpsForAssignment, setSelectedFollowUpsForAssignment] = useState([])
   const [selectedSamplesForAssignment, setSelectedSamplesForAssignment] = useState([])
+  const [resolvedVisitCoords, setResolvedVisitCoords] = useState({}) // Geocoded coords for visits that have address but no lat/long
   const watchIdRef = useRef(null)
   const countdownIntervalRef = useRef(null)
   const lastLocationSentRef = useRef(null)
   const locationUpdateIntervalRef = useRef(null)
   const lastMapLocationRef = useRef(null) // Store last location sent to map
   const locationUpdateThrottleRef = useRef(null) // Throttle location updates to map
+  const restoredAtRef = useRef(null) // When we restored tracking (so we don’t auto-pause right after coming back)
+  const mountedAtRef = useRef(Date.now()) // When component mounted (reload/tab) – don't auto-pause in first 5s
+  const isAnyModalOpenRef = useRef(false) // Skip location state updates when modal open to prevent modal blink
+  const shiftEndSubmittedRef = useRef(false) // Ensure End shift runs only once per shift
+  const [isSubmittingShiftEnd, setIsSubmittingShiftEnd] = useState(false) // Prevent double submit on End shift (reload/tab) – don’t auto-pause in first 5s
 
-  // Get current user email (salesman)
   const getCurrentUserEmail = () => {
-    return localStorage.getItem('userEmail') || 'salesman@example.com'
+    return localStorage.getItem('userEmail') || ''
   }
 
-  // Calculate distance to visit target
+  // Distance = postcode-based when available so 75400 vs 75500 show different km
   const getDistanceToVisitTarget = (target) => {
     if (!userLocation) return null
-    const distance = calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      target.latitude,
-      target.longitude
-    )
+    const id = target._id || target.id
+    const resolved = resolvedVisitCoords[id]
+    const useResolved = target.pincode && resolved?.latitude != null && resolved?.longitude != null
+    const lat = useResolved ? parseFloat(resolved.latitude) : (target.latitude != null ? parseFloat(target.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+    const lng = useResolved ? parseFloat(resolved.longitude) : (target.longitude != null ? parseFloat(target.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+    if (isNaN(lat) || isNaN(lng)) return null
+    const distance = calculateDistance(userLocation.latitude, userLocation.longitude, lat, lng)
     return formatDistance(distance)
   }
 
-  // Group visits by date
+  // Local date string YYYY-MM-DD for timezone-safe comparison
+  const toLocalDateString = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  const hasStartedShiftToday = () =>
+    typeof localStorage !== 'undefined' && localStorage.getItem(SHIFT_STARTED_DATE_KEY) === toLocalDateString(new Date())
+
+  const isReasonableOdometer = (n) => n >= ODOMETER_MIN && n <= ODOMETER_MAX
+
+  // Group visits by date (timezone-safe: compare local date strings so "today" works correctly)
   const groupVisitsByDate = (targets) => {
     const now = new Date()
+    const todayStr = toLocalDateString(now)
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     today.setHours(0, 0, 0, 0)
-    
+
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
     tomorrow.setHours(0, 0, 0, 0)
-    
+    const tomorrowStr = toLocalDateString(tomorrow)
+
     const endOfWeek = new Date(today)
     endOfWeek.setDate(endOfWeek.getDate() + 7)
     endOfWeek.setHours(23, 59, 59, 999)
+    const endOfWeekStr = toLocalDateString(endOfWeek)
 
     const grouped = {
       today: [],
@@ -137,33 +169,23 @@ const SalesTracking = () => {
 
       try {
         const visitDate = new Date(target.visitDate)
-        // Handle invalid dates
         if (isNaN(visitDate.getTime())) {
           grouped.noDate.push(target)
           return
         }
-        
-        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-        visitDateOnly.setHours(0, 0, 0, 0)
+        const visitStr = toLocalDateString(visitDate)
 
-        const todayTime = today.getTime()
-        const tomorrowTime = tomorrow.getTime()
-        const endOfWeekTime = endOfWeek.getTime()
-        const visitTime = visitDateOnly.getTime()
-
-        if (visitTime === todayTime) {
+        if (visitStr === todayStr) {
           grouped.today.push(target)
-        } else if (visitTime === tomorrowTime) {
+        } else if (visitStr === tomorrowStr) {
           grouped.tomorrow.push(target)
-        } else if (visitTime < todayTime) {
+        } else if (visitStr < todayStr) {
           grouped.past.push(target)
-        } else if (visitTime > tomorrowTime && visitTime <= endOfWeekTime) {
-          // This week includes dates after tomorrow up to end of week (7 days from today)
+        } else if (visitStr > tomorrowStr && visitStr <= endOfWeekStr) {
           grouped.thisWeek.push(target)
-        } else if (visitTime > endOfWeekTime) {
+        } else if (visitStr > endOfWeekStr) {
           grouped.upcoming.push(target)
         } else {
-          // Fallback: should not happen, but add to thisWeek if between today and end of week
           grouped.thisWeek.push(target)
         }
       } catch (e) {
@@ -175,40 +197,47 @@ const SalesTracking = () => {
     return grouped
   }
 
-  // Filter visits based on date filter
+  // Filter visits based on date filter (deduplicated by _id so Past/All show each visit once)
   const filteredVisits = useMemo(() => {
     if (!visitTargets || visitTargets.length === 0) return []
     
+    const seenIds = new Set()
+    const dedupe = (list) => list.filter((t) => {
+      const id = (t._id || t.id)?.toString()
+      if (!id || seenIds.has(id)) return false
+      seenIds.add(id)
+      return true
+    })
+
     let filtered = []
     
     if (dateFilter === 'All') {
-      filtered = visitTargets
+      filtered = dedupe(visitTargets)
     } else {
       const grouped = groupVisitsByDate(visitTargets)
       switch (dateFilter) {
         case 'Today':
-          filtered = grouped.today
+          filtered = dedupe(grouped.today)
           break
         case 'Tomorrow':
-          filtered = grouped.tomorrow
+          filtered = dedupe(grouped.tomorrow)
           break
         case 'This Week':
-          // This Week includes: Today + Tomorrow + Rest of this week (next 7 days)
-          filtered = [...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek]
+          filtered = dedupe([...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek])
           break
         case 'Upcoming':
-          filtered = grouped.upcoming
+          filtered = dedupe(grouped.upcoming)
           break
         case 'Past':
-          filtered = grouped.past
+          filtered = dedupe(grouped.past)
           break
         default:
-          filtered = visitTargets
+          filtered = dedupe(visitTargets)
       }
     }
     
     // Sort by visitDate (includes time) - earliest first
-    return filtered.sort((a, b) => {
+    let sorted = filtered.sort((a, b) => {
       if (!a.visitDate && !b.visitDate) return 0
       if (!a.visitDate) return 1
       if (!b.visitDate) return -1
@@ -218,43 +247,238 @@ const SalesTracking = () => {
       if (isNaN(dateB.getTime())) return -1
       return dateA.getTime() - dateB.getTime()
     })
-  }, [visitTargets, dateFilter])
+
+    // For Today: order by distance (nearest first); use postcode-based coords when available
+    if (dateFilter === 'Today' && userLocation?.latitude != null && userLocation?.longitude != null) {
+      const getLatLng = (t) => {
+        const id = t._id || t.id
+        const resolved = resolvedVisitCoords[id]
+        const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+        const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+        const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+        return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+      }
+      sorted = [...sorted].sort((a, b) => {
+        const posA = getLatLng(a)
+        const posB = getLatLng(b)
+        if (!posA && !posB) return 0
+        if (!posA) return 1
+        if (!posB) return -1
+        const distA = calculateDistance(userLocation.latitude, userLocation.longitude, posA.lat, posA.lng)
+        const distB = calculateDistance(userLocation.latitude, userLocation.longitude, posB.lat, posB.lng)
+        return distA - distB
+      })
+    }
+    return sorted
+  }, [visitTargets, dateFilter, userLocation, resolvedVisitCoords])
   
   // Keep function for backward compatibility
   const getFilteredVisits = () => filteredVisits
 
-  // Get today's visits center for map
+  // Helper: target has valid lat/long (from record or resolved geocode)
+  const hasValidCoords = (target) => {
+    const id = target._id || target.id
+    const resolved = resolvedVisitCoords[id]
+    const useResolved = target.pincode && resolved?.latitude != null && resolved?.longitude != null
+    const lat = useResolved ? parseFloat(resolved.latitude) : (target.latitude != null ? parseFloat(target.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+    const lng = useResolved ? parseFloat(resolved.longitude) : (target.longitude != null ? parseFloat(target.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+    return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+  }
+
+  // Map coords: prefer postcode-based (resolved) when visit has pincode so 75400 and 75500 alag dikhen
+  const visitsForMap = useMemo(() => {
+    const withCoords = filteredVisits.map(target => {
+      const id = target._id || target.id
+      const resolved = resolvedVisitCoords[id]
+      const useResolved = target.pincode && resolved?.latitude != null && resolved?.longitude != null
+      let lat = useResolved ? (resolved?.latitude != null ? parseFloat(resolved.latitude) : null) : (target.latitude != null ? parseFloat(target.latitude) : null)
+      let lng = useResolved ? (resolved?.longitude != null ? parseFloat(resolved.longitude) : null) : (target.longitude != null ? parseFloat(target.longitude) : null)
+      if ((lat == null || isNaN(lat) || lng == null || isNaN(lng)) && id && resolved?.latitude != null && resolved?.longitude != null) {
+        lat = parseFloat(resolved.latitude)
+        lng = parseFloat(resolved.longitude)
+      }
+      if (lat == null || lng == null || isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+      return { ...target, latitude: lat, longitude: lng }
+    }).filter(Boolean)
+
+    // Same postal/area = same geocode point. Offset so DONO markers clearly alag dikhen (ek hi point na lagein)
+    const OFFSET_DEG = 0.004 // ~400m – do pins clearly alag
+    const key = (lat, lng) => `${Number(lat).toFixed(2)}_${Number(lng).toFixed(2)}` // same area (e.g. same pincode) = same group
+    const byPos = {}
+    withCoords.forEach(t => {
+      const k = key(Number(t.latitude), Number(t.longitude))
+      if (!byPos[k]) byPos[k] = []
+      byPos[k].push(t)
+    })
+    const result = []
+    Object.values(byPos).forEach(group => {
+      if (group.length === 1) {
+        result.push(group[0])
+      } else {
+        group.forEach((t, i) => {
+          const angle = (i * 360) / Math.max(group.length, 1) * (Math.PI / 180)
+          const offsetLat = OFFSET_DEG * Math.cos(angle)
+          const offsetLng = OFFSET_DEG * Math.sin(angle)
+          result.push({ ...t, latitude: Number(t.latitude) + offsetLat, longitude: Number(t.longitude) + offsetLng })
+        })
+      }
+    })
+    return result
+  }, [filteredVisits, resolvedVisitCoords])
+
+  // Pending targets with valid coords for route – order: nearest first (kareeb wala pehle), so route = start → nearest visit → next → … → last (last par end meter)
+  const pendingTargetsWithLocation = useMemo(() => {
+    const pending = filteredVisits
+      .filter((t) => t.status === 'Pending' || t.status === 'In Progress')
+      .filter(hasValidCoords)
+
+    if (pending.length === 0) return []
+
+    const getLatLng = (t) => {
+      const id = t._id || t.id
+      const resolved = resolvedVisitCoords[id]
+      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+      return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+    }
+
+    // When we have user location: sort by distance (nearest first) – kharreb wala visit pehle, phir next
+    if (userLocation?.latitude != null && userLocation?.longitude != null) {
+      return [...pending].sort((a, b) => {
+        const posA = getLatLng(a)
+        const posB = getLatLng(b)
+        if (!posA && !posB) return 0
+        if (!posA) return 1
+        if (!posB) return -1
+        const distA = calculateDistance(userLocation.latitude, userLocation.longitude, posA.lat, posA.lng)
+        const distB = calculateDistance(userLocation.latitude, userLocation.longitude, posB.lat, posB.lng)
+        return distA - distB
+      })
+    }
+
+    // Fallback: sort by visitDate
+    return [...pending].sort((a, b) => {
+      if (!a.visitDate && !b.visitDate) return 0
+      if (!a.visitDate) return 1
+      if (!b.visitDate) return -1
+      return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime()
+    })
+  }, [filteredVisits, userLocation, resolvedVisitCoords])
+
+  // Today's Pending/In Progress visits in distance order (nearest first) – for remaining count, Next Visit, and visit numbers
+  const todayPendingVisitsOrdered = useMemo(() => {
+    const todayStr = toLocalDateString(new Date())
+    const pending = (visitTargets || []).filter((t) => {
+      if (t.status !== 'Pending' && t.status !== 'In Progress') return false
+      if (!t.visitDate) return false
+      const vd = new Date(t.visitDate)
+      if (isNaN(vd.getTime())) return false
+      return toLocalDateString(vd) === todayStr
+    })
+    if (pending.length === 0) return []
+
+    const getLatLng = (t) => {
+      const id = t._id || t.id
+      const resolved = resolvedVisitCoords[id]
+      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+      return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+    }
+
+    if (userLocation?.latitude != null && userLocation?.longitude != null) {
+      return [...pending].sort((a, b) => {
+        const posA = getLatLng(a)
+        const posB = getLatLng(b)
+        if (!posA && !posB) return 0
+        if (!posA) return 1
+        if (!posB) return -1
+        const distA = calculateDistance(userLocation.latitude, userLocation.longitude, posA.lat, posA.lng)
+        const distB = calculateDistance(userLocation.latitude, userLocation.longitude, posB.lat, posB.lng)
+        return distA - distB
+      })
+    }
+    return [...pending].sort((a, b) => {
+      if (!a.visitDate && !b.visitDate) return 0
+      if (!a.visitDate) return 1
+      if (!b.visitDate) return -1
+      return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime()
+    })
+  }, [visitTargets, userLocation, resolvedVisitCoords])
+
+  // Today's ALL visits in distance order (nearest first) – for Visit 1, Visit 2, ... numbering
+  const todayVisitsOrdered = useMemo(() => {
+    const todayStr = toLocalDateString(new Date())
+    const todayList = (visitTargets || []).filter((t) => {
+      if (!t.visitDate) return false
+      const vd = new Date(t.visitDate)
+      if (isNaN(vd.getTime())) return false
+      return toLocalDateString(vd) === todayStr
+    })
+    if (todayList.length === 0) return []
+
+    const getLatLng = (t) => {
+      const id = t._id || t.id
+      const resolved = resolvedVisitCoords[id]
+      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+      return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+    }
+
+    if (userLocation?.latitude != null && userLocation?.longitude != null) {
+      return [...todayList].sort((a, b) => {
+        const posA = getLatLng(a)
+        const posB = getLatLng(b)
+        if (!posA && !posB) return 0
+        if (!posA) return 1
+        if (!posB) return -1
+        const distA = calculateDistance(userLocation.latitude, userLocation.longitude, posA.lat, posA.lng)
+        const distB = calculateDistance(userLocation.latitude, userLocation.longitude, posB.lat, posB.lng)
+        return distA - distB
+      })
+    }
+    return [...todayList].sort((a, b) => {
+      if (!a.visitDate && !b.visitDate) return 0
+      if (!a.visitDate) return 1
+      if (!b.visitDate) return -1
+      return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime()
+    })
+  }, [visitTargets, userLocation, resolvedVisitCoords])
+
+  // Visit number (1-based) for today's list: nearest = 1, next = 2, ... (by todayVisitsOrdered)
+  const getVisitNumberForToday = (target) => {
+    const id = (target._id || target.id)?.toString()
+    if (!id) return null
+    const idx = todayVisitsOrdered.findIndex((t) => (t._id || t.id)?.toString() === id)
+    return idx >= 0 ? idx + 1 : null
+  }
+
+  // Get today's visits center for map (timezone-safe)
   const getTodayVisitsCenter = () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const todayStr = toLocalDateString(new Date())
     const todayVisits = visitTargets.filter(v => {
       if (!v.visitDate) return false
       const visitDate = new Date(v.visitDate)
-      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-      return visitDateOnly.getTime() === today.getTime()
+      if (isNaN(visitDate.getTime())) return false
+      return toLocalDateString(visitDate) === todayStr
     })
-    
     if (todayVisits.length === 0) return null
-    
-    // Calculate center of all today's visits
-    let totalLat = 0
-    let totalLng = 0
-    let count = 0
-    
+    let totalLat = 0, totalLng = 0, count = 0
     todayVisits.forEach(visit => {
-      if (visit.latitude && visit.longitude) {
-        totalLat += parseFloat(visit.latitude)
-        totalLng += parseFloat(visit.longitude)
-        count++
+      if (visit.latitude != null && visit.longitude != null) {
+        const lat = parseFloat(visit.latitude)
+        const lng = parseFloat(visit.longitude)
+        if (!isNaN(lat) && !isNaN(lng)) {
+          totalLat += lat
+          totalLng += lng
+          count++
+        }
       }
     })
-    
     if (count === 0) return null
-    
-    return {
-      lat: totalLat / count,
-      lng: totalLng / count
-    }
+    return { lat: totalLat / count, lng: totalLng / count }
   }
 
   // Load tasks (follow-ups) - load all statuses except completed
@@ -265,10 +489,16 @@ const SalesTracking = () => {
       const result = await getMyFollowUps({})
       console.log('Tasks API result:', result)
       if (result.success && result.data) {
-        // Filter out completed tasks for assignment view
         const activeTasks = result.data.filter(t => t.status !== 'Completed')
-        console.log('Active tasks (non-completed):', activeTasks.length)
-        setFollowUps(activeTasks)
+        const seenIds = new Set()
+        const uniqueTasks = activeTasks.filter(t => {
+          const id = (t._id || t.id)?.toString()
+          if (!id || seenIds.has(id)) return false
+          seenIds.add(id)
+          return true
+        })
+        console.log('Active tasks (non-completed, deduped):', uniqueTasks.length)
+        setFollowUps(uniqueTasks)
       } else {
         console.warn('No tasks found or API error:', result.message)
         setFollowUps([])
@@ -279,14 +509,21 @@ const SalesTracking = () => {
     }
   }
 
-  // Load samples using salesman service
+  // Load samples using salesman service (dedupe by _id so no duplicate rows)
   const loadSamples = async () => {
     try {
       const { getMySamples } = await import('../services/salemanservices/sampleService')
       const result = await getMySamples({})
       if (result.success && result.data) {
-        // Filter out converted samples for assignment view
-        const activeSamples = result.data.filter(s => s.status !== 'Converted')
+        const raw = Array.isArray(result.data) ? result.data : []
+        const seen = new Set()
+        const unique = raw.filter((s) => {
+          const id = (s._id || s.id)?.toString()
+          if (!id || seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
+        const activeSamples = unique.filter(s => s.status !== 'Converted')
         setSamples(activeSamples)
       } else {
         setSamples([])
@@ -308,23 +545,12 @@ const SalesTracking = () => {
           return
         }
         
-        // Load visit targets (approved only by backend default)
+        // Load visit targets (approved only by backend default) – keep ALL so list shows every visit; map shows only those with valid coords
         const visitTargetsResult = await getVisitTargets()
         if (visitTargetsResult.success && visitTargetsResult.data) {
-          // Filter out only targets without valid coordinates (show all statuses including completed)
-          const validTargets = visitTargetsResult.data.filter(target => {
-            const lat = parseFloat(target.latitude)
-            const lng = parseFloat(target.longitude)
-            const hasValidCoords = !isNaN(lat) && !isNaN(lng) && 
-              lat >= -90 && lat <= 90 && 
-              lng >= -180 && lng <= 180
-            return hasValidCoords
-          })
-          
-          // Ensure visitDate is properly formatted
-          const processedTargets = validTargets.map(target => {
+          const raw = visitTargetsResult.data || []
+          const processedTargets = raw.map(target => {
             if (target.visitDate) {
-              // Ensure visitDate is a valid Date object
               const visitDate = new Date(target.visitDate)
               if (!isNaN(visitDate.getTime())) {
                 return { ...target, visitDate: visitDate.toISOString() }
@@ -332,9 +558,20 @@ const SalesTracking = () => {
             }
             return target
           })
-          
-          setVisitTargets(processedTargets)
-          console.log(`✅ Loaded ${processedTargets.length} visit targets with dates`)
+          const seenIds = new Set()
+          const uniqueTargets = processedTargets.filter(t => {
+            const id = (t._id || t.id)?.toString()
+            if (!id || seenIds.has(id)) return false
+            seenIds.add(id)
+            return true
+          })
+          setVisitTargets(uniqueTargets)
+          const withCoords = uniqueTargets.filter(t => {
+            const lat = parseFloat(t.latitude)
+            const lng = parseFloat(t.longitude)
+            return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+          })
+          console.log(`✅ Loaded ${uniqueTargets.length} visit targets (${withCoords.length} with coords for map)`)
         } else {
           console.warn('Failed to load visit targets:', visitTargetsResult.message || 'Unknown error')
           setVisitTargets([])
@@ -356,6 +593,52 @@ const SalesTracking = () => {
     loadData()
   }, [])
 
+  // Geocode by postcode so 75400 and 75500 get different locations (distance sahi ho). Run for: no stored coords OR has pincode (re-resolve by postcode)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.google?.maps?.Geocoder) return
+    const needGeocode = filteredVisits.filter(t => {
+      if (!(t._id || t.id)) return false
+      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+      if (hasStored && !t.pincode) return false
+      if (t.pincode) return true
+      const parts = [t.address, t.city, t.state, t.pincode].filter(Boolean)
+      return parts.length > 0 || !!t.name
+    })
+    if (needGeocode.length === 0) return
+    const geocoder = new window.google.maps.Geocoder()
+    let cancelled = false
+    needGeocode.forEach((target, idx) => {
+      const id = target._id || target.id
+      // Prefer postcode for location so 75400 and 75500 resolve to different points (not same "karachi pakistan")
+      let addr = ''
+      if (target.pincode) {
+        const city = target.city || 'Karachi'
+        addr = `${target.pincode}, ${city}, Pakistan`
+      }
+      if (!addr.trim()) {
+        addr = [target.address, target.city, target.state, target.pincode].filter(Boolean).join(', ')
+      }
+      if (!addr.trim()) {
+        if (target.pincode && target.name) addr = `${target.name}, ${target.pincode}, Pakistan`
+        else if (target.pincode) addr = `${target.pincode}, Pakistan`
+        else if (target.name) addr = `${target.name}, Pakistan`
+      }
+      if (!addr.trim()) return
+      setTimeout(() => {
+        if (cancelled) return
+        geocoder.geocode({ address: addr }, (results, status) => {
+          if (cancelled) return
+          if (status === 'OK' && results?.[0]?.geometry?.location) {
+            const lat = results[0].geometry.location.lat()
+            const lng = results[0].geometry.location.lng()
+            setResolvedVisitCoords(prev => ({ ...prev, [id]: { latitude: lat, longitude: lng } }))
+          }
+        })
+      }, idx * 250)
+    })
+    return () => { cancelled = true }
+  }, [filteredVisits])
+
   // Check for missed visits when visitTargets change
   useEffect(() => {
     if (visitTargets.length > 0) {
@@ -372,17 +655,8 @@ const SalesTracking = () => {
       // Load all visit targets (including completed) - admin assigned and approved requests
       const visitTargetsResult = await getVisitTargets()
       if (visitTargetsResult.success && visitTargetsResult.data) {
-        // Filter only by valid coordinates (show all statuses including completed)
-        const validTargets = visitTargetsResult.data.filter(target => {
-          const lat = parseFloat(target.latitude)
-          const lng = parseFloat(target.longitude)
-          const hasValidCoords = !isNaN(lat) && !isNaN(lng) && 
-            lat >= -90 && lat <= 90 && 
-            lng >= -180 && lng <= 180
-          return hasValidCoords
-        })
-        // Ensure visitDate is properly formatted
-        const processedTargets = validTargets.map(target => {
+        const raw = visitTargetsResult.data || []
+        const processedTargets = raw.map(target => {
           if (target.visitDate) {
             const visitDate = new Date(target.visitDate)
             if (!isNaN(visitDate.getTime())) {
@@ -391,8 +665,14 @@ const SalesTracking = () => {
           }
           return target
         })
-        
-        setVisitTargets(processedTargets)
+        const seenIds = new Set()
+        const uniqueTargets = processedTargets.filter(t => {
+          const id = (t._id || t.id)?.toString()
+          if (!id || seenIds.has(id)) return false
+          seenIds.add(id)
+          return true
+        })
+        setVisitTargets(uniqueTargets)
       }
 
       // Load salesman's own visit requests (pending/rejected)
@@ -406,6 +686,28 @@ const SalesTracking = () => {
       console.error('refreshRequestsAndTargets error:', e)
     }
   }
+
+  // Refresh visit targets, tasks, and samples when user comes back to tab/window or periodically (so admin delete reflects everywhere)
+  useEffect(() => {
+    const refresh = () => {
+      refreshRequestsAndTargets()
+      loadFollowUps()
+      loadSamples()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const onWindowFocus = () => refresh()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onWindowFocus)
+    const intervalMs = 90 * 1000 // 90 seconds – so visit/task delete on admin reflects without leaving tab
+    const intervalId = setInterval(refresh, intervalMs)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', onWindowFocus)
+      clearInterval(intervalId)
+    }
+  }, [])
 
   // Load customers for visit request
   const loadCustomers = async () => {
@@ -427,7 +729,8 @@ const SalesTracking = () => {
 
   // Handle customer selection - auto-fill form
   const handleCustomerSelect = (customerId) => {
-    const selectedCustomer = customers.find(c => c._id === customerId)
+    const idStr = customerId ? String(customerId) : ''
+    const selectedCustomer = customers.find(c => String(c._id || c.id) === idStr)
     if (selectedCustomer) {
       // Build customer name from available fields
       const customerName = selectedCustomer.name || 
@@ -440,12 +743,12 @@ const SalesTracking = () => {
         ...prev,
         customerId: selectedCustomer._id,
         customerName: customerName,
-        name: customerName, // Visit name will be customer name
+        name: customerName, // Visit name auto-filled from customer
+        targetName: selectedCustomer.company || customerName,
         address: selectedCustomer.address || prev.address,
         city: selectedCustomer.city || prev.city,
         state: selectedCustomer.state || prev.state,
         pincode: selectedCustomer.pincode || selectedCustomer.postcode || prev.pincode,
-        // Keep existing latitude/longitude or use GPS if available
         latitude: prev.latitude || (userLocation ? String(userLocation.latitude) : ''),
         longitude: prev.longitude || (userLocation ? String(userLocation.longitude) : ''),
       }))
@@ -549,8 +852,8 @@ const SalesTracking = () => {
     if (selectedVisitsForAssignment.length === 0) {
       await Swal.fire({
         icon: 'warning',
-        title: 'No Visits Selected',
-        text: 'Please select at least one visit to assign',
+        title: 'No targets selected',
+        text: 'Please select at least one target to assign',
         confirmButtonColor: '#e9931c'
       })
       return
@@ -685,48 +988,23 @@ const SalesTracking = () => {
     return () => clearInterval(locationRefreshInterval)
   }, [])
 
-  // Load active tracking session on mount - Only restore if pending visits exist
+  // Load active tracking session on mount – restore if backend has active session (don’t stop on reload/tab change)
   useEffect(() => {
     const loadActiveTracking = async () => {
       try {
-        // First load visit targets to check if any pending visits exist
-        const visitTargetsResult = await getVisitTargets()
-        let hasPendingVisits = false
-        
-        if (visitTargetsResult.success && visitTargetsResult.data) {
-          hasPendingVisits = visitTargetsResult.data.some(t => 
-            t.status === 'Pending' || t.status === 'In Progress'
-          )
-        }
-        
-        // Only restore tracking if there are pending visits
-        if (!hasPendingVisits) {
-          console.log('No pending visits found, skipping tracking restoration')
-          // Stop any active tracking in backend if no visits
-          try {
-            const active = await getActiveTracking()
-            if (active && (active._id || active.id)) {
-              console.log('Stopping active tracking - no pending visits')
-              await stopTracking(active._id || active.id, active.startingKilometers || '0', null, null, null, null)
-            }
-          } catch (error) {
-            console.error('Error stopping tracking:', error)
-          }
-          return
-        }
-        
-        // If pending visits exist, restore tracking
         const active = await getActiveTracking()
         if (active && (active._id || active.id)) {
           setActiveTrackingId(active._id || active.id)
-          // Restore tracking state when active tracking is found AND pending visits exist
           setIsTracking(true)
-          // Restore starting kilometers and meter reading
+          restoredAtRef.current = Date.now()
+          try {
+            localStorage.setItem(SHIFT_STARTED_DATE_KEY, toLocalDateString(new Date()))
+          } catch (_) {}
           if (active.startingKilometers) {
             setStartingKilometers(active.startingKilometers.toString())
             setMeterReading(active.startingKilometers.toString())
           }
-          console.log('Active tracking restored:', active._id || active.id)
+          console.log('Active tracking restored after reload:', active._id || active.id)
         }
       } catch (error) {
         console.error('Error loading active tracking:', error)
@@ -735,52 +1013,45 @@ const SalesTracking = () => {
     loadActiveTracking()
   }, [])
 
-  // Restore route when tracking is restored and location/targets are available
+  // Restore route when tracking is restored and location/targets are available (all pending targets)
   useEffect(() => {
-    if (isTracking && visitTargets.length > 0 && !routeToVisitTarget) {
-      // Wait for user location if not available
-      if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
-        console.log('Waiting for user location to restore route...')
-        // Try to get location again
-        getCurrentLocation()
-          .then((location) => {
-            if (location && location.latitude && location.longitude) {
-              setUserLocation(location)
-            }
-          })
-          .catch((error) => {
-            console.error('Error getting location for route restoration:', error)
-          })
-        return
-      }
-      
-      // Find first pending visit target for route (prioritize today's visits)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const todayPendingTarget = visitTargets.find(t => {
-        if (t.status !== 'Pending' && t.status !== 'In Progress') return false
-        if (!t.visitDate) return false
-        const visitDate = new Date(t.visitDate)
-        const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-        return visitDateOnly.getTime() === today.getTime()
-      })
-      
-      // If no today's visit, find any pending target
-      const firstPendingTarget = todayPendingTarget || visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
-      
-      if (firstPendingTarget && firstPendingTarget.latitude && firstPendingTarget.longitude) {
-        setRouteToVisitTarget({
-          from: { lat: userLocation.latitude, lng: userLocation.longitude },
-          to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
-          target: firstPendingTarget
+    if (!isTracking || pendingTargetsWithLocation.length === 0 || routeToVisitTarget) return
+    if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
+      getCurrentLocation()
+        .then((location) => {
+          if (location && location.latitude && location.longitude) setUserLocation(location)
         })
-        console.log('Route restored for tracking:', firstPendingTarget.name)
-      }
+        .catch((err) => console.error('Error getting location for route restoration:', err))
+      return
     }
-  }, [isTracking, userLocation, visitTargets, routeToVisitTarget])
+    const from = { lat: userLocation.latitude, lng: userLocation.longitude }
+    const ordered = [...pendingTargetsWithLocation].sort((a, b) => {
+      const distA = calculateDistance(userLocation.latitude, userLocation.longitude, parseFloat(a.latitude), parseFloat(a.longitude))
+      const distB = calculateDistance(userLocation.latitude, userLocation.longitude, parseFloat(b.latitude), parseFloat(b.longitude))
+      return distA - distB
+    })
+    if (ordered.length === 1) {
+      const t = ordered[0]
+      setRouteToVisitTarget({
+        from,
+        to: { lat: parseFloat(t.latitude), lng: parseFloat(t.longitude) },
+        target: t
+      })
+      console.log('Route restored for tracking:', t.name)
+    } else {
+      const last = ordered[ordered.length - 1]
+      setRouteToVisitTarget({
+        from,
+        to: { lat: parseFloat(last.latitude), lng: parseFloat(last.longitude) },
+        target: ordered[0],
+        waypoints: ordered.slice(0, -1).map((t) => ({ lat: parseFloat(t.latitude), lng: parseFloat(t.longitude) }))
+      })
+      console.log('Route restored – all targets:', ordered.length, 'stops')
+    }
+  }, [isTracking, userLocation, pendingTargetsWithLocation, routeToVisitTarget])
 
   // Auto-select nearest pending target when both location and targets are available
-  // BUT only show route when tracking is started
+  // Route is built by all-targets effect when tracking; when not tracking clear route
   useEffect(() => {
     if (userLocation && visitTargets.length > 0 && !selectedVisitTarget) {
       const pendingTargets = visitTargets.filter(t => t.status === 'Pending' || t.status === 'In Progress')
@@ -801,30 +1072,43 @@ const SalesTracking = () => {
           return targetDist < nearestDist ? target : nearest
         })
         setSelectedVisitTarget(nearestTarget)
-        // Only show route if tracking is started
-        if (isTracking) {
-          setRouteToVisitTarget({
-            from: { lat: userLocation.latitude, lng: userLocation.longitude },
-            to: { lat: parseFloat(nearestTarget.latitude), lng: parseFloat(nearestTarget.longitude) },
-            target: nearestTarget
-          })
-        } else {
-          // Clear route if not tracking
-          setRouteToVisitTarget(null)
-        }
       }
     }
+    // Clear route only when tracking off AND no pending visits (don’t clear on pause after one visit – keep route to next)
+    const pendingCount = visitTargets.filter(t => (t.status === 'Pending' || t.status === 'In Progress') && t.latitude && t.longitude).length
+    if (!isTracking && pendingCount === 0) {
+      setRouteToVisitTarget(null)
+    }
   }, [userLocation, visitTargets, isTracking])
+
+  // Keep ref in sync so watch callback can skip setUserLocation when modal open (prevents modal blink)
+  useEffect(() => {
+    isAnyModalOpenRef.current = !!(showVisitTargetModal || showCompletionModal || showStartModal || showShiftEndModal)
+  }, [showVisitTargetModal, showCompletionModal, showStartModal, showShiftEndModal])
 
   // Watch position for real-time tracking and send location updates
   useEffect(() => {
     if (isTracking) {
       watchIdRef.current = watchPosition(
         (position) => {
-          // Only update location if it changed significantly (more than 10 meters) or first update
+          // Skip location state update when any modal is open – prevents modal blink
+          if (isAnyModalOpenRef.current) {
+            checkVisitTargetProximity(position)
+            const token = localStorage.getItem('token')
+            if (token && position.latitude && position.longitude) {
+              const lastSent = lastLocationSentRef.current
+              const now = Date.now()
+              if (!lastSent || (now - lastSent) >= 30000) {
+                saveLocation(position.latitude, position.longitude, position.accuracy || null)
+                  .then((result) => { if (result.success) lastLocationSentRef.current = now })
+                  .catch(() => {})
+              }
+            }
+            return
+          }
+          // Only update location if it changed significantly (50m) or first update – reduces map re-renders and blinking
           const shouldUpdateLocation = () => {
             if (!lastMapLocationRef.current) return true
-            
             const lastLoc = lastMapLocationRef.current
             const distance = calculateDistance(
               lastLoc.latitude,
@@ -832,17 +1116,21 @@ const SalesTracking = () => {
               position.latitude,
               position.longitude
             )
-            
-            // Update if moved more than 10 meters (to reduce map flickering)
-            return distance > 10
+            return distance > 50
           }
-          
-          // Throttle location updates to map (max once per 2 seconds)
+
           const now = Date.now()
           const lastUpdate = locationUpdateThrottleRef.current || 0
           const timeSinceLastUpdate = now - lastUpdate
-          
-          if (shouldUpdateLocation() && timeSinceLastUpdate >= 2000) {
+          const isFirstUpdate = !lastMapLocationRef.current
+
+          // First location when tracking starts – apply immediately so map centers once without delay
+          if (isFirstUpdate) {
+            setUserLocation(position)
+            lastMapLocationRef.current = position
+            locationUpdateThrottleRef.current = now
+          } else if (shouldUpdateLocation() && timeSinceLastUpdate >= 6000) {
+            // Throttle: min 6 seconds between state updates so map stays stable
             setUserLocation(position)
             lastMapLocationRef.current = position
             locationUpdateThrottleRef.current = now
@@ -988,37 +1276,92 @@ const SalesTracking = () => {
     setNotifications((prev) => prev.filter((n) => n.id !== id))
   }
 
-  // Handle visit target click
-  const handleVisitTargetClick = (target) => {
-    if (!target || !target.latitude || !target.longitude) return
-    
-    setSelectedVisitTarget(target)
-    setShowVisitTargetModal(true) // Open modal when target is clicked
-    
-    // Update map to center on clicked visit ONLY if tracking is NOT active
-    // If tracking is active, don't update map center (user requirement)
-    if (!isTracking) {
-      // Map center will update via useMemo when selectedVisitTarget changes
-    } else {
-      // When tracking is active, only update route if needed, but don't change map center
-      if (userLocation) {
-        setRouteToVisitTarget({
-          from: { lat: userLocation.latitude, lng: userLocation.longitude },
-          to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-          target: target
-        })
+  // Shared: resolve active tracking ID, stop session in backend, clear local state (no duplication)
+  const stopActiveTrackingAndClearState = useCallback(async (params) => {
+    const {
+      endingKilometers,
+      endingMeterImage = null,
+      visitedAreaImage = null,
+    } = params || {}
+    let trackingId = activeTrackingId
+    if (!trackingId) {
+      try {
+        const active = await getActiveTracking()
+        trackingId = active?._id || active?.id || null
+        if (trackingId) setActiveTrackingId(trackingId)
+      } catch (error) {
+        console.error('Error fetching active tracking:', error)
       }
     }
+    if (trackingId) {
+      try {
+        const response = await stopTracking(
+          trackingId,
+          endingKilometers ?? (meterReading || startingKilometers || '0'),
+          endingMeterImage,
+          visitedAreaImage,
+          userLocation?.latitude ?? null,
+          userLocation?.longitude ?? null
+        )
+        if (!response || !response.success) {
+          console.warn('Stop tracking API call failed, continuing locally')
+        }
+      } catch (apiError) {
+        console.error('Error stopping tracking:', apiError)
+      }
+    }
+    setActiveTrackingId(null)
+    setIsTracking(false)
+  }, [activeTrackingId, userLocation, meterReading, startingKilometers])
+
+  // Handle visit target click – snapshot distance/route so modal stays stable (no blink on re-renders)
+  const handleVisitTargetClick = (target) => {
+    if (!target || !target.latitude || !target.longitude) return
+
+    setSelectedVisitTarget(target)
+    setVisitTargetModalSnapshot({
+      distance: getDistanceToVisitTarget(target) ?? null,
+      routeDistanceKm: routeDistanceKm ?? null,
+    })
+    setShowVisitTargetModal(true)
+
+    // When tracking is active, route shows all targets – don't change route on click; keep map center on user
   }
 
-  // Handle mark as completed - with meter reading
+  // Handle mark as completed - with meter reading; proximity check (allow when near, warn when far)
   const handleMarkAsCompleted = async () => {
     if (!selectedVisitTarget) return
 
-    // Show completion modal to get meter reading
-    // Clear ending kilometers for individual visit completion (not required)
+    const PROXIMITY_THRESHOLD_KM = 0.1 // 100 m – visit start/complete allowed when near
+    if (userLocation && selectedVisitTarget.latitude && selectedVisitTarget.longitude) {
+      const distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        parseFloat(selectedVisitTarget.latitude),
+        parseFloat(selectedVisitTarget.longitude)
+      )
+      if (distance <= PROXIMITY_THRESHOLD_KM) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'At visit location',
+          text: `You're at ${selectedVisitTarget.name}. You can complete this visit.`,
+          confirmButtonColor: '#e9931c',
+          timer: 2000,
+          timerProgressBar: true,
+        })
+      } else {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Not at visit location',
+          html: `You're <strong>${formatDistance(distance)}</strong> away. Complete when you're at the visit location for accurate proof.`,
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    }
+
     setEndingKilometers('')
     setEndingMeterImage(null)
+    setRemainingPendingAfterComplete(null)
     setShowCompletionModal(true)
   }
 
@@ -1041,8 +1384,9 @@ const SalesTracking = () => {
       // For individual visit completion, ending kilometers are NOT required
       // They are only required at shift end (after all visits are completed)
       // Use route distance or estimated kilometers for calculation
-
-      const start = parseFloat(startingKilometers || selectedVisitTarget.startingKilometers || 0)
+      // Use meterReading (saved when Start was clicked) or startingKilometers – we clear startingKilometers after Start
+      const startVal = meterReading || startingKilometers || selectedVisitTarget.startingKilometers || ''
+      const start = parseFloat(startVal || 0)
       
       // Calculate actual kilometers using route distance or estimated
       let actualKm = '0'
@@ -1100,8 +1444,8 @@ const SalesTracking = () => {
         comments: targetComments || selectedVisitTarget.comments || '',
       }
 
-      if (startingKilometers) {
-        updateData.startingKilometers = parseFloat(startingKilometers)
+      if (startVal && !isNaN(start) && start > 0) {
+        updateData.startingKilometers = start
       }
 
       const result = await updateVisitTargetStatus(selectedVisitTarget._id || selectedVisitTarget.id, updateData)
@@ -1143,9 +1487,10 @@ const SalesTracking = () => {
         )
         
         // Set ending kilometers as starting kilometers for next visit
-        // Use route distance + starting kilometers if available, otherwise keep current starting
-        if (startingKilometers) {
-          const startKm = parseFloat(startingKilometers)
+        // Use route distance + starting kilometers if available (meterReading = value saved at Start)
+        const currentStart = meterReading || startingKilometers
+        if (currentStart) {
+          const startKm = parseFloat(currentStart)
           if (!isNaN(startKm) && estimatedKmValue > 0) {
             const nextStartKm = startKm + estimatedKmValue
             setStartingKilometers(nextStartKm.toFixed(2))
@@ -1153,7 +1498,7 @@ const SalesTracking = () => {
           }
         }
         
-        // Auto-set route to next visit if available
+        // Auto-set route to next visit if available (route will show all remaining when Play is pressed)
         if (nextPendingTarget && userLocation && isTracking) {
           setRouteToVisitTarget({
             from: { lat: userLocation.latitude, lng: userLocation.longitude },
@@ -1162,8 +1507,12 @@ const SalesTracking = () => {
           })
         }
         
+        // Auto-pause tracking after one target is completed (image uploaded). User clicks Play to go to next.
+        setIsTracking(false)
+        
         // Close modals but keep completion modal open to show continue option
         setShowVisitTargetModal(false)
+        setVisitTargetModalSnapshot(null)
         
         // Show success SweetAlert for visit completion
         await Swal.fire({
@@ -1199,21 +1548,44 @@ const SalesTracking = () => {
         const completedTodayVisits = allTodayVisits.filter(t => t.status === 'Completed')
         const pendingTodayVisits = allTodayVisits.filter(t => t.status === 'Pending' || t.status === 'In Progress')
         
-        // If all today's visits are completed, show shift end modal
+        // Store remaining pending at completion time so modal always shows correct "Next visit" vs "End shift"
+        const getLatLngForSort = (t) => {
+          const id = t._id || t.id
+          const resolved = resolvedVisitCoords[id]
+          const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+          const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
+          const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+          return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+        }
+        const sortedRemaining = userLocation?.latitude != null && userLocation?.longitude != null
+          ? [...pendingTodayVisits].sort((a, b) => {
+              const posA = getLatLngForSort(a)
+              const posB = getLatLngForSort(b)
+              if (!posA && !posB) return 0
+              if (!posA) return 1
+              if (!posB) return -1
+              const distA = calculateDistance(userLocation.latitude, userLocation.longitude, posA.lat, posA.lng)
+              const distB = calculateDistance(userLocation.latitude, userLocation.longitude, posB.lat, posB.lng)
+              return distA - distB
+            })
+          : [...pendingTodayVisits].sort((a, b) => {
+              if (!a.visitDate && !b.visitDate) return 0
+              if (!a.visitDate) return 1
+              if (!b.visitDate) return -1
+              return new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime()
+            })
+        setRemainingPendingAfterComplete(sortedRemaining)
+        
+        // If all today's visits are completed, stay on completion modal – user sees "Cancel" and "End shift (ending km)"
         if (pendingTodayVisits.length === 0 && completedTodayVisits.length > 0) {
-          // Close completion modal
-          setShowCompletionModal(false)
-          // Calculate ending kilometers from starting + estimated for shift end
-          // This will be updated when user uploads ending meter image at shift end
-          if (startingKilometers && estimatedKmValue > 0) {
-            const startKm = parseFloat(startingKilometers)
+          const currentStart = meterReading || startingKilometers
+          if (currentStart && estimatedKmValue > 0) {
+            const startKm = parseFloat(currentStart)
             if (!isNaN(startKm)) {
-              const calculatedEnd = startKm + estimatedKmValue
-              setShiftEndingKilometers(calculatedEnd.toFixed(2))
+              setShiftEndingKilometers((startKm + estimatedKmValue).toFixed(2))
             }
           }
-          // Show shift end modal for ending meter image
-          setShowShiftEndModal(true)
+          // User clicks "End shift (ending km)" in completion modal to open shift end modal
         } else {
           // Clear ending form data but keep completion modal open for continue
           // Make sure ending kilometers are cleared for next visit
@@ -1256,6 +1628,8 @@ const SalesTracking = () => {
         city: selectedVisitTarget.city,
         state: selectedVisitTarget.state,
         pincode: selectedVisitTarget.pincode,
+        customerName: selectedVisitTarget.customerName || selectedVisitTarget.name,
+        customerId: selectedVisitTarget.customerId || null,
       }
       
       localStorage.setItem('quotationVisitTarget', JSON.stringify(visitTargetData))
@@ -1270,6 +1644,7 @@ const SalesTracking = () => {
     
     // Close visit target modal first
     setShowVisitTargetModal(false)
+    setVisitTargetModalSnapshot(null)
     
     // Navigate to quotation tab
     if (window.handleNavigateToQuotation) {
@@ -1341,10 +1716,9 @@ const SalesTracking = () => {
         // Extract numbers from the text (kilometers)
         const numbers = text.match(/\d+/g)
         if (numbers && numbers.length > 0) {
-          // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
           const validNumbers = numbers
-            .map(n => parseInt(n))
-            .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
+            .map(n => parseInt(n, 10))
+            .filter(n => !isNaN(n) && isReasonableOdometer(n))
           
           if (validNumbers.length > 0) {
             // Get the largest valid number (likely the odometer reading)
@@ -1411,10 +1785,9 @@ const SalesTracking = () => {
           // Extract numbers from the text (kilometers)
           const numbers = text.match(/\d+/g)
           if (numbers && numbers.length > 0) {
-            // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
             const validNumbers = numbers
-              .map(n => parseInt(n))
-              .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
+              .map(n => parseInt(n, 10))
+              .filter(n => !isNaN(n) && isReasonableOdometer(n))
             
             if (validNumbers.length > 0) {
               // Get the largest valid number (likely the odometer reading)
@@ -1475,11 +1848,14 @@ const SalesTracking = () => {
 
         // When all files are loaded, update state
         if (loadedCount === files.length) {
-          setVisitedAreaImages(prev => [...prev, ...newImages])
-          // Also set first image as visitedAreaImage for backward compatibility
-          if (newImages.length > 0 && !visitedAreaImage) {
-            setVisitedAreaImage(newImages[0])
-          }
+          setVisitedAreaImages(prev => {
+            const combined = [...prev]
+            newImages.forEach(img => {
+              if (img && !combined.includes(img)) combined.push(img)
+            })
+            if (combined.length > 0) setVisitedAreaImage(prevImg => prevImg || combined[0])
+            return combined
+          })
         }
       }
       reader.readAsDataURL(file)
@@ -1508,10 +1884,14 @@ const SalesTracking = () => {
           loadedCount++
 
           if (loadedCount === files.length) {
-            setVisitedAreaImages(prev => [...prev, ...newImages])
-            if (newImages.length > 0 && !visitedAreaImage) {
-              setVisitedAreaImage(newImages[0])
-            }
+            setVisitedAreaImages(prev => {
+              const combined = [...prev]
+              newImages.forEach(img => {
+                if (img && !combined.includes(img)) combined.push(img)
+              })
+              if (combined.length > 0) setVisitedAreaImage(prevImg => prevImg || combined[0])
+              return combined
+            })
           }
         }
         reader.readAsDataURL(file)
@@ -1564,10 +1944,9 @@ const SalesTracking = () => {
           // Extract numbers from the text (kilometers)
           const numbers = text.match(/\d+/g)
           if (numbers && numbers.length > 0) {
-            // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
             const validNumbers = numbers
-              .map(n => parseInt(n))
-              .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
+              .map(n => parseInt(n, 10))
+              .filter(n => !isNaN(n) && isReasonableOdometer(n))
             
             let largestNumber
             if (validNumbers.length > 0) {
@@ -1676,10 +2055,9 @@ const SalesTracking = () => {
         // Extract numbers from the text (kilometers)
         const numbers = text.match(/\d+/g)
         if (numbers && numbers.length > 0) {
-          // Filter to reasonable odometer readings (typically 4-7 digits, 1000-999999)
           const validNumbers = numbers
-            .map(n => parseInt(n))
-            .filter(n => n >= 1000 && n <= 999999) // Reasonable odometer range
+            .map(n => parseInt(n, 10))
+            .filter(n => !isNaN(n) && isReasonableOdometer(n))
           
           let largestNumber
           if (validNumbers.length > 0) {
@@ -1807,26 +2185,16 @@ const SalesTracking = () => {
     }
   }
 
-  // Handle shift end - when all visits are completed
+  // Handle shift end - when all visits are completed; runs only once per shift
   const handleShiftEnd = async () => {
+    if (shiftEndSubmittedRef.current) return
     try {
-      // Validate ending kilometers - must be extracted from image
+      // Validate ending kilometers - can be manual entry OR from image
       if (!shiftEndingKilometers || shiftEndingKilometers.trim() === '') {
         await Swal.fire({
           icon: 'warning',
           title: 'Ending Kilometers Required',
-          text: 'Please upload ending meter image to extract kilometers. Manual entry is not allowed.',
-          confirmButtonColor: '#e9931c'
-        })
-        return
-      }
-
-      // Validate ending meter image is required at shift end
-      if (!shiftEndingMeterImage) {
-        await Swal.fire({
-          icon: 'warning',
-          title: 'Ending Meter Image Required',
-          text: 'Please upload ending meter image. It is required to complete the shift.',
+          text: 'Please enter ending kilometers manually or upload ending meter image.',
           confirmButtonColor: '#e9931c'
         })
         return
@@ -1869,48 +2237,24 @@ const SalesTracking = () => {
         return visitDateOnly.getTime() === today.getTime()
       })
 
-      // Stop tracking in backend
-      let trackingId = activeTrackingId
-      if (!trackingId) {
-        try {
-          const active = await getActiveTracking()
-          trackingId = active?._id || active?.id || null
-          if (trackingId) {
-            setActiveTrackingId(trackingId)
-          }
-        } catch (error) {
-          console.error('Error fetching active tracking:', error)
-        }
-      }
-
-      if (trackingId) {
-        try {
-          const response = await stopTracking(
-            trackingId,
-            shiftEndingKilometers,
-            shiftEndingMeterImage,
-            null, // Visited area image not needed at shift end
-            userLocation?.latitude || null,
-            userLocation?.longitude || null
-          )
-          if (!response || !response.success) {
-            console.warn('Stop tracking API call failed, continuing locally')
-          }
-          setActiveTrackingId(null)
-        } catch (apiError) {
-          console.error('Error stopping tracking:', apiError)
-        }
-      }
-
-      // Stop tracking locally
-      setIsTracking(false)
+      shiftEndSubmittedRef.current = true
+      setIsSubmittingShiftEnd(true)
+      await stopActiveTrackingAndClearState({
+        endingKilometers: shiftEndingKilometers,
+        endingMeterImage: shiftEndingMeterImage || null,
+        visitedAreaImage: null,
+      })
       setShowShiftEndModal(false)
-      
+      setIsSubmittingShiftEnd(false)
+      try {
+        localStorage.removeItem(SHIFT_STARTED_DATE_KEY)
+      } catch (_) {}
+
       // Clear form data
       setShiftEndingKilometers('')
       setShiftEndingMeterImage(null)
       setRouteToVisitTarget(null)
-      
+
       // Show success SweetAlert for shift completion
       const result = await Swal.fire({
         icon: 'success',
@@ -1935,13 +2279,15 @@ const SalesTracking = () => {
         setShowShiftPhotoCollage(true)
       }
 
-      // Also add notification
+      // Only show "Shift completed!" when user explicitly ends shift (last visit done + End clicked + shift end submitted)
       addNotification({
         message: `✅ Shift completed! Total distance: ${totalDistance} km | ${completedVisits.length} visits completed`,
         type: 'success',
       })
     } catch (error) {
       console.error('Error completing shift:', error)
+      shiftEndSubmittedRef.current = false
+      setIsSubmittingShiftEnd(false)
       await Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -1969,7 +2315,7 @@ const SalesTracking = () => {
         if (numbers && numbers.length > 0) {
           const validNumbers = numbers
             .map(n => parseInt(n))
-            .filter(n => n >= 1000 && n <= 999999)
+            .filter(n => isReasonableOdometer(parseInt(n, 10)))
           
           let largestNumber
           if (validNumbers.length > 0) {
@@ -2030,7 +2376,7 @@ const SalesTracking = () => {
           if (numbers && numbers.length > 0) {
             const validNumbers = numbers
               .map(n => parseInt(n))
-              .filter(n => n >= 1000 && n <= 999999)
+              .filter(n => isReasonableOdometer(parseInt(n, 10)))
             
             let largestNumber
             if (validNumbers.length > 0) {
@@ -2073,18 +2419,16 @@ const SalesTracking = () => {
   // Handle complete tracking
   const handleCompleteTracking = async () => {
     try {
-      // Validate ending kilometers - must be extracted from image
+      // Validate ending kilometers - can be manual entry OR from image
       if (!endingKilometers || endingKilometers.trim() === '') {
         await Swal.fire({
           icon: 'warning',
           title: 'Ending Kilometers Required',
-          text: 'Please upload ending meter image to extract kilometers. Manual entry is not allowed.',
+          text: 'Please enter ending kilometers manually or upload ending meter image.',
           confirmButtonColor: '#e9931c'
         })
         return
       }
-
-      // Ending meter image NOT required for individual visits - only at shift end
 
       // Validate visited area image is required
       if (!visitedAreaImage) {
@@ -2097,11 +2441,12 @@ const SalesTracking = () => {
         return
       }
 
-      const start = parseFloat(startingKilometers)
+      const startValForEnd = meterReading || startingKilometers
+      const start = parseFloat(startValForEnd || 0)
       const end = parseFloat(endingKilometers)
       
-      // Validate starting kilometers
-      if (!startingKilometers || startingKilometers.trim() === '' || isNaN(start) || start <= 0) {
+      // Validate starting kilometers (use meterReading – saved when Start was clicked)
+      if (!startValForEnd || startValForEnd.toString().trim() === '' || isNaN(start) || start <= 0) {
         await Swal.fire({
           icon: 'error',
           title: 'Invalid Starting Kilometers',
@@ -2135,43 +2480,11 @@ const SalesTracking = () => {
       // Calculate distance - ensure correct calculation
       const distanceTraveled = end - start
 
-      // Stop tracking in backend (if active session exists)
-      let trackingId = activeTrackingId
-      if (!trackingId) {
-        try {
-          const active = await getActiveTracking()
-          trackingId = active?._id || active?.id || null
-          if (trackingId) {
-            setActiveTrackingId(trackingId)
-          }
-        } catch (error) {
-          console.error('Error fetching active tracking:', error)
-        }
-      }
-
-      if (trackingId) {
-        try {
-          const response = await stopTracking(
-            trackingId,
-            endingKilometers,
-            endingMeterImage,
-            visitedAreaImage,
-            userLocation?.latitude || null,
-            userLocation?.longitude || null
-          )
-          if (!response || !response.success) {
-            console.warn('Stop tracking API call failed, continuing locally')
-          }
-          setActiveTrackingId(null)
-        } catch (apiError) {
-          console.error('Error stopping tracking:', apiError)
-        }
-      } else {
-        console.warn('No active tracking ID found to stop')
-      }
-
-      // Stop tracking locally
-      setIsTracking(false)
+      await stopActiveTrackingAndClearState({
+        endingKilometers,
+        endingMeterImage,
+        visitedAreaImage,
+      })
       setShowCompletionModal(false)
       
       // Clear form data
@@ -2230,11 +2543,17 @@ const SalesTracking = () => {
 
       // Close modal first
       setShowStartModal(false)
-      
+      shiftEndSubmittedRef.current = false // New shift started – allow End shift once when last visit done
+
       // Start countdown immediately
       setShowCountdown(true)
       setCountdown(5)
       setMeterReading(startingKilometers)
+
+      // Mark shift started today – Start modal only once per day
+      try {
+        localStorage.setItem(SHIFT_STARTED_DATE_KEY, toLocalDateString(new Date()))
+      } catch (_) {}
 
       // Try to save to database (but don't block if it fails)
       try {
@@ -2298,51 +2617,7 @@ const SalesTracking = () => {
           attempts++
         }
         
-        // Use the fetched location or wait for state update
-        const finalLocation = currentLocation || userLocation
-        
-        if (visitTargets && visitTargets.length > 0) {
-          // First try to find today's pending visits
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const todayPendingTarget = visitTargets.find(t => {
-            if (t.status !== 'Pending' && t.status !== 'In Progress') return false
-            if (!t.visitDate) return false
-            const visitDate = new Date(t.visitDate)
-            const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-            return visitDateOnly.getTime() === today.getTime()
-          })
-          
-          // If no today's visit, find any pending target
-          const firstPendingTarget = todayPendingTarget || visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
-          
-          if (firstPendingTarget && firstPendingTarget.latitude && firstPendingTarget.longitude) {
-            // Wait a bit more for location state to update if we just fetched it
-            if (!finalLocation || !finalLocation.latitude || !finalLocation.longitude) {
-              // Try one more time after a short delay
-              setTimeout(() => {
-                const stateLocation = userLocation
-                if (stateLocation && stateLocation.latitude && stateLocation.longitude) {
-                  setRouteToVisitTarget({
-                    from: { lat: stateLocation.latitude, lng: stateLocation.longitude },
-                    to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
-                    target: firstPendingTarget
-                  })
-                  console.log('Route set to:', firstPendingTarget.name)
-                }
-              }, 2000)
-            } else {
-              setRouteToVisitTarget({
-                from: { lat: finalLocation.latitude, lng: finalLocation.longitude },
-                to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
-                target: firstPendingTarget
-              })
-              console.log('Route set to:', firstPendingTarget.name)
-            }
-          } else {
-            console.warn('No pending visit target found for route')
-          }
-        }
+        // Location is set; route for all pending targets will be built by useEffect when tracking starts
       }
       
       waitForLocationAndSetRoute()
@@ -2359,22 +2634,23 @@ const SalesTracking = () => {
     }
   }
 
-  // Auto-pause tracking if no pending visits available
+  // Auto-pause tracking if no pending visits available (don’t run right after mount/reload – give restore & targets time to load)
   useEffect(() => {
     if (!isTracking) return
-    
+    // First 5s after mount (reload or tab switch) – never auto-pause, so restore can complete and targets can load
+    if (Date.now() - mountedAtRef.current < 5000) return
+    // Restored from backend but visitTargets not loaded yet – don’t auto-pause
+    if (visitTargets.length === 0 && activeTrackingId) return
+    // Just restored (within 4s) – give targets time to load, don’t auto-pause
+    if (restoredAtRef.current && Date.now() - restoredAtRef.current < 4000) return
+
     // Check if there are any pending or in-progress visits
     const pendingVisits = visitTargets.filter(t => t.status === 'Pending' || t.status === 'In Progress')
     
     // If no pending visits and tracking is active, automatically pause tracking
     if (pendingVisits.length === 0) {
-      console.log('No pending visits found, auto-pausing tracking...')
-      
-      // Stop tracking
-      setIsTracking(false)
+      console.log('No pending targets, auto-pausing tracking...')
       setRouteToVisitTarget(null)
-      
-      // Stop location watching
       if (watchIdRef.current) {
         clearWatch(watchIdRef.current)
         watchIdRef.current = null
@@ -2383,100 +2659,59 @@ const SalesTracking = () => {
         clearInterval(locationUpdateIntervalRef.current)
         locationUpdateIntervalRef.current = null
       }
-      
-      // Show notification
       addNotification({
-        message: '⏸️ Tracking paused automatically - No pending visits available',
+        message: '⏸️ Tracking paused - No pending targets',
         type: 'warning',
       })
-      
-      // Stop tracking in backend
-      if (activeTrackingId) {
-        stopTracking(activeTrackingId, meterReading || startingKilometers || '0', null, null, userLocation?.latitude || null, userLocation?.longitude || null)
-          .then(() => {
-            setActiveTrackingId(null)
-            console.log('Tracking stopped in backend - no pending visits')
-          })
-          .catch((error) => {
-            console.error('Error stopping tracking in backend:', error)
-          })
-      } else {
-        // Try to get active tracking and stop it
-        getActiveTracking()
-          .then((active) => {
-            if (active && (active._id || active.id)) {
-              return stopTracking(active._id || active.id, active.startingKilometers || '0', null, null, null, null)
-            }
-          })
-          .then(() => {
-            console.log('Active tracking stopped from backend')
-          })
-          .catch((error) => {
-            console.error('Error stopping active tracking:', error)
-          })
-      }
+      stopActiveTrackingAndClearState({
+        endingKilometers: meterReading || startingKilometers || '0',
+      }).catch((error) => {
+        console.error('Error stopping tracking in backend:', error)
+      })
     }
-  }, [visitTargets, isTracking])
+  }, [visitTargets, isTracking, activeTrackingId, stopActiveTrackingAndClearState, meterReading, startingKilometers])
 
-  // Update route when visit targets change or user location updates
+  // Update route: nearest first, then next, then next (multi-visit). Use postcode-based coords so order sahi ho
   useEffect(() => {
     if (!isTracking) return
     
-    // Wait for user location if not available
     if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
       console.log('Waiting for user location to generate route...')
       return
     }
     
-    // Find first pending visit target (prioritize today's visits)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const todayPendingTarget = visitTargets.find(t => {
-      if (t.status !== 'Pending' && t.status !== 'In Progress') return false
-      if (!t.visitDate) return false
-      const visitDate = new Date(t.visitDate)
-      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-      return visitDateOnly.getTime() === today.getTime()
-    })
-    
-    const firstPendingTarget = todayPendingTarget || visitTargets.find(t => t.status === 'Pending' || t.status === 'In Progress')
-    
-    if (firstPendingTarget && firstPendingTarget.latitude && firstPendingTarget.longitude) {
-      const targetId = firstPendingTarget._id || firstPendingTarget.id
-      
-      // Check if route is already set to this target and location hasn't changed significantly
-      if (routeToVisitTarget && routeToVisitTarget.target?._id === targetId) {
-        // Only update if location changed significantly (more than 50 meters)
-        const currentFrom = routeToVisitTarget.from
-        const distance = calculateDistance(
-          currentFrom.lat,
-          currentFrom.lng,
-          userLocation.latitude,
-          userLocation.longitude
-        )
-        
-        // Update route origin only if moved more than 50 meters (to reduce map flickering)
-        if (distance > 50) {
-          setRouteToVisitTarget({
-            from: { lat: userLocation.latitude, lng: userLocation.longitude },
-            to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
-            target: firstPendingTarget
-          })
-        }
-      } else {
-        // Set new route
-        setRouteToVisitTarget({
-          from: { lat: userLocation.latitude, lng: userLocation.longitude },
-          to: { lat: parseFloat(firstPendingTarget.latitude), lng: parseFloat(firstPendingTarget.longitude) },
-          target: firstPendingTarget
-        })
-        console.log('Route generated to:', firstPendingTarget.name)
-      }
-    } else if (!firstPendingTarget) {
-      // No pending targets, clear route
+    if (pendingTargetsWithLocation.length === 0) {
       setRouteToVisitTarget(null)
+      setRouteDistanceKm(null)
+      return
     }
-  }, [visitTargets, userLocation, isTracking]) // Removed routeToVisitTarget from dependencies to prevent loops
+
+    setRouteDistanceKm(null)
+    const from = { lat: userLocation.latitude, lng: userLocation.longitude }
+    // Effective coords = postcode-based (resolved) when available, else stored – same as sidebar/map
+    const getEffective = (t) => {
+      const id = t._id || t.id
+      const resolved = resolvedVisitCoords[id]
+      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : NaN)
+      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : NaN)
+      return { lat, lng }
+    }
+    const withEffective = pendingTargetsWithLocation.map(t => ({ target: t, ...getEffective(t) })).filter(p => !isNaN(p.lat) && !isNaN(p.lng))
+    if (withEffective.length === 0) return
+    // Order: nearest first – route = user → current (nearest) target only, so yellow line does not go past current visit
+    const ordered = [...withEffective].sort((a, b) => {
+      const distA = calculateDistance(userLocation.latitude, userLocation.longitude, a.lat, a.lng)
+      const distB = calculateDistance(userLocation.latitude, userLocation.longitude, b.lat, b.lng)
+      return distA - distB
+    })
+    const { target: t, lat, lng } = ordered[0]
+    setRouteToVisitTarget({
+      from,
+      to: { lat, lng },
+      target: t
+    })
+  }, [pendingTargetsWithLocation, userLocation, isTracking, resolvedVisitCoords])
 
   // Countdown effect
   useEffect(() => {
@@ -2532,10 +2767,12 @@ const SalesTracking = () => {
     if (isTracking && userLocation && userLocation.latitude && userLocation.longitude) {
       return { lat: userLocation.latitude, lng: userLocation.longitude }
     }
-    
     // Priority: selectedVisitTarget (when clicked) > userLocation > today's visits center > default
-    if (selectedVisitTarget && selectedVisitTarget.latitude && selectedVisitTarget.longitude) {
-      return { lat: parseFloat(selectedVisitTarget.latitude), lng: parseFloat(selectedVisitTarget.longitude) }
+    if (selectedVisitTarget) {
+      const sid = selectedVisitTarget._id || selectedVisitTarget.id
+      let lat = selectedVisitTarget.latitude != null ? parseFloat(selectedVisitTarget.latitude) : (resolvedVisitCoords[sid]?.latitude != null ? Number(resolvedVisitCoords[sid].latitude) : NaN)
+      let lng = selectedVisitTarget.longitude != null ? parseFloat(selectedVisitTarget.longitude) : (resolvedVisitCoords[sid]?.longitude != null ? Number(resolvedVisitCoords[sid].longitude) : NaN)
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng }
     }
     if (userLocation && userLocation.latitude && userLocation.longitude) {
       return { lat: userLocation.latitude, lng: userLocation.longitude }
@@ -2544,30 +2781,35 @@ const SalesTracking = () => {
     if (todayCenter && todayCenter.lat && todayCenter.lng) {
       return todayCenter
     }
-    return { lat: 28.6139, lng: 77.2090 }
+    if (visitsForMap.length > 0) {
+      const avgLat = visitsForMap.reduce((s, t) => s + Number(t.latitude), 0) / visitsForMap.length
+      const avgLon = visitsForMap.reduce((s, t) => s + Number(t.longitude), 0) / visitsForMap.length
+      return { lat: avgLat, lng: avgLon }
+    }
+    return DEFAULT_MAP_CENTER
   }, [
-    isTracking, // Add isTracking to dependencies
+    isTracking,
     selectedVisitTarget?._id || selectedVisitTarget?.id,
     selectedVisitTarget?.latitude,
     selectedVisitTarget?.longitude,
     userLocation?.latitude,
     userLocation?.longitude,
-    visitTargets.length
+    visitTargets.length,
+    resolvedVisitCoords,
+    visitsForMap.length
   ])
 
-  // Memoize route info change handler (must be at top level, not in JSX)
+  // Memoize route info change handler. Skip updates when any modal is open to prevent modal blink.
   const handleRouteInfoChange = useCallback((routeInfo) => {
+    if (showVisitTargetModal || showCompletionModal || showStartModal || showShiftEndModal) return
     if (routeInfo && routeInfo.distanceKm) {
-      // Ensure distanceKm is a number
-      const distance = typeof routeInfo.distanceKm === 'number' 
-        ? routeInfo.distanceKm 
-        : !isNaN(parseFloat(routeInfo.distanceKm)) 
-          ? parseFloat(routeInfo.distanceKm) 
+      const distance = typeof routeInfo.distanceKm === 'number'
+        ? routeInfo.distanceKm
+        : !isNaN(parseFloat(routeInfo.distanceKm))
+          ? parseFloat(routeInfo.distanceKm)
           : null
-      
       if (distance !== null) {
         setRouteDistanceKm(distance)
-        // Update estimated kilometers if route is available
         if (!estimatedKilometers || estimatedKilometers === '') {
           setEstimatedKilometers(distance.toString())
         }
@@ -2577,26 +2819,26 @@ const SalesTracking = () => {
     } else {
       setRouteDistanceKm(null)
     }
-  }, [estimatedKilometers])
+  }, [estimatedKilometers, showVisitTargetModal, showCompletionModal, showStartModal, showShiftEndModal])
 
-  // Calculate map center (average of visit targets or user location)
+  // Calculate map center (average of visit targets with coords, or user location)
   const getMapCenter = () => {
     if (userLocation) {
       return [userLocation.latitude, userLocation.longitude]
     }
-    if (visitTargets.length > 0) {
-      const avgLat = visitTargets.reduce((sum, t) => sum + parseFloat(t.latitude), 0) / visitTargets.length
-      const avgLon = visitTargets.reduce((sum, t) => sum + parseFloat(t.longitude), 0) / visitTargets.length
+    if (visitsForMap.length > 0) {
+      const avgLat = visitsForMap.reduce((sum, t) => sum + Number(t.latitude), 0) / visitsForMap.length
+      const avgLon = visitsForMap.reduce((sum, t) => sum + Number(t.longitude), 0) / visitsForMap.length
       return [avgLat, avgLon]
     }
-    return [28.6139, 77.2090] // Default: Delhi
+    return [DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng]
   }
 
   return (
     <>
-      {/* Countdown Overlay */}
+      {/* Countdown Overlay - no animation to avoid blink */}
       {showCountdown && countdown !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[10000] animate-fadeIn">
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[10000]" style={{ contain: 'layout style paint' }}>
           <div className="text-center">
             <div className="text-9xl sm:text-[12rem] font-bold text-white mb-4 animate-pulse" style={{
               textShadow: '0 0 30px rgba(233, 147, 28, 0.8)',
@@ -2609,12 +2851,12 @@ const SalesTracking = () => {
         </div>
       )}
 
-      <div className="relative z-0">
-        <div className="flex items-center justify-between mb-4 px-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">Sales Tracking - Map View</h2>
-            <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
-              Proximity Alert: {PROXIMITY_DISTANCE_KM}km |               GPS: {userLocation && userLocation.latitude && userLocation.longitude ? (
+      <div className="relative z-0 flex flex-col min-h-0 h-full w-full" style={{ minHeight: 'calc(100vh - 100px)' }}>
+        <div className="flex flex-shrink-0 items-center justify-between gap-2 mb-2 px-2 sm:px-4 py-1">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-800 truncate">Sales Tracking - Map View</h2>
+            <p className="text-xs sm:text-sm text-gray-600 mt-0.5 truncate" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+              Proximity: {PROXIMITY_DISTANCE_KM}km | GPS: {userLocation && userLocation.latitude && userLocation.longitude ? (
                 <span>Active ({userLocation.latitude.toFixed(4)}, {userLocation.longitude.toFixed(4)})</span>
               ) : (
                 <span>Getting location...</span>
@@ -2632,13 +2874,11 @@ const SalesTracking = () => {
             <button
               onClick={() => {
                 setShowRequestVisitModal(true)
-                // Load customers when modal opens
-                if (customers.length === 0) {
-                  loadCustomers()
-                }
+                // Always load allotted customers when modal opens so list is fresh
+                loadCustomers()
               }}
               className="px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 bg-gray-600 text-white hover:bg-gray-700"
-              title="Request a new visit (admin approval required)"
+              title="Request a new target (admin approval required)"
             >
               <FaMapMarkerAlt className="w-4 h-4" />
               <span className="hidden md:inline text-sm" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Request Visit</span>
@@ -2646,13 +2886,15 @@ const SalesTracking = () => {
             <button
               onClick={() => {
                 if (isTracking) {
-                  // Show completion modal instead of directly stopping
-                  // Clear ending kilometers for individual visit completion (not required)
-    setEndingKilometers('')
-    setEndingMeterImage(null)
-    setShowCompletionModal(true)
+                  setIsTracking(false)
+                  setRouteToVisitTarget(null)
                 } else {
-                  setShowStartModal(true)
+                  if (hasStartedShiftToday()) {
+                    setIsTracking(true)
+                    addNotification({ message: 'Resuming tracking for today.', type: 'info' })
+                  } else {
+                    setShowStartModal(true)
+                  }
                 }
               }}
               className={`px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
@@ -2677,6 +2919,52 @@ const SalesTracking = () => {
           </div>
         </div>
 
+        {/* Map area - fills remaining space */}
+        <div className="relative flex flex-col gap-0 flex-1 min-h-0">
+          {/* Visit Targets label - compact */}
+          <div className="flex-shrink-0 px-2 sm:px-4 pb-1">
+            <h3 className="text-sm font-semibold text-gray-700">Visit Targets</h3>
+          </div>
+          {/* Map container - takes all remaining space */}
+          <div className="flex-1 min-h-0 w-full flex flex-col" style={{ minHeight: 0 }}>
+            {userLocation || visitTargets.length > 0 ? (
+              <GoogleMapView
+                milestones={[]}
+                visitTargets={visitsForMap}
+                userLocation={userLocation}
+                onMarkerClick={handleVisitTargetClick}
+                center={mapCenter}
+                zoom={11}
+                height="100%"
+                showUserLocation={true}
+                showRadius={false}
+                routeToMilestone={routeToVisitTarget && isTracking ? {
+                  from: routeToVisitTarget.from,
+                  to: routeToVisitTarget.to,
+                  milestone: routeToVisitTarget.target,
+                  destinationTarget: routeToVisitTarget.destinationTarget || null,
+                  ...(routeToVisitTarget.waypoints && routeToVisitTarget.waypoints.length > 0
+                    ? { waypoints: routeToVisitTarget.waypoints }
+                    : {})
+                } : null}
+                isTracking={isTracking}
+                selectedTarget={selectedVisitTarget}
+                onRouteInfoChange={handleRouteInfoChange}
+              />
+            ) : (
+              <div className="bg-white rounded-lg h-full flex items-center justify-center border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                  </svg>
+                  <p className="text-gray-600">Loading map...</p>
+                  <p className="text-sm text-gray-500">Please enable location access</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Notifications */}
         <div className="fixed top-4 right-4 z-[9998] space-y-2" style={{ pointerEvents: 'none' }}>
           {notifications.map((notification, index) => (
@@ -2697,51 +2985,7 @@ const SalesTracking = () => {
           ))}
         </div>
 
-        <div className="relative flex gap-0" style={{ height: 'calc(100vh - 200px)' }}>
-          {/* Left: Map - Takes full width when panel is hidden */}
-          <div className={`flex-1 transition-all duration-300 flex flex-col ${showRightPanel ? '' : ''}`} style={{ height: '100%' }}>
-            <h3 className="text-lg font-semibold text-gray-700 mb-4">Visit Targets</h3>
-            
-            {/* Map View - Direct on Page - Full Height */}
-            <div className="flex-1 w-full" style={{ minHeight: 0 }}>
-              {userLocation || visitTargets.length > 0 ? (
-                <GoogleMapView
-                  milestones={[]}
-                  visitTargets={visitTargets.filter(target => 
-                    target.status !== 'Completed' && target.status !== 'completed'
-                  )}
-                  userLocation={userLocation}
-                  onMarkerClick={handleVisitTargetClick}
-                  center={mapCenter}
-                  zoom={11}
-                  height="100%"
-                  showUserLocation={true}
-                  showRadius={false}
-                  routeToMilestone={routeToVisitTarget && isTracking ? {
-                    from: routeToVisitTarget.from,
-                    to: routeToVisitTarget.to,
-                    milestone: routeToVisitTarget.target
-                  } : null}
-                  isTracking={isTracking}
-                  selectedTarget={selectedVisitTarget}
-                  onRouteInfoChange={handleRouteInfoChange}
-                />
-              ) : (
-                <div className="bg-white rounded-lg h-full flex items-center justify-center border-2 border-dashed border-gray-300">
-                  <div className="text-center">
-                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                    </svg>
-                    <p className="text-gray-600">Loading map...</p>
-                    <p className="text-sm text-gray-500">Please enable location access</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-
-          {/* Right Edge Trigger Zone - Always visible when panel is hidden */}
+        {/* Right Edge Trigger Zone - Always visible when panel is hidden */}
           {!showRightPanel && (
             <div
               className="fixed right-0 top-0 h-full w-8 z-50 cursor-pointer"
@@ -2809,14 +3053,12 @@ const SalesTracking = () => {
                     }`}
                   >
                     <FaMapMarkerAlt className="w-4 h-4" />
-                    Visits
+                    Targets
                   </button>
                   <button
                     onClick={() => {
                       setRightPanelTab('tasks')
-                      if (followUps.length === 0) {
-                        loadFollowUps()
-                      }
+                      loadFollowUps()
                     }}
                     className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
                       rightPanelTab === 'tasks'
@@ -2848,130 +3090,35 @@ const SalesTracking = () => {
                 {/* Tab Content */}
                 {rightPanelTab === 'visits' && (
                   <>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-700">Visit Targets</h3>
-                      <select
-                        value={dateFilter}
-                        onChange={(e) => setDateFilter(e.target.value)}
-                        className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                      >
-                        <option value="All">All Dates</option>
-                        <option value="Today">Today</option>
-                        <option value="Tomorrow">Tomorrow</option>
-                        <option value="This Week">This Week</option>
-                        <option value="Upcoming">Upcoming</option>
-                        <option value="Past">Past</option>
-                      </select>
-                    </div>
-                
-                {/* Date-wise Grouped Visit Targets */}
-                {(() => {
-                  const filtered = getFilteredVisits()
-                  if (filtered.length === 0) {
-                    return (
-                      <div className="text-center py-8">
-                        <svg className="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                        </svg>
-                        <p className="text-gray-600 font-medium">
-                          {dateFilter !== 'All' 
-                            ? `No visit targets for ${dateFilter}` 
-                            : 'No visit targets assigned'}
-                        </p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {dateFilter !== 'All' 
-                            ? 'Try selecting a different date filter' 
-                            : 'Admin will assign visit targets to you'}
-                        </p>
-                      </div>
-                    )
-                  }
-                  return (
-                    <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
-                      {filtered.map((target) => {
-                      const targetId = target._id || target.id
-                      const isSelected = selectedVisitTarget && (selectedVisitTarget._id === targetId || selectedVisitTarget.id === targetId)
-                      return (
-                        <div
-                          key={targetId}
-                          onClick={() => {
-                            handleVisitTargetClick(target)
-                            // Update map center on visit click
-                            if (target.latitude && target.longitude) {
-                              setSelectedVisitTarget(target)
-                              // Map will automatically center on selectedVisitTarget
-                            }
-                          }}
-                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
-                          }`}
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      <h3 className="text-lg font-semibold text-gray-700">Targets</h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => refreshRequestsAndTargets()}
+                          className="p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-800 transition-colors"
+                          title="Refresh list (e.g. after deleting from Admin)"
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="font-semibold text-gray-800 text-sm">{target.name || 'Unnamed Target'}</h4>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              target.status === 'Completed'
-                                ? 'bg-green-100 text-green-800'
-                                : target.status === 'In Progress'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {target.status}
-                            </span>
-                          </div>
-                          
-                          {target.address && (
-                            <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
-                              <FaMapMarkerAlt className="w-3 h-3" />
-                              {target.address}
-                              {target.city && `, ${target.city}`}
-                              {target.state && `, ${target.state}`}
-                            </p>
-                          )}
-                          
-                          <div className="flex items-center gap-3 mt-2 flex-wrap">
-                            {target.visitDate && (
-                              <p className="text-xs text-gray-600 flex items-center gap-1">
-                                <FaClock className="w-3 h-3" />
-                                {new Date(target.visitDate).toLocaleDateString()}
-                              </p>
-                            )}
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              target.priority === 'High'
-                                ? 'bg-red-100 text-red-700'
-                                : target.priority === 'Medium'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {target.priority || 'Medium'}
-                            </span>
-                            {userLocation && (
-                              <p className="text-xs text-blue-600 font-medium">
-                                {getDistanceToVisitTarget(target) || 'Calculating...'}
-                              </p>
-                            )}
-                          </div>
-                          
-                          {target.description && (
-                            <p className="text-xs text-gray-500 mt-2 line-clamp-2">{target.description}</p>
-                          )}
-                          
-                          {target.createdBy && (
-                            <p className="text-xs text-gray-400 mt-2">
-                              Assigned by: {target.createdBy.name || target.createdBy.email || 'Admin'}
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  )
-                })()}
+                          <FaSyncAlt className="w-4 h-4" />
+                        </button>
+                        <select
+                          value={dateFilter}
+                          onChange={(e) => setDateFilter(e.target.value)}
+                          className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                        >
+                          <option value="All">All Dates</option>
+                          <option value="Today">Today</option>
+                          <option value="Tomorrow">Tomorrow</option>
+                          <option value="This Week">This Week</option>
+                          <option value="Upcoming">Upcoming</option>
+                          <option value="Past">Past</option>
+                        </select>
+                      </div>
+                    </div>
                 
                 {visitRequests && visitRequests.length > 0 && (
                   <div className="mt-6 mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <p className="text-sm font-semibold text-gray-800 mb-2">My Visit Requests (Waiting/Rejected)</p>
+                    <p className="text-sm font-semibold text-gray-800 mb-2">My target requests (Waiting/Rejected)</p>
                     <div className="space-y-2 max-h-44 overflow-y-auto">
                       {visitRequests.map((r) => (
                         <div key={r._id} className="p-2 rounded bg-white border border-gray-200">
@@ -2996,13 +3143,28 @@ const SalesTracking = () => {
                     <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p className="text-gray-600">No visit targets assigned</p>
-                    <p className="text-sm text-gray-500 mt-1">Admin will assign visit targets to you</p>
+                    <p className="text-gray-600">No targets assigned</p>
+                    <p className="text-sm text-gray-500 mt-1">Admin will assign targets to you</p>
                   </div>
                 ) : (
                   <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
                     {(() => {
                       const filteredVisits = getFilteredVisits()
+                      if (filteredVisits.length === 0) {
+                        return (
+                          <div className="text-center py-8">
+                            <svg className="w-16 h-16 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                            </svg>
+                            <p className="text-gray-600 font-medium">
+                              {dateFilter !== 'All' ? `No targets for ${dateFilter}` : 'No targets in list'}
+                            </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {dateFilter !== 'All' ? 'Try selecting a different date filter' : 'Assign dates to targets to see them here'}
+                            </p>
+                          </div>
+                        )
+                      }
                       const grouped = dateFilter === 'All' ? groupVisitsByDate(filteredVisits) : null
                       
                       // If filter is "All", show grouped by date sections
@@ -3012,20 +3174,27 @@ const SalesTracking = () => {
                           { key: 'tomorrow', title: '📅 Tomorrow', visits: grouped.tomorrow, color: 'bg-green-50 border-green-200' },
                           { key: 'thisWeek', title: '📅 This Week', visits: grouped.thisWeek, color: 'bg-yellow-50 border-yellow-200' },
                           { key: 'upcoming', title: '📅 Upcoming', visits: grouped.upcoming, color: 'bg-purple-50 border-purple-200' },
-                          { key: 'past', title: '📅 Past Visits', visits: grouped.past, color: 'bg-gray-50 border-gray-200' },
+                          { key: 'past', title: '📅 Past', visits: grouped.past, color: 'bg-gray-50 border-gray-200' },
                           { key: 'noDate', title: '📅 No Date Assigned', visits: grouped.noDate, color: 'bg-orange-50 border-orange-200' }
                         ]
 
                         return sections.map(section => {
-                          if (section.visits.length === 0) return null
+                          const sectionSeen = new Set()
+                          const uniqueVisits = section.visits.filter(t => {
+                            const id = (t._id || t.id)?.toString()
+                            if (!id || sectionSeen.has(id)) return false
+                            sectionSeen.add(id)
+                            return true
+                          })
+                          if (uniqueVisits.length === 0) return null
                           
                           return (
                             <div key={section.key} className={`rounded-lg border-2 p-3 ${section.color}`}>
                               <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                {section.title} ({section.visits.length})
+                                {section.title} ({uniqueVisits.length})
                               </h4>
                               <div className="space-y-2">
-                                {section.visits
+                                {uniqueVisits
                                   .sort((a, b) => {
                                     // Sort by visit date (includes time) - earliest first
                                     if (a.visitDate && b.visitDate) {
@@ -3091,7 +3260,7 @@ const SalesTracking = () => {
                                 {target.visitDate && (
                                   <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
                                     <FaClock className="w-3 h-3" />
-                                    Visit Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
+                                    Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
                                       day: '2-digit',
                                       month: 'short',
                                       year: 'numeric'
@@ -3137,12 +3306,7 @@ const SalesTracking = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  if (userLocation && isTracking) {
-                                    setRouteToVisitTarget({
-                                      from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                      to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-                                      target: target
-                                    })
+                                  if (isTracking) {
                                     handleVisitTargetClick(target)
                                   } else {
                                     Swal.fire({
@@ -3172,22 +3336,8 @@ const SalesTracking = () => {
                           )
                         }).filter(Boolean)
                       } else {
-                        // Show filtered list
+                        // Show filtered list (order from filteredVisits: Today = nearest first, else by date)
                         return filteredVisits
-                          .sort((a, b) => {
-                            // Sort by visit date (includes time) - earliest first
-                            if (a.visitDate && b.visitDate) {
-                              return new Date(a.visitDate) - new Date(b.visitDate)
-                            }
-                            if (!a.visitDate && !b.visitDate) {
-                              // Then by status if no date
-                              const statusOrder = { 'Pending': 1, 'In Progress': 2, 'Completed': 3 }
-                              return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4)
-                            }
-                            if (!a.visitDate) return 1
-                            if (!b.visitDate) return -1
-                            return 0
-                          })
                           .map((target) => {
                             const targetId = target._id || target.id
                             const isSelected = selectedVisitTarget && (selectedVisitTarget._id === targetId || selectedVisitTarget.id === targetId)
@@ -3196,15 +3346,7 @@ const SalesTracking = () => {
                                 key={targetId}
                                 onClick={() => {
                                   handleVisitTargetClick(target)
-                                  if (userLocation && isTracking) {
-                                    setRouteToVisitTarget({
-                                      from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                      to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-                                      target: target
-                                    })
-                                  } else {
-                                    setRouteToVisitTarget(null)
-                                  }
+                                  if (!isTracking) setRouteToVisitTarget(null)
                                 }}
                                 className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                                   isSelected
@@ -3214,7 +3356,12 @@ const SalesTracking = () => {
                               >
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                      {dateFilter === 'Today' && getVisitNumberForToday(target) != null && (
+                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-[#e9931c] text-white">
+                                          Visit {getVisitNumberForToday(target)}
+                                        </span>
+                                      )}
                                       <p className="font-semibold text-gray-800">{target.name || 'Unnamed Target'}</p>
                                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                                         target.status === 'Completed'
@@ -3247,7 +3394,7 @@ const SalesTracking = () => {
                                     {target.visitDate && (
                                       <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
                                         <FaClock className="w-3 h-3" />
-                                        Visit Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
+                                        Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
                                           day: '2-digit',
                                           month: 'short',
                                           year: 'numeric'
@@ -3293,12 +3440,7 @@ const SalesTracking = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      if (userLocation && isTracking) {
-                                        setRouteToVisitTarget({
-                                          from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                          to: { lat: parseFloat(target.latitude), lng: parseFloat(target.longitude) },
-                                          target: target
-                                        })
+                                      if (isTracking) {
                                         handleVisitTargetClick(target)
                                       } else {
                                         Swal.fire({
@@ -3332,8 +3474,16 @@ const SalesTracking = () => {
 
                 {rightPanelTab === 'tasks' && (
                   <div>
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between gap-2 mb-4">
                       <h3 className="text-lg font-semibold text-gray-700">Tasks (Follow-ups)</h3>
+                      <button
+                        type="button"
+                        onClick={() => loadFollowUps()}
+                        className="p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 hover:text-gray-800 transition-colors"
+                        title="Refresh list (e.g. after admin deleted a task)"
+                      >
+                        <FaSyncAlt className="w-4 h-4" />
+                      </button>
                     </div>
                     {followUps.length === 0 ? (
                       <div className="text-center py-8">
@@ -3343,15 +3493,27 @@ const SalesTracking = () => {
                       </div>
                     ) : (
                       <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto">
-                        {followUps
-                          .filter(f => f.status !== 'Completed')
-                          .sort((a, b) => {
-                            if (a.dueDate && b.dueDate) {
-                              return new Date(a.dueDate) - new Date(b.dueDate)
-                            }
-                            return 0
+                        {(() => {
+                          const taskSeen = new Set()
+                          const uniqueTasks = followUps.filter(f => {
+                            const id = (f._id || f.id)?.toString()
+                            if (!id || taskSeen.has(id)) return false
+                            taskSeen.add(id)
+                            return true
                           })
-                          .map((task) => (
+                          return uniqueTasks
+                            .filter(f => {
+                              // Only show follow-up tasks (not Visit type - those are visit targets)
+                              const taskType = (f.type || '').toLowerCase().trim()
+                              return f.status !== 'Completed' && taskType !== 'visit'
+                            })
+                            .sort((a, b) => {
+                              if (a.dueDate && b.dueDate) {
+                                return new Date(a.dueDate) - new Date(b.dueDate)
+                              }
+                              return 0
+                            })
+                            .map((task) => (
                             <div
                               key={task._id || task.id}
                               className="p-4 rounded-lg border-2 border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
@@ -3379,7 +3541,8 @@ const SalesTracking = () => {
                                 </div>
                               </div>
                             </div>
-                          ))}
+                          ))
+                        })()}
                       </div>
                     )}
                   </div>
@@ -3452,13 +3615,12 @@ const SalesTracking = () => {
               </div>
             </div>
           </div>
-        </div>
       </div>
 
-      {/* Start Tracking Modal */}
+      {/* Start Tracking Modal - no animation class to avoid blink on re-render */}
       {showStartModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp mx-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
+          <div key="start-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-auto" style={{ contain: 'layout style paint' }}>
             {/* Modal Header - Removed colored header */}
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">Start Tracking</h3>
@@ -3479,7 +3641,7 @@ const SalesTracking = () => {
             {/* Modal Body */}
             <div className="p-4 sm:p-6 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto">
               <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
-                📸 Upload your motorcycle speedometer/odometer image to automatically extract starting kilometers
+                📸 Starting meter: use <strong>Camera</strong>, <strong>Upload document</strong>, or <strong>Manual entry</strong> below
               </p>
 
               {/* Image Upload Area */}
@@ -3618,17 +3780,18 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Tracking Completion Modal */}
-      {showCompletionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp mx-auto">
-            {/* Modal Header - Removed colored header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
+      {/* Tracking Completion Modal – no animation class to avoid blink on re-render */}
+      {showCompletionModal && selectedVisitTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
+          <div key={`completion-${selectedVisitTarget._id || selectedVisitTarget.id || 'modal'}`} className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-auto" style={{ contain: 'layout style paint' }}>
+            {/* Modal Header */}
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
-                {selectedVisitTarget ? `Complete: ${selectedVisitTarget.name}` : 'Complete Tracking'}
+                Complete: {selectedVisitTarget.name}
               </h3>
               <button
                 onClick={() => {
+                  setRemainingPendingAfterComplete(null)
                   setShowCompletionModal(false)
                   setEndingKilometers('')
                   setEndingMeterImage(null)
@@ -3642,24 +3805,32 @@ const SalesTracking = () => {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto">
-              <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
-                Please upload ending meter reading and visited area picture to complete tracking.
+            {/* Modal Body - scrollable; buttons stay visible in footer */}
+            <div className="p-4 sm:p-6 overflow-y-auto min-h-0 flex-1">
+              <p className="text-sm sm:text-base text-gray-700 mb-2 text-center leading-relaxed font-medium">
+                Please upload visited area picture to complete this visit.
+              </p>
+              <p className="text-xs text-gray-500 mb-5 sm:mb-6 text-center">
+                Ending meter reading will be asked only when all today&apos;s visits are completed (Shift End).
               </p>
 
-              {/* Starting Kilometers Display */}
-              <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                <p className="text-sm font-semibold text-blue-800 mb-1">Starting Reading</p>
-                <p className="text-2xl font-bold text-blue-700">
-                  {startingKilometers && !isNaN(parseFloat(startingKilometers)) && parseFloat(startingKilometers) > 0 
-                    ? `${startingKilometers} km` 
-                    : 'Not set'}
-                </p>
-                {(!startingKilometers || isNaN(parseFloat(startingKilometers)) || parseFloat(startingKilometers) <= 0) && (
-                  <p className="text-xs text-red-600 mt-1">⚠️ Please set a valid starting reading</p>
-                )}
-              </div>
+              {/* Starting Kilometers Display - use meterReading (saved when Start was clicked) or startingKilometers */}
+              {(() => {
+                const startVal = meterReading || startingKilometers
+                const startNum = startVal != null && startVal !== '' ? parseFloat(startVal) : NaN
+                const isValid = !isNaN(startNum) && startNum > 0
+                return (
+                  <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                    <p className="text-sm font-semibold text-blue-800 mb-1">Starting Reading</p>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {isValid ? `${startVal} km` : 'Not set'}
+                    </p>
+                    {!isValid && (
+                      <p className="text-xs text-red-600 mt-1">⚠️ Please set a valid starting reading</p>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Estimated Kilometers Display */}
               {(routeDistanceKm || estimatedKilometers) && (
@@ -3693,29 +3864,14 @@ const SalesTracking = () => {
                 </div>
               ) : null}
 
-              {/* Remaining Visits Count */}
+              {/* Remaining Visits Count – use remainingPendingAfterComplete when set so count matches Next/End buttons */}
               {selectedVisitTarget && selectedVisitTarget.status === 'Completed' && (
                 (() => {
-                  const today = new Date()
-                  today.setHours(0, 0, 0, 0)
-                  const remainingVisits = visitTargets.filter(t => {
-                    if (t.status === 'Completed') return false
-                    if (t.status !== 'Pending' && t.status !== 'In Progress') return false
-                    if (!t.visitDate) return false
-                    const visitDate = new Date(t.visitDate)
-                    const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-                    return visitDateOnly.getTime() === today.getTime()
-                  })
-                  const nextVisit = remainingVisits.find(t => {
-                    if (!t.visitDate) return false
-                    const visitDate = new Date(t.visitDate)
-                    const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-                    return visitDateOnly.getTime() === today.getTime()
-                  }) || remainingVisits[0]
-                  
+                  const remainingVisits = remainingPendingAfterComplete !== null ? remainingPendingAfterComplete : todayPendingVisitsOrdered
+                  const nextVisit = remainingVisits[0] || null
                   return remainingVisits.length > 0 ? (
                     <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                      <p className="text-sm font-semibold text-blue-800 mb-1">Remaining Visits</p>
+                      <p className="text-sm font-semibold text-blue-800 mb-1">Remaining Visits (today)</p>
                       <p className="text-2xl font-bold text-blue-700">{remainingVisits.length}</p>
                       {nextVisit && (
                         <p className="text-xs text-blue-600 mt-1">Next: {nextVisit.name}</p>
@@ -3770,29 +3926,33 @@ const SalesTracking = () => {
                 >
                   {(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) ? (
                     <div className="w-full h-full flex items-center justify-center p-2 overflow-auto">
-                      {visitedAreaImages && visitedAreaImages.length > 1 ? (
-                        <div className="grid grid-cols-2 gap-1 w-full h-full">
-                          {visitedAreaImages.slice(0, 4).map((img, idx) => (
-                            <img
-                              key={idx}
-                              src={img}
-                              alt={`Visited area ${idx + 1}`}
-                              className="w-full h-full rounded object-cover"
-                            />
-                          ))}
-                          {visitedAreaImages.length > 4 && (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded text-xs font-semibold">
-                              +{visitedAreaImages.length - 4}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <img
-                          src={visitedAreaImage || (visitedAreaImages && visitedAreaImages[0])}
-                          alt="Visited area"
-                          className="max-w-full max-h-full rounded-lg object-contain"
-                        />
-                      )}
+                      {(() => {
+                        const uniqueImages = visitedAreaImages && visitedAreaImages.length > 0 ? [...new Set(visitedAreaImages)] : []
+                        const showGrid = uniqueImages.length > 1
+                        return showGrid ? (
+                          <div className="grid grid-cols-2 gap-1 w-full h-full">
+                            {uniqueImages.slice(0, 4).map((img, idx) => (
+                              <img
+                                key={idx}
+                                src={img}
+                                alt={`Visited area ${idx + 1}`}
+                                className="w-full h-full rounded object-cover"
+                              />
+                            ))}
+                            {uniqueImages.length > 4 && (
+                              <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded text-xs font-semibold">
+                                +{uniqueImages.length - 4}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <img
+                            src={visitedAreaImage || (visitedAreaImages && visitedAreaImages[0])}
+                            alt="Visited area"
+                            className="max-w-full max-h-full rounded-lg object-contain"
+                          />
+                        )
+                      })()}
                     </div>
                   ) : (
                     <div className="text-center p-4">
@@ -3808,7 +3968,6 @@ const SalesTracking = () => {
                   <button
                     onClick={() => {
                       setVisitedAreaImage(null)
-          setVisitedAreaImages([])
                       setVisitedAreaImages([])
                     }}
                     className="mt-2 text-xs sm:text-sm text-red-600 hover:text-red-700 font-semibold"
@@ -3817,92 +3976,151 @@ const SalesTracking = () => {
                   </button>
                 )}
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t-2 border-gray-200">
+            {/* Footer – buttons always visible, no scroll needed */}
+            <div className="px-4 sm:px-6 py-4 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl flex-shrink-0">
+              <div className="flex gap-3">
                 {selectedVisitTarget && selectedVisitTarget.status === 'Completed' ? (
-                  // Show Continue button after completion
+                  // After one target complete: show End shift when no more pending today (fallback: all today completed)
                   (() => {
-                    const today = new Date()
-                    today.setHours(0, 0, 0, 0)
-                    const remainingVisits = visitTargets.filter(t => {
-                      if (t.status === 'Completed') return false
-                      if (t.status !== 'Pending' && t.status !== 'In Progress') return false
-                      if (!t.visitDate) return false
-                      const visitDate = new Date(t.visitDate)
-                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-                      return visitDateOnly.getTime() === today.getTime()
-                    })
-                    const nextVisit = remainingVisits.find(t => {
-                      if (!t.visitDate) return false
-                      const visitDate = new Date(t.visitDate)
-                      const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-                      return visitDateOnly.getTime() === today.getTime()
-                    }) || remainingVisits[0]
-                    
+                    const remainingVisits = remainingPendingAfterComplete !== null ? remainingPendingAfterComplete : todayPendingVisitsOrdered
+                    const todayStr = toLocalDateString(new Date())
+                    const todayTargets = (visitTargets || []).filter(t => t.visitDate && toLocalDateString(new Date(t.visitDate)) === todayStr)
+                    const allTodayCompleted = todayTargets.length > 0 && todayTargets.every(t => (t.status === 'Completed' || t.status === 'completed'))
+                    const hasMore = !allTodayCompleted && remainingVisits.length > 0
+                    const nextVisit = remainingVisits[0] || null
+
                     return (
                       <>
                         <button
                           onClick={() => {
+                            setRemainingPendingAfterComplete(null)
                             setShowCompletionModal(false)
-                            setShowAchievementModal(true)
+                            if (hasMore) setShowAchievementModal(true)
                           }}
                           className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
                         >
-                          Close
+                          {!hasMore ? 'Cancel' : 'Close'}
                         </button>
-                        {nextVisit && isTracking ? (
-                          <button
-                            onClick={() => {
-                              // Set next visit as selected
-                              setSelectedVisitTarget(nextVisit)
-                              // Set ending kilometers as starting for next visit
-                              if (selectedVisitTarget.endingKilometers) {
-                                setStartingKilometers(selectedVisitTarget.endingKilometers.toString())
-                                setMeterReading(selectedVisitTarget.endingKilometers.toString())
-                              }
-                              // Set route to next visit
-                              if (userLocation) {
-                                setRouteToVisitTarget({
-                                  from: { lat: userLocation.latitude, lng: userLocation.longitude },
-                                  to: { lat: parseFloat(nextVisit.latitude), lng: parseFloat(nextVisit.longitude) },
-                                  target: nextVisit
+                        {hasMore && nextVisit ? (
+                          <>
+                            <button
+                              onClick={async () => {
+                                setRemainingPendingAfterComplete(null)
+                                setShowCompletionModal(false)
+                                setVisitedAreaImage(null)
+                                setVisitedAreaImages([])
+                                setSelectedVisitTarget(nextVisit)
+                                setIsTracking(true)
+                                // Clear old route so map does not show first-visit route; then refresh location for second visit
+                                setRouteToVisitTarget(null)
+                                setRouteDistanceKm(null)
+                                let loc = null
+                                try {
+                                  loc = await getCurrentLocation()
+                                  if (loc && loc.latitude != null && loc.longitude != null) {
+                                    setUserLocation(loc)
+                                  }
+                                } catch (_) {}
+                                // Snapshot for next-visit modal: distance from new location (or fallback), route km will come from Directions
+                                const getLatLng = (t) => {
+                                  const id = t._id || t.id
+                                  const resolved = resolvedVisitCoords[id]
+                                  const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+                                  const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : NaN)
+                                  const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : NaN)
+                                  return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+                                }
+                                const nextPos = getLatLng(nextVisit)
+                                const distStr = (loc && nextPos)
+                                  ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng))
+                                  : null
+                                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
+                                setShowVisitTargetModal(true)
+                                addNotification({
+                                  message: `📍 Next target: ${nextVisit.name}. Upload visited image when you reach.`,
+                                  type: 'info',
                                 })
-                              }
-                              // Close completion modal
-                              setShowCompletionModal(false)
-                              // Open next visit modal
-                              setShowVisitTargetModal(true)
-                              addNotification({
-                                message: `📍 Next Visit: ${nextVisit.name} | Starting from ${selectedVisitTarget.endingKilometers || 'current'} km`,
-                                type: 'info',
-                              })
-                            }}
-                            className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
-                          >
-                            <FaArrowRight className="w-4 h-4" />
-                            <span>Continue to Next Visit</span>
-                          </button>
+                              }}
+                              className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
+                            >
+                              <FaArrowRight className="w-4 h-4" />
+                              <span>Go to next visit</span>
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setRemainingPendingAfterComplete(null)
+                                setShowCompletionModal(false)
+                                setVisitedAreaImage(null)
+                                setVisitedAreaImages([])
+                                setSelectedVisitTarget(nextVisit)
+                                setIsTracking(true)
+                                // Clear old route; refresh location so second visit uses current position
+                                setRouteToVisitTarget(null)
+                                setRouteDistanceKm(null)
+                                let loc = null
+                                try {
+                                  loc = await getCurrentLocation()
+                                  if (loc && loc.latitude != null && loc.longitude != null) {
+                                    setUserLocation(loc)
+                                  }
+                                } catch (_) {}
+                                const getLatLng = (t) => {
+                                  const id = t._id || t.id
+                                  const resolved = resolvedVisitCoords[id]
+                                  const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
+                                  const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : NaN)
+                                  const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : NaN)
+                                  return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+                                }
+                                const nextPos = getLatLng(nextVisit)
+                                const distStr = (loc && nextPos)
+                                  ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng))
+                                  : null
+                                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
+                                setShowVisitTargetModal(true)
+                                addNotification({
+                                  message: `📍 Navigating to: ${nextVisit.name}. Upload visited image when you reach.`,
+                                  type: 'info',
+                                })
+                              }}
+                              className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
+                            >
+                              <FaMapMarkerAlt className="w-4 h-4" />
+                              <span>Go there</span>
+                            </button>
+                          </>
                         ) : (
                           <button
                             onClick={() => {
+                              setRemainingPendingAfterComplete(null)
                               setShowCompletionModal(false)
-                              setShowAchievementModal(true)
+                              setShowShiftEndModal(true)
+                              const currentStart = meterReading || startingKilometers
+                              if (currentStart && estimatedKilometers) {
+                                const startKm = parseFloat(currentStart)
+                                const estKm = parseFloat(estimatedKilometers)
+                                if (!isNaN(startKm) && !isNaN(estKm) && estKm > 0) {
+                                  setShiftEndingKilometers((startKm + estKm).toFixed(2))
+                                }
+                              }
                             }}
                             className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
                           >
                             <FaCheckCircle className="w-5 h-5" />
-                            <span>Done</span>
+                            <span>End shift</span>
                           </button>
                         )}
                       </>
                     )
                   })()
                 ) : (
-                  // Show normal complete button before completion
+                  // Before completion: Cancel + Complete Target (visited area required)
                   <>
                     <button
                       onClick={() => {
+                        setRemainingPendingAfterComplete(null)
                         setShowCompletionModal(false)
                         setEndingKilometers('')
                         setEndingMeterImage(null)
@@ -3913,22 +4131,12 @@ const SalesTracking = () => {
                       Cancel
                     </button>
                     <button
-                      onClick={() => {
-                        if (selectedVisitTarget) {
-                          handleCompleteTarget()
-                        } else {
-                          handleCompleteTracking()
-                        }
-                      }}
-                      disabled={
-                        selectedVisitTarget 
-                          ? (!visitedAreaImage || isExtractingEnding) // For individual visit: only visited area image required
-                          : (!endingKilometers || endingKilometers.trim() === '' || !visitedAreaImage || isExtractingEnding) // For complete tracking: both required
-                      }
+                      onClick={() => handleCompleteTarget()}
+                      disabled={!(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) || isExtractingEnding}
                       className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
                     >
                       <FaCheckCircle className="w-5 h-5" />
-                      <span>{selectedVisitTarget ? 'Complete Target' : 'Complete Tracking'}</span>
+                      <span>Complete Target</span>
                     </button>
                   </>
                 )}
@@ -3938,10 +4146,10 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Visit Target Action Modal - Opens when target is clicked */}
+      {/* Visit Target Action Modal - containment to avoid blink on re-render */}
       {showVisitTargetModal && selectedVisitTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto animate-slideUp my-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key={selectedVisitTarget._id || selectedVisitTarget.id || 'visit-modal'} className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto my-auto" style={{ contain: 'layout style paint' }}>
             {/* Header removed - simple border */}
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-xl font-semibold text-gray-800">{selectedVisitTarget.name}</h3>
@@ -3949,6 +4157,7 @@ const SalesTracking = () => {
                 onClick={() => {
                   setShowVisitTargetModal(false)
                   setSelectedVisitTarget(null)
+                  setVisitTargetModalSnapshot(null)
                 }}
                 className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
               >
@@ -3959,7 +4168,7 @@ const SalesTracking = () => {
             </div>
 
             <div className="p-6">
-              {/* Target Info */}
+              {/* Target Info – use snapshot so distance doesn't change on re-renders */}
               <div className="mb-6">
                 <div className="bg-gray-50 rounded-lg p-4 mb-4">
                   <p className="text-sm text-gray-600 mb-1">
@@ -3970,9 +4179,9 @@ const SalesTracking = () => {
                       <span className="font-semibold">Location:</span> {selectedVisitTarget.city}, {selectedVisitTarget.state}
                     </p>
                   )}
-                  {userLocation && (
+                  {visitTargetModalSnapshot?.distance != null && (
                     <p className="text-sm text-gray-600">
-                      <span className="font-semibold">Distance:</span> {getDistanceToVisitTarget(selectedVisitTarget)}
+                      <span className="font-semibold">Distance:</span> {visitTargetModalSnapshot.distance}
                     </p>
                   )}
                 </div>
@@ -4008,12 +4217,16 @@ const SalesTracking = () => {
                 />
               </div>
 
-              {/* Estimated Kilometers Display (if route is available) */}
-              {routeDistanceKm && isTracking && (
+              {/* Estimated Kilometers Display – snapshot only so modal doesn't blink on route updates */}
+              {visitTargetModalSnapshot?.routeDistanceKm != null && (
                 <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
                   <p className="text-sm font-semibold text-blue-800 mb-1">Estimated Route Distance</p>
                   <p className="text-2xl font-bold text-blue-700">
-                    {typeof routeDistanceKm === 'number' ? `${routeDistanceKm.toFixed(2)} km` : !isNaN(parseFloat(routeDistanceKm)) ? `${parseFloat(routeDistanceKm).toFixed(2)} km` : `${routeDistanceKm} km`}
+                    {typeof visitTargetModalSnapshot.routeDistanceKm === 'number'
+                      ? `${visitTargetModalSnapshot.routeDistanceKm.toFixed(2)} km`
+                      : !isNaN(parseFloat(visitTargetModalSnapshot.routeDistanceKm))
+                        ? `${parseFloat(visitTargetModalSnapshot.routeDistanceKm).toFixed(2)} km`
+                        : `${visitTargetModalSnapshot.routeDistanceKm} km`}
                   </p>
                   <p className="text-xs text-blue-600 mt-1">Based on best route calculation</p>
                 </div>
@@ -4025,6 +4238,7 @@ const SalesTracking = () => {
                   onClick={() => {
                     handleCreateQuotation()
                     setShowVisitTargetModal(false)
+                    setVisitTargetModalSnapshot(null)
                   }}
                   className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
                 >
@@ -4050,6 +4264,7 @@ const SalesTracking = () => {
                       localStorage.setItem('salesOrderFromAchievement', 'true')
                     }
                     setShowVisitTargetModal(false)
+                    setVisitTargetModalSnapshot(null)
                     // Navigate to Sales Orders tab
                     const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
                     window.dispatchEvent(event)
@@ -4066,6 +4281,7 @@ const SalesTracking = () => {
                   <button
                     onClick={() => {
                       setShowVisitTargetModal(false)
+                      setVisitTargetModalSnapshot(null)
                       handleMarkAsCompleted()
                     }}
                     className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
@@ -4082,6 +4298,7 @@ const SalesTracking = () => {
                 onClick={() => {
                   setShowVisitTargetModal(false)
                   setSelectedVisitTarget(null)
+                  setVisitTargetModalSnapshot(null)
                 }}
                 className="w-full mt-4 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
               >
@@ -4093,10 +4310,10 @@ const SalesTracking = () => {
       )}
 
       {/* Achievement Modal - Shown after completion */}
-      {/* Request Visit Modal */}
+      {/* Request Visit Modal - no animation to avoid blink */}
       {showRequestVisitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="request-visit-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col my-auto" style={{ contain: 'layout style paint' }}>
             {/* Header removed - simple border */}
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h3 className="text-xl font-semibold text-gray-800">Request a Visit</h3>
@@ -4309,10 +4526,10 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Unified Assign Modal - Visits, Follow-up, Sample Track */}
+      {/* Unified Assign Modal - no animation to avoid blink */}
       {showVisitAssignmentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="assign-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col my-auto" style={{ contain: 'layout style paint' }}>
             {/* Header removed - simple border */}
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h3 className="text-xl font-semibold text-gray-800">Assign</h3>
@@ -4519,15 +4736,6 @@ const SalesTracking = () => {
                         return dateMatch || stringMatch
                       })
                       
-                      // Debug log
-                      console.log('Selected date:', selectedDateForView)
-                      console.log('Total visits:', visitTargets.length)
-                      console.log('Filtered visits for date:', visitsToShow.length)
-                      console.log('Visits data:', visitsToShow.map(v => ({
-                        name: v.name,
-                        visitDate: v.visitDate,
-                        status: v.status
-                      })))
                     }
                     
                     // Categorize visits - if date is selected, show all visits for that date in one section
@@ -4681,7 +4889,12 @@ const SalesTracking = () => {
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         if (!isTracking) {
-                                          setShowStartModal(true)
+                                          if (hasStartedShiftToday()) {
+                                            setIsTracking(true)
+                                            addNotification({ message: 'Resuming tracking for today.', type: 'info' })
+                                          } else {
+                                            setShowStartModal(true)
+                                          }
                                         }
                                       }}
                                       className="ml-2 p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
@@ -4907,21 +5120,21 @@ const SalesTracking = () => {
                           <div className="p-8 text-center border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
                             <FaCalendarAlt className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                             <p className="text-gray-600 font-medium">
-                              {selectedDateForView ? `No visits scheduled for ${new Date(selectedDateForView).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No visits available'}
+                              {selectedDateForView ? `No targets scheduled for ${new Date(selectedDateForView).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No targets available'}
                             </p>
                             <p className="text-sm text-gray-500 mt-1">
                               {selectedDateForView ? (
                                 <>
-                                  Select another date or assign visits to this date.
+                                  Select another date or assign targets to this date.
                                   <br />
                                   <span className="text-xs text-gray-400 mt-2 block">
-                                    Total visits: {visitTargets.length} | 
+                                    Total targets: {visitTargets.length} | 
                                     Without date: {visitTargets.filter(v => !v.visitDate && (v.status || '').toLowerCase() !== 'completed').length} |
                                     Approved: {visitTargets.filter(v => (v.approvalStatus || 'Approved') === 'Approved' && (v.status || '').toLowerCase() !== 'completed').length}
                                   </span>
                                 </>
                               ) : (
-                                'Visits will appear here once assigned'
+                                'Targets will appear here once assigned'
                               )}
                             </p>
                           </div>
@@ -5425,8 +5638,8 @@ const SalesTracking = () => {
       )}
 
       {showAchievementModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4" style={{ contain: 'layout style paint' }}>
+          <div key="achievement-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-md" style={{ contain: 'layout style paint' }}>
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -5518,14 +5731,14 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Shift End Modal - When all visits are completed */}
+      {/* Shift End Modal - no animation to avoid blink */}
       {showShiftEndModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp mx-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
+          <div key="shift-end-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-auto" style={{ contain: 'layout style paint' }}>
             {/* Modal Header */}
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
-                Shift End - Upload Ending Meter Reading
+                End Shift – Ending Kilometer & Picture
               </h3>
               <button
                 onClick={() => {
@@ -5544,8 +5757,25 @@ const SalesTracking = () => {
             {/* Modal Body */}
             <div className="p-4 sm:p-6 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto">
               <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
-                All visits completed! Please upload ending meter reading to complete the shift.
+                All visits done. Enter ending kilometers and upload ending meter picture to complete the shift.
               </p>
+
+              {/* Manual Ending Kilometers Input */}
+              <div className="mb-5 sm:mb-6">
+                <label className="block text-sm sm:text-base font-bold text-gray-800 mb-2">
+                  Ending Kilometers (Manual Entry)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 45230"
+                  value={shiftEndingKilometers}
+                  onChange={handleEndingKilometersChange}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter odometer reading or use image upload below</p>
+              </div>
 
               {/* Starting Kilometers Display */}
               <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
@@ -5557,10 +5787,10 @@ const SalesTracking = () => {
                 </p>
               </div>
 
-              {/* Ending Meter Image Upload */}
+              {/* Ending Kilometer Picture – manual entry above OR camera/upload */}
               <div className="mb-5 sm:mb-6">
                 <label className="block text-sm sm:text-base font-bold text-gray-800 mb-3">
-                  Ending Meter Reading (Upload Image) *
+                  Ending Kilometer Picture (Camera or Upload)
                 </label>
                 <div className="flex gap-2 mb-3">
                   <button
@@ -5619,12 +5849,11 @@ const SalesTracking = () => {
                 )}
               </div>
 
-              {/* Ending Kilometers - Auto-extracted from image only */}
+              {/* Ending Kilometers - from manual or extracted from image */}
               {shiftEndingKilometers && (
                 <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                  <p className="text-sm font-semibold text-blue-800 mb-1">Extracted Ending Kilometers</p>
+                  <p className="text-sm font-semibold text-blue-800 mb-1">Ending Kilometers</p>
                   <p className="text-2xl font-bold text-blue-700">{shiftEndingKilometers} km</p>
-                  <p className="text-xs text-blue-600 mt-1">Extracted from meter image</p>
                 </div>
               )}
 
@@ -5660,11 +5889,20 @@ const SalesTracking = () => {
                 </button>
                 <button
                   onClick={handleShiftEnd}
-                  disabled={!shiftEndingKilometers || shiftEndingKilometers.trim() === '' || !shiftEndingMeterImage || isExtractingShiftEnd}
+                  disabled={!shiftEndingKilometers || shiftEndingKilometers.trim() === '' || isExtractingShiftEnd || isSubmittingShiftEnd}
                   className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
                 >
-                  <FaCheckCircle className="w-5 h-5" />
-                  <span>Complete Shift</span>
+                  {isSubmittingShiftEnd ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                      <span>Ending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FaCheckCircle className="w-5 h-5" />
+                      <span>Complete Shift</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -5674,8 +5912,8 @@ const SalesTracking = () => {
 
       {/* Shift Photo Collage Modal */}
       {showShiftPhotoCollage && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl animate-slideUp mx-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
+          <div key="shift-photo-collage" className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-auto" style={{ contain: 'layout style paint' }}>
             {/* Modal Header */}
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">

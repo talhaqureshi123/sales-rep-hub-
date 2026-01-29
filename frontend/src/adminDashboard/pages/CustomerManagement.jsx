@@ -14,7 +14,6 @@ const CustomerManagement = () => {
   const [hubspotPushing, setHubspotPushing] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
-  const [filterSalesman, setFilterSalesman] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
@@ -75,13 +74,12 @@ const CustomerManagement = () => {
   useEffect(() => {
     setCurrentPage(1) // Reset to first page when filters change
     loadCustomers()
-  }, [filterSalesman, filterStatus, searchTerm])
+  }, [filterStatus, searchTerm])
 
   const loadCustomers = async () => {
     setLoading(true)
     try {
       const params = {}
-      if (filterSalesman) params.salesman = filterSalesman
       if (filterStatus && filterStatus !== 'All') params.status = filterStatus
       if (searchTerm) params.search = searchTerm
 
@@ -123,7 +121,7 @@ const CustomerManagement = () => {
   const handleAddCustomer = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const customerData = {
         firstName: formData.firstName,
@@ -143,12 +141,11 @@ const CustomerManagement = () => {
         associatedCompanyName: formData.associatedCompanyName || '',
         lastContact: formData.lastContact || undefined,
         lastEngagement: formData.lastEngagement || undefined,
-        assignedSalesman: formData.assignedSalesman || null,
         view: formData.view || 'admin_salesman',
       }
 
       const result = await createCustomer(customerData)
-      
+
       if (result.success) {
         setShowAddForm(false)
         resetForm()
@@ -208,7 +205,7 @@ const CustomerManagement = () => {
   const handleUpdateCustomer = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const customerData = {
         firstName: formData.firstName,
@@ -227,12 +224,11 @@ const CustomerManagement = () => {
         associatedCompanyName: formData.associatedCompanyName || '',
         lastContact: formData.lastContact || undefined,
         lastEngagement: formData.lastEngagement || undefined,
-        assignedSalesman: formData.assignedSalesman || null,
         view: formData.view || 'admin_salesman',
       }
 
       const result = await updateCustomer(editingCustomer._id, customerData)
-      
+
       if (result.success) {
         setShowAddForm(false)
         resetForm()
@@ -288,7 +284,7 @@ const CustomerManagement = () => {
     setLoading(true)
     try {
       const result = await deleteCustomer(id)
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -417,7 +413,7 @@ const CustomerManagement = () => {
     try {
       // Always push with myContactsOnly=true (assign to current user)
       const result = await pushCustomersToHubSpot(false, 0, true, [customer._id])
-      
+
       if (result?.success && result?.data?.synced > 0) {
         Swal.fire({
           icon: 'success',
@@ -538,19 +534,21 @@ const CustomerManagement = () => {
             )}
           </button>
 
-          {/* Add Customer Button */}
-          <button
-            onClick={() => {
-              resetForm()
-              setShowAddForm(true)
-            }}
-            disabled={loading}
-            className="flex items-center gap-2 px-5 py-2 bg-[#e9931c] text-white rounded-xl font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Add Customer"
-          >
-            <span className="text-lg leading-none">+</span>
-            <span className="whitespace-nowrap">Add Customer</span>
-          </button>
+          {/* Add Customer Button - Only Admin */}
+          {userRole === 'admin' && (
+            <button
+              onClick={() => {
+                resetForm()
+                setShowAddForm(true)
+              }}
+              disabled={loading}
+              className="flex items-center gap-2 px-5 py-2 bg-[#e9931c] text-white rounded-xl font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Add Customer"
+            >
+              <span className="text-lg leading-none">+</span>
+              <span className="whitespace-nowrap">Add Customer</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -574,52 +572,36 @@ const CustomerManagement = () => {
               <button
                 key={option.value}
                 onClick={() => setFilterStatus(option.value)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  filterStatus === option.value
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === option.value
                     ? 'bg-[#e9931c] text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {option.label}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={filterSalesman}
-              onChange={(e) => setFilterSalesman(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] text-sm"
-            >
-              <option value="">All Potential</option>
-              {salesmen.map((salesman) => (
-                <option key={salesman._id || salesman.id} value={salesman._id || salesman.id}>
-                  {salesman.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Salesman filter removed – assignment is done via Customer Allotment only */}
         </div>
 
         {/* View Toggles */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('grid')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'grid'
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'grid'
                 ? 'bg-gray-200 text-gray-900'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+              }`}
           >
             <FaTh className="w-4 h-4 inline mr-2" />
             Grid View
           </button>
           <button
             onClick={() => setViewMode('map')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'map'
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'map'
                 ? 'bg-gray-200 text-gray-900'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+              }`}
           >
             <FaMapMarkerAlt className="w-4 h-4 inline mr-2" />
             Map View
@@ -733,9 +715,9 @@ const CustomerManagement = () => {
                   onChange={handleInputChange}
                   disabled={loading}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="e.g., LE4 0JP, SW1A 1AA"
+                  placeholder="e.g., 75400, 75500 (used for map location)"
                 />
-                <p className="mt-1 text-xs text-gray-500">UK postcode for accurate directions</p>
+                <p className="mt-1 text-xs text-gray-500">Postcode for accurate map location and directions</p>
               </div>
 
               <div>
@@ -865,8 +847,8 @@ const CustomerManagement = () => {
                 />
               </div>
 
-              {/* View Access Dropdown - Only for Admin or Salesman */}
-              {(userRole === 'admin' || userRole === 'salesman') && (
+              {/* View Access Dropdown - Only Admin can set (sirf admin ko show) */}
+              {userRole === 'admin' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">View Access *</label>
                   <select
@@ -919,15 +901,17 @@ const CustomerManagement = () => {
           </div>
           <h3 className="text-xl font-semibold text-gray-800 mb-2">No customers found</h3>
           <p className="text-gray-600 mb-6">Get started by adding your first customer.</p>
-          <button
-            onClick={() => {
-              resetForm()
-              setShowAddForm(true)
-            }}
-            className="px-6 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
-          >
-            + Add Customer
-          </button>
+          {userRole === 'admin' && (
+            <button
+              onClick={() => {
+                resetForm()
+                setShowAddForm(true)
+              }}
+              className="px-6 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
+            >
+              + Add Customer
+            </button>
+          )}
         </div>
       ) : viewMode === 'grid' ? (
         <>
@@ -963,155 +947,153 @@ const CustomerManagement = () => {
           {/* Customer Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {customers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((customer) => {
-            // Note: assignedSalesman field was removed from Customer model
-            // Salesmen are now linked through Tasks/FollowUps, not directly to customers
-            // Check if customer has assignedSalesman in raw data (legacy data)
-            const salesmanId = customer.assignedSalesman?._id || customer.assignedSalesman
-            const salesman = salesmanId ? getSalesmanInfo(salesmanId) : null
-            return (
-              <div
-                key={customer._id}
-                className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={(e) => {
-                  // Don't trigger if clicking on action buttons or links
-                  if (e.target.closest('button') || e.target.closest('a')) {
-                    return
-                  }
-                  handleCustomerClick(customer)
-                }}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 text-lg hover:text-[#e9931c] transition-colors">{customer.name || customer.firstName}</h3>
-                    {customer.company && (
-                      <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-                        <FaBuilding className="w-3 h-3" />
-                        {customer.company}
+              // Note: assignedSalesman field was removed from Customer model
+              // Salesmen are now linked through Tasks/FollowUps, not directly to customers
+              // Check if customer has assignedSalesman in raw data (legacy data)
+              const salesmanId = customer.assignedSalesman?._id || customer.assignedSalesman
+              const salesman = salesmanId ? getSalesmanInfo(salesmanId) : null
+              return (
+                <div
+                  key={customer._id}
+                  className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={(e) => {
+                    // Don't trigger if clicking on action buttons or links
+                    if (e.target.closest('button') || e.target.closest('a')) {
+                      return
+                    }
+                    handleCustomerClick(customer)
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 text-lg hover:text-[#e9931c] transition-colors">{customer.name || customer.firstName}</h3>
+                      {customer.company && (
+                        <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                          <FaBuilding className="w-3 h-3" />
+                          {customer.company}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Show "Push" button for app-created customers, "Imported" badge for HubSpot-imported customers */}
+                      {customer?.source !== 'hubspot' ? (
+                        <button
+                          onClick={(e) => handlePushSingleCustomer(customer, e)}
+                          disabled={hubspotPushing || !customer.email}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Push to HubSpot"
+                        >
+                          {hubspotPushing ? (
+                            <FaSpinner className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <FaArrowUp className="w-3 h-3" />
+                              Push
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
+                          Imported
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    {customer.email && (
+                      <p className="text-gray-600">
+                        <span className="font-medium">Email:</span> {customer.email}
                       </p>
                     )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* Show "Push" button for app-created customers, "Imported" badge for HubSpot-imported customers */}
-                    {customer?.source !== 'hubspot' ? (
-                      <button
-                        onClick={(e) => handlePushSingleCustomer(customer, e)}
-                        disabled={hubspotPushing || !customer.email}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Push to HubSpot"
-                      >
-                        {hubspotPushing ? (
-                          <FaSpinner className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <>
-                            <FaArrowUp className="w-3 h-3" />
-                            Push
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <span className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-semibold">
-                        Imported
-                      </span>
+                    {customer.phone && (
+                      <p className="text-gray-600">
+                        <span className="font-medium">Phone:</span> {customer.phone}
+                      </p>
                     )}
-                  </div>
-                </div>
-                <div className="space-y-2 text-sm">
-                  {customer.email && (
-                    <p className="text-gray-600">
-                      <span className="font-medium">Email:</span> {customer.email}
-                    </p>
-                  )}
-                  {customer.phone && (
-                    <p className="text-gray-600">
-                      <span className="font-medium">Phone:</span> {customer.phone}
-                    </p>
-                  )}
-                  {(customer.email || customer.phone) && (
-                    <div className="pt-1 flex items-center gap-2">
-                      <a
-                        href={getWhatsAppHref(customer.phone) || '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (!getWhatsAppHref(customer.phone)) e.preventDefault()
-                        }}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                          getWhatsAppHref(customer.phone)
-                            ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                            : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                        }`}
-                        title="Send WhatsApp"
-                      >
-                        <FaWhatsapp />
-                        WhatsApp
-                      </a>
-                      <a
-                        href={getEmailHref(customer.email, customer.name) || '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
-                        }}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                          getEmailHref(customer.email, customer.name)
-                            ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                            : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                        }`}
-                        title="Send Email"
-                      >
-                        <FaEnvelope />
-                        Email
-                      </a>
-                    </div>
-                  )}
-                  {customer.address && (
-                    <p className="text-gray-600">
-                      <span className="font-medium">Address:</span> {customer.address}
-                    </p>
-                  )}
-                  {salesman ? (
-                    <p className="text-gray-600">
-                      <span className="font-medium">Salesman:</span> {salesman.name || salesman.email || 'Unknown'}
-                    </p>
-                  ) : (
-                    // Note: assignedSalesman field was removed - salesmen are linked through tasks/visits
-                    <p className="text-gray-500 text-xs italic">
-                      Salesman assigned through tasks/visits
-                    </p>
-                  )}
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(customer.status)}`}>
-                      {customer.status}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditCustomer(customer)
-                        }}
-                        className="p-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors"
-                        title="Edit Customer"
-                      >
-                        <FaEdit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteCustomer(customer._id)
-                        }}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Customer"
-                      >
-                        <FaTrash className="w-4 h-4" />
-                      </button>
+                    {(customer.email || customer.phone) && (
+                      <div className="pt-1 flex items-center gap-2">
+                        <a
+                          href={getWhatsAppHref(customer.phone) || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (!getWhatsAppHref(customer.phone)) e.preventDefault()
+                          }}
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${getWhatsAppHref(customer.phone)
+                              ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            }`}
+                          title="Send WhatsApp"
+                        >
+                          <FaWhatsapp />
+                          WhatsApp
+                        </a>
+                        <a
+                          href={getEmailHref(customer.email, customer.name) || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
+                          }}
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${getEmailHref(customer.email, customer.name)
+                              ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            }`}
+                          title="Send Email"
+                        >
+                          <FaEnvelope />
+                          Email
+                        </a>
+                      </div>
+                    )}
+                    {customer.address && (
+                      <p className="text-gray-600">
+                        <span className="font-medium">Address:</span> {customer.address}
+                      </p>
+                    )}
+                    {salesman ? (
+                      <p className="text-gray-600">
+                        <span className="font-medium">Salesman:</span> {salesman.name || salesman.email || 'Unknown'}
+                      </p>
+                    ) : (
+                      // Note: assignedSalesman field was removed - salesmen are linked through tasks/visits
+                      <p className="text-gray-500 text-xs italic">
+                        Salesman assigned through tasks/visits
+                      </p>
+                    )}
+                    <div className="pt-2 flex items-center justify-between">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(customer.status)}`}>
+                        {customer.status}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditCustomer(customer)
+                          }}
+                          className="p-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors"
+                          title="Edit Customer"
+                        >
+                          <FaEdit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCustomer(customer._id)
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete Customer"
+                        >
+                          <FaTrash className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
           </div>
 
           {/* Pagination Controls */}
@@ -1147,11 +1129,10 @@ const CustomerManagement = () => {
                         )}
                         <button
                           onClick={() => setCurrentPage(page)}
-                          className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                            currentPage === page
+                          className={`px-4 py-2 rounded-lg font-semibold transition-colors ${currentPage === page
                               ? 'bg-[#e9931c] text-white'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
+                            }`}
                         >
                           {page}
                         </button>
@@ -1184,13 +1165,13 @@ const CustomerManagement = () => {
                 // Try to extract coordinates if available, otherwise use geocoding
                 let lat = null
                 let lng = null
-                
+
                 // Check if customer has coordinates (if added in future)
                 if (customer.latitude && customer.longitude) {
                   lat = parseFloat(customer.latitude)
                   lng = parseFloat(customer.longitude)
                 }
-                
+
                 // Build address string for geocoding
                 const addressParts = []
                 if (customer.address) addressParts.push(customer.address)
@@ -1198,16 +1179,16 @@ const CustomerManagement = () => {
                 if (customer.state) addressParts.push(customer.state)
                 if (customer.postcode) addressParts.push(customer.postcode)
                 else if (customer.pincode) addressParts.push(customer.pincode)
-                
+
                 const fullAddress = addressParts.join(', ')
-                
+
                 // Customer name
-                const customerName = customer.name || 
-                                    customer.company || 
-                                    (customer.firstName ? `${customer.firstName}${customer.contactPerson ? ` ${customer.contactPerson}` : ''}` : '') ||
-                                    customer.email ||
-                                    'Customer'
-                
+                const customerName = customer.name ||
+                  customer.company ||
+                  (customer.firstName ? `${customer.firstName}${customer.contactPerson ? ` ${customer.contactPerson}` : ''}` : '') ||
+                  customer.email ||
+                  'Customer'
+
                 return {
                   _id: customer._id,
                   id: customer._id,
@@ -1226,14 +1207,14 @@ const CustomerManagement = () => {
                 if (marker.latitude && marker.longitude) {
                   const lat = parseFloat(marker.latitude)
                   const lng = parseFloat(marker.longitude)
-                  return !isNaN(lat) && !isNaN(lng) && 
-                         lat >= -90 && lat <= 90 && 
-                         lng >= -180 && lng <= 180
+                  return !isNaN(lat) && !isNaN(lng) &&
+                    lat >= -90 && lat <= 90 &&
+                    lng >= -180 && lng <= 180
                 }
                 // Include markers with address (will be geocoded by GoogleMapView)
                 return marker.address && marker.address !== 'No address'
               })
-            
+
             // Calculate map center from customer locations
             const validCoords = customerMarkers.filter(m => m.latitude && m.longitude)
             let calculatedCenter = mapCenter
@@ -1244,7 +1225,7 @@ const CustomerManagement = () => {
                 calculatedCenter = { lat: avgLat, lng: avgLng }
               }
             }
-            
+
             return customerMarkers.length > 0 ? (
               <GoogleMapView
                 key={`customer-map-${customers.length}-${calculatedCenter.lat}-${calculatedCenter.lng}`}
@@ -1332,66 +1313,60 @@ const CustomerManagement = () => {
             <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0 overflow-x-auto">
               <button
                 onClick={() => setCustomerDetailTab('overview')}
-                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
-                  customerDetailTab === 'overview'
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'overview'
                     ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                     : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <FaInfoCircle className="w-4 h-4" />
                 Overview
               </button>
               <button
                 onClick={() => setCustomerDetailTab('tasks')}
-                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
-                  customerDetailTab === 'tasks'
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'tasks'
                     ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                     : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <FaTasks className="w-4 h-4" />
                 Tasks ({customerDetailData?.counts?.tasks || 0})
               </button>
               <button
                 onClick={() => setCustomerDetailTab('visits')}
-                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
-                  customerDetailTab === 'visits'
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'visits'
                     ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                     : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <FaMapMarkerAlt className="w-4 h-4" />
                 Visits ({customerDetailData?.counts?.visits || 0})
               </button>
               <button
                 onClick={() => setCustomerDetailTab('samples')}
-                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
-                  customerDetailTab === 'samples'
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'samples'
                     ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                     : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <FaFlask className="w-4 h-4" />
                 Samples ({customerDetailData?.counts?.samples || 0})
               </button>
               <button
                 onClick={() => setCustomerDetailTab('quotations')}
-                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
-                  customerDetailTab === 'quotations'
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'quotations'
                     ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                     : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <FaFileAlt className="w-4 h-4" />
                 Quotations ({customerDetailData?.counts?.quotations || 0})
               </button>
               <button
                 onClick={() => setCustomerDetailTab('orders')}
-                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
-                  customerDetailTab === 'orders'
+                className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'orders'
                     ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
                     : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <FaShoppingCart className="w-4 h-4" />
                 Orders ({customerDetailData?.counts?.orders || 0})
@@ -1582,12 +1557,11 @@ const CustomerManagement = () => {
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">{task.description || task.customerName || 'Task'}</p>
-                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                    task.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                    task.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                                    task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-yellow-100 text-yellow-700'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${task.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                      task.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                        task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
+                                          'bg-yellow-100 text-yellow-700'
+                                    }`}>
                                     {task.status}
                                   </span>
                                   {task.type && (
@@ -1596,11 +1570,10 @@ const CustomerManagement = () => {
                                     </span>
                                   )}
                                   {task.priority && (
-                                    <span className={`px-2 py-0.5 rounded text-xs ${
-                                      task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
-                                      task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-gray-100 text-gray-700'
-                                    }`}>
+                                    <span className={`px-2 py-0.5 rounded text-xs ${task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
+                                        task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                          'bg-gray-100 text-gray-700'
+                                      }`}>
                                       {task.priority}
                                     </span>
                                   )}
@@ -1654,11 +1627,10 @@ const CustomerManagement = () => {
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">{visit.name || 'Visit'}</p>
-                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                    visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                    visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-yellow-100 text-yellow-700'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                      visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-yellow-100 text-yellow-700'
+                                    }`}>
                                     {visit.status}
                                   </span>
                                 </div>
@@ -1717,11 +1689,10 @@ const CustomerManagement = () => {
                                     <span>Quantity: {sample.quantity}</span>
                                   )}
                                   {sample.status && (
-                                    <span className={`px-2 py-0.5 rounded ${
-                                      sample.status === 'Converted' ? 'bg-green-100 text-green-700' :
-                                      sample.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
-                                      'bg-yellow-100 text-yellow-700'
-                                    }`}>
+                                    <span className={`px-2 py-0.5 rounded ${sample.status === 'Converted' ? 'bg-green-100 text-green-700' :
+                                        sample.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
+                                          'bg-yellow-100 text-yellow-700'
+                                      }`}>
                                       {sample.status}
                                     </span>
                                   )}
@@ -1762,11 +1733,10 @@ const CustomerManagement = () => {
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">Quotation #{quotation.quotationNumber || 'N/A'}</p>
                                   {quotation.status && (
-                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                      quotation.status === 'Approved' ? 'bg-green-100 text-green-700' :
-                                      quotation.status === 'Rejected' ? 'bg-red-100 text-red-700' :
-                                      'bg-yellow-100 text-yellow-700'
-                                    }`}>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${quotation.status === 'Approved' ? 'bg-green-100 text-green-700' :
+                                        quotation.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                                          'bg-yellow-100 text-yellow-700'
+                                      }`}>
                                       {quotation.status}
                                     </span>
                                   )}
@@ -1812,11 +1782,10 @@ const CustomerManagement = () => {
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">Order #{order.soNumber || 'N/A'}</p>
                                   {order.orderStatus && (
-                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                      order.orderStatus === 'Completed' ? 'bg-green-100 text-green-700' :
-                                      order.orderStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-gray-100 text-gray-700'
-                                    }`}>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${order.orderStatus === 'Completed' ? 'bg-green-100 text-green-700' :
+                                        order.orderStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                                          'bg-gray-100 text-gray-700'
+                                      }`}>
                                       {order.orderStatus}
                                     </span>
                                   )}

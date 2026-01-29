@@ -20,24 +20,20 @@ const getMyCustomers = async (req, res) => {
       monthlySpendMax
     } = req.query;
     
-    // Get customers through tasks/visits assigned to this salesman
+    // Get customers through tasks/visits allotted to this salesman (only allotted customers)
     const FollowUp = require('../../database/models/FollowUp');
     const VisitTarget = require('../../database/models/VisitTarget');
     
     // Get unique customer IDs from tasks
     const taskCustomerIds = await FollowUp.find({ salesman: req.user._id }).distinct('customer');
-    // Get unique customer IDs from visits
-    const visitCustomerIds = await VisitTarget.find({ salesman: req.user._id }).distinct('customer');
-    
-    // Combine and get unique customer IDs, plus customers created by this salesman
-    const relatedCustomerIds = [...new Set([...taskCustomerIds, ...visitCustomerIds].filter(id => id))];
-    
-    const filter = {
-      $or: [
-        { _id: { $in: relatedCustomerIds } }, // Customers with tasks/visits
-        { createdBy: req.user._id }, // Customers created by this salesman
-      ],
-    };
+    // Get unique customer IDs from visits (VisitTarget uses customerId)
+    const visitCustomerIds = await VisitTarget.find({ salesman: req.user._id }).distinct('customerId');
+    // Customers allotted via Customer Allotment (simple allotment – no task)
+    const allottedCustomerIds = await Customer.find({ allottedSalesman: req.user._id }).distinct('_id');
+
+    const relatedCustomerIds = [...new Set([...taskCustomerIds, ...visitCustomerIds, ...allottedCustomerIds].filter(id => id))];
+
+    const filter = { _id: { $in: relatedCustomerIds } };
 
     // Apply additional filters
     if (status && status !== 'All') {
@@ -74,7 +70,6 @@ const getMyCustomers = async (req, res) => {
       filter.status = status;
     }
     if (search) {
-      // Combine search with existing $or filter
       const searchFilter = {
         $or: [
           { firstName: { $regex: search, $options: 'i' } },
@@ -88,13 +83,8 @@ const getMyCustomers = async (req, res) => {
           { state: { $regex: search, $options: 'i' } },
         ],
       };
-      
-      // Merge search filter with existing filter
-      filter.$and = [
-        { $or: filter.$or },
-        searchFilter
-      ];
-      delete filter.$or;
+      filter.$and = [{ _id: { $in: relatedCustomerIds } }, searchFilter];
+      delete filter._id;
     }
 
     const customers = await Customer.find(filter)
@@ -129,30 +119,23 @@ const getCustomer = async (req, res) => {
       });
     }
 
-    // Check if customer is accessible to this salesman:
-    // 1. Customer was created by this salesman, OR
-    // 2. Customer has tasks assigned to this salesman, OR
-    // 3. Customer name matches visits assigned to this salesman
+    // Only allotted customers: customer must have task or visit assigned to this salesman
     const FollowUp = require('../../database/models/FollowUp');
     const VisitTarget = require('../../database/models/VisitTarget');
     
-    const isCreatedBySalesman = customer.createdBy && customer.createdBy._id.toString() === req.user._id.toString();
-    const hasTasks = await FollowUp.findOne({ 
-      customer: customer._id, 
-      salesman: req.user._id 
+    const hasTasks = await FollowUp.findOne({
+      customer: customer._id,
+      salesman: req.user._id,
     });
-    
-    // VisitTarget doesn't have customer field, check by customer name
-    const customerName = customer.name || customer.firstName || '';
-    const hasVisits = customerName ? await VisitTarget.findOne({ 
-      name: { $regex: customerName, $options: 'i' },
-      salesman: req.user._id 
-    }) : null;
+    const hasVisits = await VisitTarget.findOne({
+      customerId: customer._id,
+      salesman: req.user._id,
+    });
 
-    if (!isCreatedBySalesman && !hasTasks && !hasVisits) {
+    if (!hasTasks && !hasVisits) {
       return res.status(404).json({
         success: false,
-        message: 'Customer not found or not assigned to you',
+        message: 'Customer not found or not allotted to you',
       });
     }
 
@@ -190,6 +173,10 @@ const createCustomer = async (req, res) => {
       status,
       notes,
       competitorInfo,
+      associatedContactName,
+      associatedCompanyName,
+      lastContact,
+      lastEngagement,
       view,
     } = req.body;
 
@@ -233,12 +220,15 @@ const createCustomer = async (req, res) => {
       company,
       orderPotential,
       monthlySpend: monthlySpend || 0,
-      // REMOVED: assignedSalesman - Customers and Salesmen are separate
       status: status || 'Active',
       notes,
       competitorInfo,
-      view: view || 'admin_salesman', // Default: visible to both admin and salesman
-      createdBy: req.user._id, // Set createdBy to logged-in salesman
+      associatedContactName: associatedContactName || undefined,
+      associatedCompanyName: associatedCompanyName || undefined,
+      lastContact: lastContact ? new Date(lastContact) : undefined,
+      lastEngagement: lastEngagement ? new Date(lastEngagement) : undefined,
+      view: view || 'admin_salesman',
+      createdBy: req.user._id,
     });
 
     const populatedCustomer = await Customer.findById(customer._id)
