@@ -259,8 +259,9 @@ const Tasks = () => {
         return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
       })
     } else if (activeTab !== 'All') {
-      // Status-based filters (Overdue, Today, Upcoming, Completed)
-      list = list.filter((t) => t.status === activeTab)
+      // Status-based filters (Overdue, Today, Upcoming, Completed) – case-insensitive match
+      const tabLower = (activeTab || '').toString().toLowerCase()
+      list = list.filter((t) => (t.status || '').toString().toLowerCase() === tabLower)
     }
     // Remove duplicate tasks for same customer - keep only one task per customer
     // BUT: Skip deduplication for Pending tab to show all pending tasks
@@ -483,10 +484,10 @@ const Tasks = () => {
     return list
   }, [tasks, search, activeTab, activeFilters])
 
-  // Reset to page 1 when tab changes so list shows first page of that tab
+  // Reset to page 1 when tab or filters change so list shows first page of filtered results
   useEffect(() => {
     setCurrentPage(1)
-  }, [activeTab])
+  }, [activeTab, activeFilters, search])
 
   useEffect(() => {
     loadTasks()
@@ -2261,7 +2262,7 @@ const Tasks = () => {
               <FaChevronDown className="w-3 h-3" />
             </button>
             {showTaskTypeDropdown && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-60 overflow-y-auto">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px] max-h-60 overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="p-2 border-b border-gray-200">
                   <div className="relative">
                     <FaSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3" />
@@ -2392,7 +2393,7 @@ const Tasks = () => {
               <FaChevronDown className="w-3 h-3" />
             </button>
             {showPriorityDropdown && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[180px] max-h-60 overflow-y-auto">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[180px] max-h-60 overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="p-2 border-b border-gray-200">
                   <div className="relative">
                     <FaSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3" />
@@ -2447,7 +2448,7 @@ const Tasks = () => {
               <FaChevronDown className="w-3 h-3" />
             </button>
             {showSalesmanDropdown && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[250px] max-h-60 overflow-y-auto">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[250px] max-h-60 overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="p-2 border-b border-gray-200">
                   <div className="relative">
                     <FaSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3" />
@@ -2506,7 +2507,7 @@ const Tasks = () => {
               <FaChevronDown className="w-3 h-3" />
             </button>
             {showTimeDropdown && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[180px]">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[180px]" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="py-1">
                   {[
                     { value: 'morning', label: 'Morning (6 AM - 12 PM)' },

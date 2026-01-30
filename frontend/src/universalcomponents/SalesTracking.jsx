@@ -105,6 +105,7 @@ const SalesTracking = () => {
   const isAnyModalOpenRef = useRef(false) // Skip location state updates when modal open to prevent modal blink
   const shiftEndSubmittedRef = useRef(false) // Ensure End shift runs only once per shift
   const shiftStartKilometersRef = useRef(null) // Original odometer when shift started – used for total km (never overwrite on visit complete)
+  const shiftCollageImagesRef = useRef({ startImage: null, endImage: null }) // For collage after shift end (cleared images still show)
   const [isSubmittingShiftEnd, setIsSubmittingShiftEnd] = useState(false) // Prevent double submit on End shift (reload/tab) – don’t auto-pause in first 5s
 
   const getCurrentUserEmail = () => {
@@ -2336,6 +2337,12 @@ const SalesTracking = () => {
         localStorage.removeItem(SHIFT_STARTED_DATE_KEY)
       } catch (_) {}
 
+      // Save images for collage before clearing (so View Photos shows start + visits + end)
+      shiftCollageImagesRef.current = {
+        startImage: uploadedImage || null,
+        endImage: shiftEndingMeterImage || null,
+      }
+
       // Clear form data
       setShiftEndingKilometers('')
       setShiftEndingMeterImage(null)
@@ -2630,6 +2637,7 @@ const SalesTracking = () => {
       // Close modal first
       setShowStartModal(false)
       shiftEndSubmittedRef.current = false // New shift started – allow End shift once when last visit done
+      shiftCollageImagesRef.current = { startImage: null, endImage: null } // Clear previous shift collage
 
       // Start countdown immediately
       setShowCountdown(true)
@@ -3054,8 +3062,8 @@ const SalesTracking = () => {
                 </div>
               </div>
             )}
-            {/* Floating action bar – hide when ANY modal open so End shift bar never shows below modals */}
-            {selectedVisitTarget?.status === 'Completed' && !showCompletionModal && !showVisitTargetModal && !showShiftEndModal && !showStartModal && (userLocation || visitTargets.length > 0) && (() => {
+            {/* Floating action bar – only when shift started today and not ended; hide when any modal open */}
+            {hasStartedShiftToday() && selectedVisitTarget?.status === 'Completed' && !showCompletionModal && !showVisitTargetModal && !showShiftEndModal && !showStartModal && (userLocation || visitTargets.length > 0) && (() => {
               const remainingVisits = remainingPendingAfterComplete !== null ? remainingPendingAfterComplete : todayPendingVisitsOrdered
               const todayStr = toLocalDateString(new Date())
               const todayTargets = (visitTargets || []).filter(t => t.visitDate && toLocalDateString(new Date(t.visitDate)) === todayStr)
@@ -6182,26 +6190,33 @@ const SalesTracking = () => {
                 })
 
                 const allImages = []
-                
-                // Add starting meter image if available
-                if (uploadedImage) {
-                  allImages.push({ type: 'Starting Meter', image: uploadedImage, visitName: 'Shift Start' })
+                const { startImage: savedStart, endImage: savedEnd } = shiftCollageImagesRef.current || {}
+
+                // Add starting meter image (current or saved from shift end)
+                const startImg = uploadedImage || savedStart
+                if (startImg) {
+                  allImages.push({ type: 'Starting Meter', image: startImg, visitName: 'Shift Start' })
                 }
-                
-                // Add visited area images from all completed visits
+
+                // Add visited area images from all completed visits (single + array)
                 completedVisits.forEach((visit, index) => {
-                  if (visit.visitedAreaImage) {
-                    allImages.push({ 
-                      type: 'Visited Area', 
-                      image: visit.visitedAreaImage, 
-                      visitName: visit.name || `Visit ${index + 1}` 
-                    })
+                  const visitName = visit.name || `Visit ${index + 1}`
+                  const single = visit.visitedAreaImage
+                  const multiple = Array.isArray(visit.visitedAreaImages) ? visit.visitedAreaImages : []
+                  if (single) {
+                    allImages.push({ type: 'Visited Area', image: single, visitName })
                   }
+                  multiple.forEach((img, i) => {
+                    if (img && img !== single) {
+                      allImages.push({ type: 'Visited Area', image: img, visitName: `${visitName} (${i + 1})` })
+                    }
+                  })
                 })
-                
-                // Add ending meter image
-                if (shiftEndingMeterImage) {
-                  allImages.push({ type: 'Ending Meter', image: shiftEndingMeterImage, visitName: 'Shift End' })
+
+                // Add ending meter image (current or saved from shift end)
+                const endImg = shiftEndingMeterImage || savedEnd
+                if (endImg) {
+                  allImages.push({ type: 'Ending Meter', image: endImg, visitName: 'Shift End' })
                 }
 
                 return (

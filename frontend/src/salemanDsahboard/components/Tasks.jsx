@@ -171,12 +171,28 @@ const Tasks = () => {
         )
       })
     }
-    // Apply active filters
+    // Apply active filters – case-insensitive and support type / hs_task_type
     if (activeFilters.taskType.length > 0) {
-      list = list.filter(t => activeFilters.taskType.includes(t.type))
+      list = list.filter(t => {
+        const taskType = (t.hs_task_type || t.type || '').toString().trim()
+        return activeFilters.taskType.some(ft => {
+          const f = (ft || '').toString().toLowerCase().trim()
+          const tt = taskType.toLowerCase()
+          if (f === tt) return true
+          if ((f === 'visit' || f === 'visit target') && (tt.includes('visit') || t.isVisitTarget || t.visitTargetId)) return true
+          if ((f === 'follow-up' || f === 'follow up') && tt.includes('follow')) return true
+          if ((f === 'sample' || f === 'sample feedback') && (tt.includes('sample') || tt.includes('feedback'))) return true
+          if (f === 'call' && (tt === 'call' || tt.includes('call'))) return true
+          if (f === 'email' && (tt === 'email' || tt.includes('email'))) return true
+          return false
+        })
+      })
     }
     if (activeFilters.priority.length > 0) {
-      list = list.filter(t => activeFilters.priority.includes(t.priority))
+      list = list.filter(t => {
+        const p = (t.priority || '').toString().toLowerCase()
+        return activeFilters.priority.some(fp => (fp || '').toString().toLowerCase() === p)
+      })
     }
     if (activeFilters.dueDateRange) {
       const today = new Date()
