@@ -10,7 +10,6 @@ import {
   FaChartLine,
   FaCheckCircle,
   FaFileInvoice,
-  FaFlask,
   FaBell,
   FaMapMarkerAlt,
   FaCamera,
@@ -25,7 +24,6 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
     { id: 'product-videos', label: 'Videos', icon: FaVideo },
     { id: 'sales-orders', label: 'Orders', icon: FaShoppingCart },
     { id: 'quotes', label: 'Quotes', icon: FaFileInvoice },
-    { id: 'sample-tracker', label: 'Samples', icon: FaFlask },
     { id: 'hubspot-tasks', label: 'Tasks', icon: FaTasks },
     { id: 'user-management', label: 'Salesmen', icon: FaUsers },
     { id: 'customer-management', label: 'Customers', icon: FaUser },
@@ -34,8 +32,8 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
   ]
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 lg:hidden">
-      <div className="flex items-center justify-around h-16 overflow-x-auto">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 lg:hidden pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center justify-around h-16 min-h-[64px] overflow-x-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id

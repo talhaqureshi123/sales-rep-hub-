@@ -6,7 +6,6 @@ import Quotation from '../components/quatation'
 import CustomerManagement from '../components/CustomerManagement'
 import Dashboard from '../components/Dashboard'
 import Tasks from '../components/Tasks'
-import SampleTracker from '../components/SampleTracker'
 import SalesTargets from '../components/SalesTargets'
 import SalesOrders from '../../adminDashboard/pages/SalesOrders'
 import ProductVideos from '../components/ProductVideos'
@@ -60,8 +59,6 @@ const SalesmanDashboard = ({ onLogout }) => {
         return <CustomerManagement openAddForm={openAddCustomer} onAddFormClose={() => setOpenAddCustomer(false)} />
       case 'tasks':
         return <Tasks />
-      case 'sample-tracker':
-        return <SampleTracker />
       case 'sales-targets':
         return <SalesTargets />
       case 'sales-orders':

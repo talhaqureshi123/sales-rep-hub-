@@ -310,14 +310,14 @@ const QRCameraScanner = ({ onScanSuccess, onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-4" style={{ zIndex: 9999 }}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md" style={{ maxWidth: '500px' }}>
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ zIndex: 9999 }}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-md my-auto max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 className="text-lg font-bold text-gray-800">Scan QR Code</h3>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
             type="button"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

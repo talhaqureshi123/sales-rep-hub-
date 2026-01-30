@@ -119,10 +119,12 @@ const getCustomer = async (req, res) => {
       });
     }
 
-    // Only allotted customers: customer must have task or visit assigned to this salesman
+    // Only allotted customers: task, visit, or Customer Allotment (allottedSalesman)
     const FollowUp = require('../../database/models/FollowUp');
     const VisitTarget = require('../../database/models/VisitTarget');
     
+    const allottedId = customer.allottedSalesman?._id || customer.allottedSalesman;
+    const allottedToMe = allottedId && allottedId.toString() === req.user._id.toString();
     const hasTasks = await FollowUp.findOne({
       customer: customer._id,
       salesman: req.user._id,
@@ -132,7 +134,7 @@ const getCustomer = async (req, res) => {
       salesman: req.user._id,
     });
 
-    if (!hasTasks && !hasVisits) {
+    if (!allottedToMe && !hasTasks && !hasVisits) {
       return res.status(404).json({
         success: false,
         message: 'Customer not found or not allotted to you',

@@ -2,6 +2,7 @@ const FollowUp = require("../../database/models/FollowUp");
 const VisitTarget = require("../../database/models/VisitTarget");
 const User = require("../../database/models/User");
 const Customer = require("../../database/models/Customer");
+const Sample = require("../../database/models/Sample");
 const hubspotService = require("../../services/hubspotService");
 
 // @desc    Get all follow-ups
@@ -548,6 +549,19 @@ const approveFollowUp = async (req, res) => {
     followUp.approvedBy = req.user._id;
     followUp.approvedAt = new Date();
     await followUp.save();
+
+    // When task is Sample Track (relatedSample), auto-approve the linked sample so Sample Tracker page doesn't need separate approval
+    if (followUp.relatedSample) {
+      try {
+        const sampleId = followUp.relatedSample._id || followUp.relatedSample;
+        await Sample.findByIdAndUpdate(sampleId, {
+          approvalStatus: "Approved",
+          $unset: { rejectionReason: 1 },
+        });
+      } catch (sampleErr) {
+        console.error("Sample auto-approve on task approve:", sampleErr.message);
+      }
+    }
 
     // 🔁 HUBSPOT SYNC (NON-BLOCKING): create task in HubSpot when approved
     (async () => {

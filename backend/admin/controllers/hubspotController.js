@@ -1,8 +1,8 @@
-const hubspotService = require('../../services/hubspotService');
-const Customer = require('../../database/models/Customer');
-const FollowUp = require('../../database/models/FollowUp');
-const SalesOrder = require('../../database/models/SalesOrder');
-const User = require('../../database/models/User');
+const hubspotService = require("../../services/hubspotService");
+const Customer = require("../../database/models/Customer");
+const FollowUp = require("../../database/models/FollowUp");
+const SalesOrder = require("../../database/models/SalesOrder");
+const User = require("../../database/models/User");
 
 // @desc    Create customer and order in HubSpot
 // @route   POST /api/admin/hubspot/create-order
@@ -14,7 +14,7 @@ const createCustomerAndOrder = async (req, res) => {
     if (!customer || !order) {
       return res.status(400).json({
         success: false,
-        message: 'Customer and order data are required',
+        message: "Customer and order data are required",
       });
     }
 
@@ -23,23 +23,26 @@ const createCustomerAndOrder = async (req, res) => {
     if (!customerId) {
       return res.status(500).json({
         success: false,
-        message: 'Customer creation failed in HubSpot',
+        message: "Customer creation failed in HubSpot",
       });
     }
 
     // Step 2: Create order linked to customer
-    const orderId = await hubspotService.createOrderInHubSpot(order, customerId);
+    const orderId = await hubspotService.createOrderInHubSpot(
+      order,
+      customerId,
+    );
     if (!orderId) {
       return res.status(500).json({
         success: false,
-        message: 'Order creation failed in HubSpot',
+        message: "Order creation failed in HubSpot",
         customerId, // Return customerId even if order fails
       });
     }
 
     res.status(201).json({
       success: true,
-      message: 'Customer & Order created successfully in HubSpot',
+      message: "Customer & Order created successfully in HubSpot",
       data: {
         customerId,
         orderId,
@@ -48,7 +51,7 @@ const createCustomerAndOrder = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error creating customer and order in HubSpot',
+      message: error.message || "Error creating customer and order in HubSpot",
     });
   }
 };
@@ -59,13 +62,14 @@ const createCustomerAndOrder = async (req, res) => {
 // Query params: myContactsOnly (true/false) - If true, only fetch contacts owned by current user
 const getHubSpotCustomers = async (req, res) => {
   try {
-    console.log('=== HUBSPOT CUSTOMERS ENDPOINT CALLED ===');
-    console.log('Request received at:', new Date().toISOString());
-    console.log('User:', req.user?.id);
-    
-    const myContactsOnly = req.query.myContactsOnly === 'true' || req.query.myContactsOnly === true;
-    console.log('My Contacts Only:', myContactsOnly);
-    
+    console.log("=== HUBSPOT CUSTOMERS ENDPOINT CALLED ===");
+    console.log("Request received at:", new Date().toISOString());
+    console.log("User:", req.user?.id);
+
+    const myContactsOnly =
+      req.query.myContactsOnly === "true" || req.query.myContactsOnly === true;
+    console.log("My Contacts Only:", myContactsOnly);
+
     const customers = await hubspotService.fetchCustomers({ myContactsOnly });
 
     // If myContactsOnly was requested but we got 0 results, check if user ID detection failed
@@ -77,8 +81,10 @@ const getHubSpotCustomers = async (req, res) => {
           count: 0,
           data: [],
           myContactsOnly: true,
-          warning: 'Could not determine your HubSpot owner ID. This usually happens with Private App tokens. "My Contacts" filter requires knowing your owner ID.',
-          suggestion: 'Try using OAuth authentication instead of Private App token, or check backend logs for details.',
+          warning:
+            'Could not determine your HubSpot owner ID. This usually happens with Private App tokens. "My Contacts" filter requires knowing your owner ID.',
+          suggestion:
+            "Try using OAuth authentication instead of Private App token, or check backend logs for details.",
         });
       }
     }
@@ -90,10 +96,10 @@ const getHubSpotCustomers = async (req, res) => {
       myContactsOnly,
     });
   } catch (error) {
-    console.error('Error in getHubSpotCustomers controller:', error);
+    console.error("Error in getHubSpotCustomers controller:", error);
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || 'Error fetching customers from HubSpot',
+      message: error.message || "Error fetching customers from HubSpot",
       error: error.data || error.originalError,
       status: error.status,
     });
@@ -105,10 +111,10 @@ const getHubSpotCustomers = async (req, res) => {
 // @access  Private/Admin
 const getHubSpotOrders = async (req, res) => {
   try {
-    console.log('=== HUBSPOT ORDERS ENDPOINT CALLED ===');
-    console.log('Request received at:', new Date().toISOString());
-    console.log('User:', req.user?.id);
-    
+    console.log("=== HUBSPOT ORDERS ENDPOINT CALLED ===");
+    console.log("Request received at:", new Date().toISOString());
+    console.log("User:", req.user?.id);
+
     const orders = await hubspotService.fetchOrders();
 
     res.status(200).json({
@@ -117,10 +123,10 @@ const getHubSpotOrders = async (req, res) => {
       data: orders,
     });
   } catch (error) {
-    console.error('Error in getHubSpotOrders controller:', error);
+    console.error("Error in getHubSpotOrders controller:", error);
     res.status(error.status || 500).json({
       success: false,
-      message: error.message || 'Error fetching orders from HubSpot',
+      message: error.message || "Error fetching orders from HubSpot",
       error: error.data || error.originalError,
       status: error.status,
     });
@@ -136,13 +142,13 @@ const syncHubSpotData = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'HubSpot data synced successfully',
+      message: "HubSpot data synced successfully",
       data: syncResult,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error syncing HubSpot data',
+      message: error.message || "Error syncing HubSpot data",
     });
   }
 };
@@ -157,7 +163,7 @@ const createHubSpotTask = async (req, res) => {
     if (!subject) {
       return res.status(400).json({
         success: false,
-        message: 'Task subject is required',
+        message: "Task subject is required",
       });
     }
 
@@ -166,19 +172,19 @@ const createHubSpotTask = async (req, res) => {
     if (!task) {
       return res.status(500).json({
         success: false,
-        message: 'Task creation failed in HubSpot',
+        message: "Task creation failed in HubSpot",
       });
     }
 
     res.status(201).json({
       success: true,
-      message: 'Task created successfully in HubSpot',
+      message: "Task created successfully in HubSpot",
       data: task,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error creating task in HubSpot',
+      message: error.message || "Error creating task in HubSpot",
     });
   }
 };
@@ -188,36 +194,47 @@ const createHubSpotTask = async (req, res) => {
 // @access  Private/Admin
 const testHubSpotConnection = async (req, res) => {
   try {
-    console.log('=== HUBSPOT TEST ENDPOINT CALLED ===');
-    console.log('Request received at:', new Date().toISOString());
-    console.log('User:', req.user?.id);
-    
-    const config = require('../../config');
-    const axios = require('axios');
-    const hubspotOAuthService = require('../../services/hubspotOAuthService');
+    console.log("=== HUBSPOT TEST ENDPOINT CALLED ===");
+    console.log("Request received at:", new Date().toISOString());
+    console.log("User:", req.user?.id);
+
+    const config = require("../../config");
+    const axios = require("axios");
+    const hubspotOAuthService = require("../../services/hubspotOAuthService");
 
     // Choose token source based on auth mode
-    let token = '';
-    if (config.HUBSPOT_AUTH_MODE === 'oauth') {
+    let token = "";
+    if (config.HUBSPOT_AUTH_MODE === "oauth") {
       try {
         token = await hubspotOAuthService.getValidAccessToken();
       } catch (e) {
-        token = '';
+        token = "";
       }
     } else {
-      token = config.HUBSPOT_TOKEN || config.HUBSPOT_ACCESS_TOKEN || config.HUBSPOT_API_KEY;
+      token =
+        config.HUBSPOT_TOKEN ||
+        config.HUBSPOT_ACCESS_TOKEN ||
+        config.HUBSPOT_API_KEY;
     }
 
     const hasToken = !!token;
-    
+    const isOAuthMode = config.HUBSPOT_AUTH_MODE === "oauth";
+
     if (!hasToken) {
+      const message = isOAuthMode
+        ? "HubSpot not connected. Please sign in with HubSpot first."
+        : "HubSpot API token not configured.";
+      const hint = isOAuthMode
+        ? 'Click "Connect with HubSpot" below to authorize.'
+        : "Add HUBSPOT_TOKEN or HUBSPOT_ACCESS_TOKEN to backend .env, or use OAuth (HUBSPOT_AUTH_MODE=oauth) and connect.";
       return res.status(400).json({
         success: false,
-        message: 'HubSpot API token not configured',
+        message,
         config: {
           hasToken: false,
           hubspotEnabled: config.HUBSPOT_ENABLED,
-          hint: 'Please add HUBSPOT_ACCESS_TOKEN or HUBSPOT_API_KEY to .env file',
+          authMode: config.HUBSPOT_AUTH_MODE,
+          hint,
         },
       });
     }
@@ -226,17 +243,17 @@ const testHubSpotConnection = async (req, res) => {
     let directTestResult = null;
     try {
       const testResponse = await axios.get(
-        'https://api.hubapi.com/crm/v3/objects/contacts',
+        "https://api.hubapi.com/crm/v3/objects/contacts",
         {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
           params: {
             limit: 1,
-            properties: 'email,firstname,lastname'
-          }
-        }
+            properties: "email,firstname,lastname",
+          },
+        },
       );
       directTestResult = {
         success: true,
@@ -281,7 +298,7 @@ const testHubSpotConnection = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'HubSpot connection test completed',
+      message: "HubSpot connection test completed",
       config: {
         authMode: config.HUBSPOT_AUTH_MODE,
         hasToken: true,
@@ -300,14 +317,14 @@ const testHubSpotConnection = async (req, res) => {
           error: orderError,
           sample: orders.length > 0 ? orders[0] : null,
         },
-        connectionStatus: customerError && orderError ? 'Failed' : 'Connected',
+        connectionStatus: customerError && orderError ? "Failed" : "Connected",
       },
     });
   } catch (error) {
-    console.error('Error in testHubSpotConnection:', error);
+    console.error("Error in testHubSpotConnection:", error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Error testing HubSpot connection',
+      message: error.message || "Error testing HubSpot connection",
       error: error.response?.data || error.message,
     });
   }
@@ -319,10 +336,17 @@ const testHubSpotConnection = async (req, res) => {
 // Body params: myContactsOnly (boolean) - If true, only import contacts owned by current user
 const importHubSpotCustomersToDb = async (req, res) => {
   try {
-    const myContactsOnly = req.body?.myContactsOnly === true || req.body?.myContactsOnly === 'true';
-    console.log('Importing HubSpot customers (My Contacts Only:', myContactsOnly, ')');
-    
-    const hubspotContacts = await hubspotService.fetchCustomers({ myContactsOnly });
+    const myContactsOnly =
+      req.body?.myContactsOnly === true || req.body?.myContactsOnly === "true";
+    console.log(
+      "Importing HubSpot customers (My Contacts Only:",
+      myContactsOnly,
+      ")",
+    );
+
+    const hubspotContacts = await hubspotService.fetchCustomers({
+      myContactsOnly,
+    });
 
     let created = 0;
     let updated = 0;
@@ -330,33 +354,33 @@ const importHubSpotCustomersToDb = async (req, res) => {
 
     for (const c of hubspotContacts) {
       const p = c?.properties || {};
-      const email = (p.email || '').toLowerCase().trim();
+      const email = (p.email || "").toLowerCase().trim();
       if (!email) {
         skipped += 1;
         continue;
       }
 
-      const firstname = (p.firstname || '').trim();
-      const lastname = (p.lastname || '').trim();
+      const firstname = (p.firstname || "").trim();
+      const lastname = (p.lastname || "").trim();
       const fullName = `${firstname} ${lastname}`.trim();
 
       // Customer schema requires firstName and createdBy.
       const firstName =
         firstname ||
         lastname ||
-        (email.includes('@') ? email.split('@')[0] : 'Customer');
+        (email.includes("@") ? email.split("@")[0] : "Customer");
 
       const payload = {
         firstName,
         name: fullName || firstName,
         email,
-        phone: (p.phone || '').trim(),
-        address: p.address || '',
-        city: p.city || '',
-        state: p.state || '',
-        pincode: p.zip || '',
-        company: p.company || '',
-        source: 'hubspot', // Mark as imported from HubSpot
+        phone: (p.phone || "").trim(),
+        address: p.address || "",
+        city: p.city || "",
+        state: p.state || "",
+        pincode: p.zip || "",
+        company: p.company || "",
+        source: "hubspot", // Mark as imported from HubSpot
         // Keep existing status if already in DB; default for new is Not Visited
         createdBy: req.user?._id,
       };
@@ -372,13 +396,13 @@ const importHubSpotCustomersToDb = async (req, res) => {
         existing.state = payload.state || existing.state;
         existing.pincode = payload.pincode || existing.pincode;
         existing.company = payload.company || existing.company;
-        existing.source = 'hubspot'; // Mark as HubSpot source
+        existing.source = "hubspot"; // Mark as HubSpot source
         await existing.save();
         updated += 1;
       } else {
         await Customer.create({
           ...payload,
-          status: 'Not Visited',
+          status: "Not Visited",
           // REMOVED: assignedSalesman - Customers and Salesmen are separate
         });
         created += 1;
@@ -387,7 +411,7 @@ const importHubSpotCustomersToDb = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'HubSpot contacts imported to Customers successfully',
+      message: "HubSpot contacts imported to Customers successfully",
       data: {
         fetchedFromHubSpot: hubspotContacts.length,
         created,
@@ -398,7 +422,7 @@ const importHubSpotCustomersToDb = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Error importing HubSpot customers to DB',
+      message: error.message || "Error importing HubSpot customers to DB",
     });
   }
 };
@@ -414,27 +438,35 @@ const importHubSpotTasksToDb = async (req, res) => {
     const limit = Math.min(Number(req.body?.limit || 100), 100);
     const currentMonthOnly = req.body?.currentMonthOnly !== false; // Default to true - import current month weeks
     const weekWise = req.body?.weekWise !== false; // Default to true - use week-wise filtering
-    
-    console.log(`Importing HubSpot tasks (Current Month Only: ${currentMonthOnly}, Week Wise: ${weekWise}, Limit: ${limit})`);
-    
-    const hubspotTasks = await hubspotService.fetchTasks({ limit, currentMonthOnly, weekWise });
+
+    console.log(
+      `Importing HubSpot tasks (Current Month Only: ${currentMonthOnly}, Week Wise: ${weekWise}, Limit: ${limit})`,
+    );
+
+    const hubspotTasks = await hubspotService.fetchTasks({
+      limit,
+      currentMonthOnly,
+      weekWise,
+    });
 
     let created = 0;
     let updated = 0;
     let skipped = 0;
     const totalTasks = hubspotTasks.length;
-    
+
     console.log(`\n🚀 Starting import of ${totalTasks} tasks...\n`);
 
     for (let i = 0; i < hubspotTasks.length; i++) {
       const t = hubspotTasks[i];
       const progress = `[${i + 1}/${totalTasks}]`;
-      
+
       // Log progress every 10 tasks
       if ((i + 1) % 10 === 0 || i === 0) {
-        console.log(`\n📊 Progress: ${progress} (${created} created, ${updated} updated, ${skipped} skipped)`);
+        console.log(
+          `\n📊 Progress: ${progress} (${created} created, ${updated} updated, ${skipped} skipped)`,
+        );
       }
-      const taskId = String(t?.id || '').trim();
+      const taskId = String(t?.id || "").trim();
       if (!taskId) {
         skipped += 1;
         console.log(`${progress} ⏭️  Skipped: No task ID`);
@@ -442,32 +474,35 @@ const importHubSpotTasksToDb = async (req, res) => {
       }
 
       const p = t?.properties || {};
-      const subject = (p.hs_task_subject || '').trim();
-      const body = (p.hs_task_body || '').trim();
-      
+      const subject = (p.hs_task_subject || "").trim();
+      const body = (p.hs_task_body || "").trim();
+
       // Log task being processed (especially for debugging missing tasks)
-      if (subject && subject.toLowerCase().includes('test')) {
+      if (subject && subject.toLowerCase().includes("test")) {
         console.log(`🔍 Processing task ${taskId}: "${subject}"`);
       }
-      const hsStatus = (p.hs_task_status || '').trim();
-      const hsPriority = (p.hs_task_priority || '').trim();
-      const hsType = (p.hs_task_type || '').trim();
-      const hubspotOwnerId = (p.hubspot_owner_id || '').trim();
-      const hsQueue = (p.hs_task_queue || '').trim();
-      const hsReminder = (p.hs_task_reminder || '').trim();
-      
+      const hsStatus = (p.hs_task_status || "").trim();
+      const hsPriority = (p.hs_task_priority || "").trim();
+      const hsType = (p.hs_task_type || "").trim();
+      const hubspotOwnerId = (p.hubspot_owner_id || "").trim();
+      const hsQueue = (p.hs_task_queue || "").trim();
+      const hsReminder = (p.hs_task_reminder || "").trim();
+
       // Debug logging for task type
-      if (!hsType || hsType === '') {
-        console.warn(`⚠️ Task ${taskId} has no hs_task_type. Properties:`, Object.keys(p));
+      if (!hsType || hsType === "") {
+        console.warn(
+          `⚠️ Task ${taskId} has no hs_task_type. Properties:`,
+          Object.keys(p),
+        );
       }
 
       // Due date: hs_timestamp is typically epoch millis (but sometimes seconds)
       let dueDate = null;
       const tsRaw = p.hs_timestamp;
-      
+
       // Try to parse timestamp - could be string or number
       let tsNum = NaN;
-      if (tsRaw !== undefined && tsRaw !== null && tsRaw !== '') {
+      if (tsRaw !== undefined && tsRaw !== null && tsRaw !== "") {
         tsNum = Number(tsRaw);
         // If conversion failed, try parsing as date string
         if (isNaN(tsNum) || tsNum <= 0) {
@@ -481,11 +516,13 @@ const importHubSpotTasksToDb = async (req, res) => {
           // Convert seconds to milliseconds if needed
           if (tsNum > 0 && tsNum < 946684800000) {
             tsNum = tsNum * 1000; // Convert seconds to milliseconds
-            console.log(`📅 Task ${taskId}: Timestamp was in seconds, converted to milliseconds: ${tsNum}`);
+            console.log(
+              `📅 Task ${taskId}: Timestamp was in seconds, converted to milliseconds: ${tsNum}`,
+            );
           }
         }
       }
-      
+
       if (!isNaN(tsNum) && tsNum > 0) {
         // Ensure proper Date object with time preserved
         dueDate = new Date(tsNum);
@@ -494,7 +531,9 @@ const importHubSpotTasksToDb = async (req, res) => {
         const minutes = dueDate.getMinutes();
         const seconds = dueDate.getSeconds();
         // Log for debugging with full time info
-        console.log(`📅 Task ${taskId}: Due date parsed -> ${dueDate.toISOString()} | Time: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} (${dueDate.toLocaleString('en-GB', { hour12: false })})`);
+        console.log(
+          `📅 Task ${taskId}: Due date parsed -> ${dueDate.toISOString()} | Time: ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")} (${dueDate.toLocaleString("en-GB", { hour12: false })})`,
+        );
       } else {
         // fallback to created date if no due date
         const createdRaw = p.hs_createdate;
@@ -503,109 +542,117 @@ const importHubSpotTasksToDb = async (req, res) => {
         const hours = dueDate.getHours();
         const minutes = dueDate.getMinutes();
         const seconds = dueDate.getSeconds();
-        console.log(`📅 Task ${taskId}: No due date, using created date -> ${dueDate.toISOString()} | Time: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+        console.log(
+          `📅 Task ${taskId}: No due date, using created date -> ${dueDate.toISOString()} | Time: ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+        );
       }
 
       // Map HubSpot priority to our enum
-      let priority = 'Medium';
+      let priority = "Medium";
       const pr = hsPriority.toLowerCase();
-      if (pr.includes('high')) priority = 'High';
-      else if (pr.includes('urgent')) priority = 'Urgent';
-      else if (pr.includes('low')) priority = 'Low';
+      if (pr.includes("high")) priority = "High";
+      else if (pr.includes("urgent")) priority = "Urgent";
+      else if (pr.includes("low")) priority = "Low";
 
       // Map HubSpot task types to local enum values
       // HubSpot types: TODO, CALL, EMAIL, MEETING, VISIT, etc.
       // Local enum: 'Call', 'Visit', 'Email', 'Quote Follow-up', 'Sample Feedback', 'Order Check'
       // Note: Original HubSpot type is preserved in hs_task_type field
-      let type = 'Call'; // Default fallback to valid enum value
-      const ty = (hsType || '').toLowerCase().trim();
-      if (ty.includes('email')) {
-        type = 'Email';
-      } else if (ty.includes('visit') || ty.includes('meeting')) {
-        type = 'Visit';
-      } else if (ty.includes('call')) {
-        type = 'Call';
-      } else if (ty.includes('quote') || ty.includes('quotation')) {
-        type = 'Quote Follow-up';
-      } else if (ty.includes('sample')) {
-        type = 'Sample Feedback';
-      } else if (ty.includes('order')) {
-        type = 'Order Check';
-      } else if (ty === 'todo' || ty.includes('todo')) {
+      let type = "Call"; // Default fallback to valid enum value
+      const ty = (hsType || "").toLowerCase().trim();
+      if (ty.includes("email")) {
+        type = "Email";
+      } else if (ty.includes("visit") || ty.includes("meeting")) {
+        type = "Visit";
+      } else if (ty.includes("call")) {
+        type = "Call";
+      } else if (ty.includes("quote") || ty.includes("quotation")) {
+        type = "Quote Follow-up";
+      } else if (ty.includes("sample")) {
+        type = "Sample Feedback";
+      } else if (ty.includes("order")) {
+        type = "Order Check";
+      } else if (ty === "todo" || ty.includes("todo")) {
         // TODO maps to Call as default
-        type = 'Call';
+        type = "Call";
       } else {
         // For any unrecognized type, default to Call (valid enum value)
-        type = 'Call';
+        type = "Call";
       }
-      
+
       // Debug logging
-      if (hsType && hsType !== '') {
-        console.log(`📋 Task ${taskId}: hs_task_type="${hsType}" -> display type="${type}"`);
+      if (hsType && hsType !== "") {
+        console.log(
+          `📋 Task ${taskId}: hs_task_type="${hsType}" -> display type="${type}"`,
+        );
       }
 
       // Resolve associated contact (if any) -> find customer in DB by email when possible
       let customer = null;
       let customerName = `HubSpot Task ${taskId}`; // Default fallback - required field
-      let customerEmail = '';
-      let customerPhone = '';
-      let associatedContactName = '';
+      let customerEmail = "";
+      let customerPhone = "";
+      let associatedContactName = "";
 
       const contactAssoc = t?.associations?.contacts?.results || [];
       const contactId = contactAssoc.length > 0 ? contactAssoc[0].id : null;
-      
+
       // Debug: Log association info
       console.log(`🔍 Task ${taskId}: Associations check -`, {
         hasAssociations: !!t?.associations,
         contactAssocCount: contactAssoc.length,
-        contactId: contactId || 'NONE',
+        contactId: contactId || "NONE",
         companyAssocCount: (t?.associations?.companies?.results || []).length,
-        allAssociations: Object.keys(t?.associations || {})
+        allAssociations: Object.keys(t?.associations || {}),
       });
 
       let contactResData = null; // Store contact response for reuse
       let contactCompanyAssoc = []; // Store company associations from contact
-      let contactCompany = ''; // Store company name from contact
-      
+      let contactCompany = ""; // Store company name from contact
+
       if (contactId) {
         try {
           // Fetch contact details (email/name/phone) with company associations
           const headers = await (async () => {
-            const cfg = require('../../config');
-            const hubspotOAuthService = require('../../services/hubspotOAuthService');
-            let token = '';
-            if (cfg.HUBSPOT_AUTH_MODE === 'oauth') {
+            const cfg = require("../../config");
+            const hubspotOAuthService = require("../../services/hubspotOAuthService");
+            let token = "";
+            if (cfg.HUBSPOT_AUTH_MODE === "oauth") {
               token = await hubspotOAuthService.getValidAccessToken();
             } else {
-              token = cfg.HUBSPOT_TOKEN || cfg.HUBSPOT_ACCESS_TOKEN || cfg.HUBSPOT_API_KEY;
+              token =
+                cfg.HUBSPOT_TOKEN ||
+                cfg.HUBSPOT_ACCESS_TOKEN ||
+                cfg.HUBSPOT_API_KEY;
             }
             return {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             };
           })();
 
-          const axios = require('axios');
+          const axios = require("axios");
           // Fetch contact with company property and associations
           // Add timeout to prevent hanging requests
           const contactRes = await axios.get(
             `https://api.hubapi.com/crm/v3/objects/contacts/${contactId}`,
-            { 
-              headers, 
-              params: { 
-                properties: 'firstname,lastname,email,phone,company',
-                associations: 'companies' // Also get company associations
+            {
+              headers,
+              params: {
+                properties: "firstname,lastname,email,phone,company",
+                associations: "companies", // Also get company associations
               },
-              timeout: 10000 // 10 second timeout
-            }
+              timeout: 10000, // 10 second timeout
+            },
           );
           contactResData = contactRes.data; // Store for reuse
           const cp = contactResData?.properties || {};
-          customerEmail = (cp.email || '').toLowerCase().trim();
-          customerPhone = (cp.phone || '').trim();
-          const firstName = (cp.firstname || '').trim();
-          const lastName = (cp.lastname || '').trim();
-          associatedContactName = `${firstName} ${lastName}`.trim() || customerEmail || '';
+          customerEmail = (cp.email || "").toLowerCase().trim();
+          customerPhone = (cp.phone || "").trim();
+          const firstName = (cp.firstname || "").trim();
+          const lastName = (cp.lastname || "").trim();
+          associatedContactName =
+            `${firstName} ${lastName}`.trim() || customerEmail || "";
           // Set customerName - use contact name, email, or fallback (required field)
           // Ensure customerName is never empty
           if (associatedContactName && associatedContactName.trim()) {
@@ -615,65 +662,83 @@ const importHubSpotTasksToDb = async (req, res) => {
           } else {
             customerName = `HubSpot Task ${taskId}`;
           }
-          contactCompany = (cp.company || '').trim();
-          
+          contactCompany = (cp.company || "").trim();
+
           // Get company associations from contact
-          contactCompanyAssoc = contactResData?.associations?.companies?.results || [];
-          
+          contactCompanyAssoc =
+            contactResData?.associations?.companies?.results || [];
+
           // Debug logging
-          console.log(`👤 Task ${taskId}: Contact ${contactId} -> Name: "${associatedContactName}", Email: "${customerEmail}", Company property: "${contactCompany}", Company associations: ${contactCompanyAssoc.length}`);
-          
+          console.log(
+            `👤 Task ${taskId}: Contact ${contactId} -> Name: "${associatedContactName}", Email: "${customerEmail}", Company property: "${contactCompany}", Company associations: ${contactCompanyAssoc.length}`,
+          );
+
           // If company property is empty, try to get from company associations
           if (!contactCompany && contactCompanyAssoc.length > 0) {
             try {
               const companyId = contactCompanyAssoc[0].id;
               const companyRes = await axios.get(
                 `https://api.hubapi.com/crm/v3/objects/companies/${companyId}`,
-                { headers, params: { properties: 'name' }, timeout: 10000 }
+                { headers, params: { properties: "name" }, timeout: 10000 },
               );
-              contactCompany = (companyRes.data?.properties?.name || '').trim();
-              console.log(`🏢 Task ${taskId}: Got company from contact association: "${contactCompany}"`);
+              contactCompany = (companyRes.data?.properties?.name || "").trim();
+              console.log(
+                `🏢 Task ${taskId}: Got company from contact association: "${contactCompany}"`,
+              );
             } catch (e) {
-              console.warn(`Failed to fetch company name from contact association:`, e.message);
+              console.warn(
+                `Failed to fetch company name from contact association:`,
+                e.message,
+              );
             }
           }
-          
+
           if (customerEmail) {
             customer = await Customer.findOne({ email: customerEmail });
             // If customer exists but doesn't have company, update it from HubSpot
-            if (customer && contactCompany && (!customer.company || customer.company.trim() === '')) {
+            if (
+              customer &&
+              contactCompany &&
+              (!customer.company || customer.company.trim() === "")
+            ) {
               customer.company = contactCompany;
               await customer.save();
             }
           }
         } catch (e) {
-          console.warn(`Failed to fetch contact ${contactId} for task ${taskId}:`, e.message);
+          console.warn(
+            `Failed to fetch contact ${contactId} for task ${taskId}:`,
+            e.message,
+          );
         }
       }
 
       // Get company information - prioritize from contact associations, then from task associations
       let associatedCompanyId = null;
-      let associatedCompanyName = '';
-      let associatedCompanyDomain = '';
-      
+      let associatedCompanyName = "";
+      let associatedCompanyDomain = "";
+
       // Get headers for API calls
       const headers = await (async () => {
-        const cfg = require('../../config');
-        const hubspotOAuthService = require('../../services/hubspotOAuthService');
-        let token = '';
-        if (cfg.HUBSPOT_AUTH_MODE === 'oauth') {
+        const cfg = require("../../config");
+        const hubspotOAuthService = require("../../services/hubspotOAuthService");
+        let token = "";
+        if (cfg.HUBSPOT_AUTH_MODE === "oauth") {
           token = await hubspotOAuthService.getValidAccessToken();
         } else {
-          token = cfg.HUBSPOT_TOKEN || cfg.HUBSPOT_ACCESS_TOKEN || cfg.HUBSPOT_API_KEY;
+          token =
+            cfg.HUBSPOT_TOKEN ||
+            cfg.HUBSPOT_ACCESS_TOKEN ||
+            cfg.HUBSPOT_API_KEY;
         }
         return {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         };
       })();
-      
-      const axios = require('axios');
-      
+
+      const axios = require("axios");
+
       try {
         // Priority 1: Get company from contact's company associations (most reliable)
         if (contactId && contactResData && contactCompanyAssoc.length > 0) {
@@ -681,23 +746,34 @@ const importHubSpotTasksToDb = async (req, res) => {
           try {
             const companyRes = await axios.get(
               `https://api.hubapi.com/crm/v3/objects/companies/${associatedCompanyId}`,
-              { headers, params: { properties: 'name,domain' }, timeout: 10000 }
+              {
+                headers,
+                params: { properties: "name,domain" },
+                timeout: 10000,
+              },
             );
             const cp = companyRes.data?.properties || {};
-            associatedCompanyName = (cp.name || '').trim();
-            associatedCompanyDomain = (cp.domain || '').trim();
-            console.log(`🏢 Task ${taskId}: Company from contact association -> ID: ${associatedCompanyId}, Name: "${associatedCompanyName}"`);
+            associatedCompanyName = (cp.name || "").trim();
+            associatedCompanyDomain = (cp.domain || "").trim();
+            console.log(
+              `🏢 Task ${taskId}: Company from contact association -> ID: ${associatedCompanyId}, Name: "${associatedCompanyName}"`,
+            );
           } catch (e) {
-            console.warn(`Failed to fetch company details for ID ${associatedCompanyId}:`, e.message);
+            console.warn(
+              `Failed to fetch company details for ID ${associatedCompanyId}:`,
+              e.message,
+            );
           }
         }
-        
+
         // Priority 2: If no company from contact associations, try contact's company property
         if (!associatedCompanyName && contactCompany && contactCompany.trim()) {
           associatedCompanyName = contactCompany.trim();
-          console.log(`🏢 Task ${taskId}: Using company from contact property: "${associatedCompanyName}"`);
+          console.log(
+            `🏢 Task ${taskId}: Using company from contact property: "${associatedCompanyName}"`,
+          );
         }
-        
+
         // Priority 3: Try task's direct company associations (works even if contact not found)
         if (!associatedCompanyId) {
           const taskCompanyAssoc = t?.associations?.companies?.results || [];
@@ -706,44 +782,61 @@ const importHubSpotTasksToDb = async (req, res) => {
             try {
               const companyRes = await axios.get(
                 `https://api.hubapi.com/crm/v3/objects/companies/${associatedCompanyId}`,
-                { headers, params: { properties: 'name,domain' }, timeout: 10000 }
+                {
+                  headers,
+                  params: { properties: "name,domain" },
+                  timeout: 10000,
+                },
               );
               const cp = companyRes.data?.properties || {};
-              associatedCompanyName = (cp.name || '').trim();
-              associatedCompanyDomain = (cp.domain || '').trim();
-              console.log(`🏢 Task ${taskId}: Company from task association -> ID: ${associatedCompanyId}, Name: "${associatedCompanyName}"`);
+              associatedCompanyName = (cp.name || "").trim();
+              associatedCompanyDomain = (cp.domain || "").trim();
+              console.log(
+                `🏢 Task ${taskId}: Company from task association -> ID: ${associatedCompanyId}, Name: "${associatedCompanyName}"`,
+              );
             } catch (e) {
-              console.warn(`Failed to fetch company from task association for ID ${associatedCompanyId}:`, e.message);
+              console.warn(
+                `Failed to fetch company from task association for ID ${associatedCompanyId}:`,
+                e.message,
+              );
             }
           }
         }
-        
+
         // Priority 4: Fallback to contactCompany if still no company found
         if (!associatedCompanyName && contactCompany && contactCompany.trim()) {
           associatedCompanyName = contactCompany.trim();
-          console.log(`🏢 Task ${taskId}: Using company from contact property (fallback): "${associatedCompanyName}"`);
+          console.log(
+            `🏢 Task ${taskId}: Using company from contact property (fallback): "${associatedCompanyName}"`,
+          );
         }
       } catch (e) {
-        console.warn(`Error fetching company information for task ${taskId}:`, e.message);
+        console.warn(
+          `Error fetching company information for task ${taskId}:`,
+          e.message,
+        );
         // Final fallback to contactCompany if available
         if (!associatedCompanyName && contactCompany && contactCompany.trim()) {
           associatedCompanyName = contactCompany.trim();
         }
       }
-      
+
       // Debug logging for final values
       console.log(`✅ Task ${taskId} import summary:`, {
-        contactName: associatedContactName || 'N/A',
-        contactId: contactId || 'N/A',
-        companyName: associatedCompanyName || 'N/A',
-        companyId: associatedCompanyId || 'N/A',
-        taskType: hsType || 'N/A',
-        displayType: type
+        contactName: associatedContactName || "N/A",
+        contactId: contactId || "N/A",
+        companyName: associatedCompanyName || "N/A",
+        companyId: associatedCompanyId || "N/A",
+        taskType: hsType || "N/A",
+        displayType: type,
       });
-      
+
       // If no contact found, log warning
       if (!contactId) {
-        console.warn(`⚠️ Task ${taskId} has no contact association. Task associations:`, JSON.stringify(t?.associations || {}, null, 2));
+        console.warn(
+          `⚠️ Task ${taskId} has no contact association. Task associations:`,
+          JSON.stringify(t?.associations || {}, null, 2),
+        );
       }
 
       // Parse HubSpot dates
@@ -761,67 +854,93 @@ const importHubSpotTasksToDb = async (req, res) => {
       // Simple logic: Match HubSpot "Assigned to" with local users (admin or salesman)
       // HubSpot assigned users → local salesman (or admin if admin matches)
       let assignedSalesman = null;
-      let hubspotOwnerName = '';
-      let hubspotOwnerEmail = '';
-      
+      let hubspotOwnerName = "";
+      let hubspotOwnerEmail = "";
+
       if (hubspotOwnerId) {
         try {
           // Get assigned user details from HubSpot
-          const ownerDetails = await hubspotService.getOwnerById(hubspotOwnerId);
+          const ownerDetails =
+            await hubspotService.getOwnerById(hubspotOwnerId);
           if (ownerDetails) {
-            hubspotOwnerName = ownerDetails.fullName || '';
-            hubspotOwnerEmail = ownerDetails.email || '';
-            console.log(`👤 Task ${taskId}: HubSpot assigned -> "${hubspotOwnerName}" (${hubspotOwnerEmail})`);
-            
+            hubspotOwnerName = ownerDetails.fullName || "";
+            hubspotOwnerEmail = ownerDetails.email || "";
+            console.log(
+              `👤 Task ${taskId}: HubSpot assigned -> "${hubspotOwnerName}" (${hubspotOwnerEmail})`,
+            );
+
             // Simple matching: Try exact email match first, then name match
             if (hubspotOwnerEmail) {
               const searchEmail = hubspotOwnerEmail.toLowerCase().trim();
-              
+
               // Step 1: Exact email match (case-insensitive)
-              let matchingUser = await User.findOne({ 
-                email: { $regex: new RegExp(`^${searchEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-                role: { $in: ['admin', 'salesman'] }
+              let matchingUser = await User.findOne({
+                email: {
+                  $regex: new RegExp(
+                    `^${searchEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                    "i",
+                  ),
+                },
+                role: { $in: ["admin", "salesman"] },
               });
-              
+
               // Step 2: If not found, try name match (case-insensitive)
               if (!matchingUser && hubspotOwnerName) {
                 const searchName = hubspotOwnerName.toLowerCase().trim();
                 matchingUser = await User.findOne({
-                  name: { $regex: new RegExp(`^${searchName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-                  role: { $in: ['admin', 'salesman'] }
+                  name: {
+                    $regex: new RegExp(
+                      `^${searchName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                      "i",
+                    ),
+                  },
+                  role: { $in: ["admin", "salesman"] },
                 });
               }
-              
+
               // If match found, assign it
               if (matchingUser) {
                 assignedSalesman = matchingUser._id;
-                console.log(`✅ Task ${taskId}: Matched "${hubspotOwnerName}" → ${matchingUser.name || matchingUser.email} (${matchingUser.role})`);
+                console.log(
+                  `✅ Task ${taskId}: Matched "${hubspotOwnerName}" → ${matchingUser.name || matchingUser.email} (${matchingUser.role})`,
+                );
               } else {
                 // No match - use current user (admin) as fallback
                 assignedSalesman = req.user?._id;
-                console.log(`ℹ️ Task ${taskId}: No match for "${hubspotOwnerName}". Using current user (${req.user?.name || req.user?.email}) as salesman.`);
+                console.log(
+                  `ℹ️ Task ${taskId}: No match for "${hubspotOwnerName}". Using current user (${req.user?.name || req.user?.email}) as salesman.`,
+                );
               }
             } else {
               // No email - use current user as fallback
               assignedSalesman = req.user?._id;
-              console.log(`ℹ️ Task ${taskId}: HubSpot assigned user has no email. Using current user as salesman.`);
+              console.log(
+                `ℹ️ Task ${taskId}: HubSpot assigned user has no email. Using current user as salesman.`,
+              );
             }
           } else {
             // Could not fetch owner details - use current user as fallback
             assignedSalesman = req.user?._id;
-            console.log(`ℹ️ Task ${taskId}: Could not fetch HubSpot owner details. Using current user as salesman.`);
+            console.log(
+              `ℹ️ Task ${taskId}: Could not fetch HubSpot owner details. Using current user as salesman.`,
+            );
           }
         } catch (e) {
           // Error fetching owner - use current user as fallback
-          console.warn(`Task ${taskId}: Error fetching HubSpot owner:`, e.message);
+          console.warn(
+            `Task ${taskId}: Error fetching HubSpot owner:`,
+            e.message,
+          );
           assignedSalesman = req.user?._id;
         }
       } else {
         // No hubspot_owner_id - use current user as fallback
         assignedSalesman = req.user?._id;
-        console.log(`ℹ️ Task ${taskId}: No HubSpot assigned user. Using current user as salesman.`);
+        console.log(
+          `ℹ️ Task ${taskId}: No HubSpot assigned user. Using current user as salesman.`,
+        );
       }
-      
+
       // Ensure assignedSalesman is never null (required field)
       if (!assignedSalesman) {
         assignedSalesman = req.user?._id;
@@ -859,78 +978,114 @@ const importHubSpotTasksToDb = async (req, res) => {
         scheduledDate: dueDate,
         dueDate,
         description: subject || body || `HubSpot Task ${taskId}`,
-        notes: body || '',
+        notes: body || "",
         // Associated entities (HubSpot-style)
         associatedContactId: contactId || null,
-        associatedContactName: associatedContactName || '',
+        associatedContactName: associatedContactName || "",
         associatedContactEmail: customerEmail || null,
         associatedCompanyId: associatedCompanyId || null,
-        associatedCompanyName: associatedCompanyName || '',
-        associatedCompanyDomain: associatedCompanyDomain || '',
+        associatedCompanyName: associatedCompanyName || "",
+        associatedCompanyDomain: associatedCompanyDomain || "",
         // Metadata
-        source: 'hubspot',
+        source: "hubspot",
         createdBy: req.user?._id,
-        approvalStatus: 'Approved', // Imported tasks from HubSpot are auto-approved
+        approvalStatus: "Approved", // Imported tasks from HubSpot are auto-approved
         hubspotLastSyncedAt: new Date(),
       };
 
       // If completed, mark completed; otherwise pre-save hook will compute Overdue/Today/Upcoming
-      if (hsStatus.toLowerCase().includes('complete')) {
-        payload.status = 'Completed';
+      if (hsStatus.toLowerCase().includes("complete")) {
+        payload.status = "Completed";
         payload.completedDate = new Date();
       }
 
       if (existing) {
         // Update all HubSpot fields
         existing.hubspotTaskId = payload.hubspotTaskId;
-        existing.hs_createdate = payload.hs_createdate || existing.hs_createdate;
-        existing.hs_lastmodifieddate = payload.hs_lastmodifieddate || existing.hs_lastmodifieddate;
-        existing.hs_task_subject = payload.hs_task_subject || existing.hs_task_subject;
+        existing.hs_createdate =
+          payload.hs_createdate || existing.hs_createdate;
+        existing.hs_lastmodifieddate =
+          payload.hs_lastmodifieddate || existing.hs_lastmodifieddate;
+        existing.hs_task_subject =
+          payload.hs_task_subject || existing.hs_task_subject;
         existing.hs_task_body = payload.hs_task_body || existing.hs_task_body;
-        existing.hs_task_status = payload.hs_task_status || existing.hs_task_status;
-        existing.hs_task_priority = payload.hs_task_priority || existing.hs_task_priority;
+        existing.hs_task_status =
+          payload.hs_task_status || existing.hs_task_status;
+        existing.hs_task_priority =
+          payload.hs_task_priority || existing.hs_task_priority;
         existing.hs_task_type = payload.hs_task_type || existing.hs_task_type;
         existing.hs_timestamp = payload.hs_timestamp || existing.hs_timestamp;
-        if (payload.hubspot_owner_id !== undefined) existing.hubspot_owner_id = payload.hubspot_owner_id;
-        if (payload.hubspot_owner_name !== undefined) existing.hubspot_owner_name = payload.hubspot_owner_name;
-        if (payload.hubspot_owner_email !== undefined) existing.hubspot_owner_email = payload.hubspot_owner_email;
-        if (payload.hs_task_queue !== undefined) existing.hs_task_queue = payload.hs_task_queue;
-        if (payload.hs_task_reminder !== undefined) existing.hs_task_reminder = payload.hs_task_reminder;
+        if (payload.hubspot_owner_id !== undefined)
+          existing.hubspot_owner_id = payload.hubspot_owner_id;
+        if (payload.hubspot_owner_name !== undefined)
+          existing.hubspot_owner_name = payload.hubspot_owner_name;
+        if (payload.hubspot_owner_email !== undefined)
+          existing.hubspot_owner_email = payload.hubspot_owner_email;
+        if (payload.hs_task_queue !== undefined)
+          existing.hs_task_queue = payload.hs_task_queue;
+        if (payload.hs_task_reminder !== undefined)
+          existing.hs_task_reminder = payload.hs_task_reminder;
         // Update core fields
         // salesman is required field, so always update it
         // Frontend will prioritize hubspot_owner_name for display
         existing.salesman = payload.salesman || existing.salesman;
         existing.customer = payload.customer ?? existing.customer;
         // Ensure customerName is never empty (required field)
-        existing.customerName = (payload.customerName && payload.customerName.trim()) ? payload.customerName.trim() : (existing.customerName || `HubSpot Task ${taskId}`);
-        existing.customerEmail = payload.customerEmail || existing.customerEmail;
-        existing.customerPhone = payload.customerPhone || existing.customerPhone;
+        existing.customerName =
+          payload.customerName && payload.customerName.trim()
+            ? payload.customerName.trim()
+            : existing.customerName || `HubSpot Task ${taskId}`;
+        existing.customerEmail =
+          payload.customerEmail || existing.customerEmail;
+        existing.customerPhone =
+          payload.customerPhone || existing.customerPhone;
         existing.type = payload.type || existing.type;
         existing.priority = payload.priority || existing.priority;
-        existing.scheduledDate = payload.scheduledDate || existing.scheduledDate;
+        existing.scheduledDate =
+          payload.scheduledDate || existing.scheduledDate;
         existing.dueDate = payload.dueDate || existing.dueDate;
         existing.description = payload.description || existing.description;
         existing.notes = payload.notes || existing.notes;
         // Update associated entities - always update if payload has values
-        if (payload.associatedContactId !== undefined) existing.associatedContactId = payload.associatedContactId;
-        if (payload.associatedContactName !== undefined && payload.associatedContactName.trim()) existing.associatedContactName = payload.associatedContactName.trim();
-        if (payload.associatedContactEmail !== undefined) existing.associatedContactEmail = payload.associatedContactEmail;
-        if (payload.associatedCompanyId !== undefined) existing.associatedCompanyId = payload.associatedCompanyId;
-        if (payload.associatedCompanyName !== undefined && payload.associatedCompanyName.trim()) existing.associatedCompanyName = payload.associatedCompanyName.trim();
-        if (payload.associatedCompanyDomain !== undefined && payload.associatedCompanyDomain.trim()) existing.associatedCompanyDomain = payload.associatedCompanyDomain.trim();
+        if (payload.associatedContactId !== undefined)
+          existing.associatedContactId = payload.associatedContactId;
+        if (
+          payload.associatedContactName !== undefined &&
+          payload.associatedContactName.trim()
+        )
+          existing.associatedContactName = payload.associatedContactName.trim();
+        if (payload.associatedContactEmail !== undefined)
+          existing.associatedContactEmail = payload.associatedContactEmail;
+        if (payload.associatedCompanyId !== undefined)
+          existing.associatedCompanyId = payload.associatedCompanyId;
+        if (
+          payload.associatedCompanyName !== undefined &&
+          payload.associatedCompanyName.trim()
+        )
+          existing.associatedCompanyName = payload.associatedCompanyName.trim();
+        if (
+          payload.associatedCompanyDomain !== undefined &&
+          payload.associatedCompanyDomain.trim()
+        )
+          existing.associatedCompanyDomain =
+            payload.associatedCompanyDomain.trim();
         // Update metadata - IMPORTANT: Only set source to 'hubspot' if it's actually imported (not app-created)
         // Don't overwrite 'app' source if task was created in app
-        if (payload.source === 'hubspot' && (!existing.source || existing.source === 'hubspot')) {
-          existing.source = 'hubspot';
+        if (
+          payload.source === "hubspot" &&
+          (!existing.source || existing.source === "hubspot")
+        ) {
+          existing.source = "hubspot";
         } else if (!existing.source) {
           // If no source set, mark as hubspot (imported)
-          existing.source = 'hubspot';
+          existing.source = "hubspot";
         }
         // If existing.source is 'app', keep it as 'app' (don't overwrite)
-        existing.approvalStatus = 'Approved'; // Ensure imported tasks are approved
+        existing.approvalStatus = "Approved"; // Ensure imported tasks are approved
         existing.hubspotLastSyncedAt = payload.hubspotLastSyncedAt;
         if (payload.status) existing.status = payload.status;
-        if (payload.completedDate) existing.completedDate = payload.completedDate;
+        if (payload.completedDate)
+          existing.completedDate = payload.completedDate;
         await existing.save();
         updated += 1;
         console.log(`✅ Task ${taskId}: Updated successfully`);
@@ -938,17 +1093,22 @@ const importHubSpotTasksToDb = async (req, res) => {
         try {
           await FollowUp.create(payload);
           created += 1;
-          console.log(`✅ Task ${taskId}: Created successfully - "${subject || 'No subject'}"`);
+          console.log(
+            `✅ Task ${taskId}: Created successfully - "${subject || "No subject"}"`,
+          );
         } catch (createError) {
           skipped += 1;
-          console.error(`❌ Task ${taskId}: Failed to create -`, createError.message);
+          console.error(
+            `❌ Task ${taskId}: Failed to create -`,
+            createError.message,
+          );
           console.error(`   Error details:`, {
-            subject: subject || 'N/A',
-            customerName: customerName || 'N/A',
-            salesman: assignedSalesman ? 'Set' : 'Missing',
-            dueDate: dueDate ? dueDate.toISOString() : 'N/A',
-            type: type || 'N/A',
-            validationErrors: createError.errors || 'N/A'
+            subject: subject || "N/A",
+            customerName: customerName || "N/A",
+            salesman: assignedSalesman ? "Set" : "Missing",
+            dueDate: dueDate ? dueDate.toISOString() : "N/A",
+            type: type || "N/A",
+            validationErrors: createError.errors || "N/A",
           });
           continue;
         }
@@ -956,23 +1116,30 @@ const importHubSpotTasksToDb = async (req, res) => {
     }
 
     console.log(`\n📊 Import Summary:`);
-    const filterDescription = currentMonthOnly 
-      ? (weekWise ? ' (current month: previous week, current week, next week)' : ' (current month only)')
-      : '';
-    console.log(`   Fetched from HubSpot: ${hubspotTasks.length} tasks${filterDescription}`);
+    const filterDescription = currentMonthOnly
+      ? weekWise
+        ? " (current month: previous week, current week, next week)"
+        : " (current month only)"
+      : "";
+    console.log(
+      `   Fetched from HubSpot: ${hubspotTasks.length} tasks${filterDescription}`,
+    );
     console.log(`   Created: ${created}`);
     console.log(`   Updated: ${updated}`);
     console.log(`   Skipped: ${skipped}`);
     console.log(`   Total processed: ${created + updated + skipped}`);
-    
+
     // Log all task subjects for debugging (especially for missing tasks like "test4" or 30 Jan tasks)
     if (hubspotTasks.length > 0) {
-      console.log(`\n📋 All Tasks fetched from HubSpot (${hubspotTasks.length} total):`);
+      console.log(
+        `\n📋 All Tasks fetched from HubSpot (${hubspotTasks.length} total):`,
+      );
       hubspotTasks.forEach((t, idx) => {
-        const subj = (t?.properties?.hs_task_subject || '').trim() || 'No subject';
-        const taskId = String(t?.id || '').trim() || 'No ID';
+        const subj =
+          (t?.properties?.hs_task_subject || "").trim() || "No subject";
+        const taskId = String(t?.id || "").trim() || "No ID";
         const tsRaw = t?.properties?.hs_timestamp;
-        let dueDateStr = 'N/A';
+        let dueDateStr = "N/A";
         if (tsRaw) {
           let tsNum = Number(tsRaw);
           // Check if in seconds and convert
@@ -981,14 +1148,16 @@ const importHubSpotTasksToDb = async (req, res) => {
           }
           if (!isNaN(tsNum) && tsNum > 0) {
             const dueDate = new Date(tsNum);
-            dueDateStr = `${dueDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ${dueDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+            dueDateStr = `${dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} ${dueDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
           }
         }
-        console.log(`   ${idx + 1}. Task ${taskId}: "${subj}" (Due: ${dueDateStr})`);
+        console.log(
+          `   ${idx + 1}. Task ${taskId}: "${subj}" (Due: ${dueDateStr})`,
+        );
       });
-      
+
       // Check specifically for 30 Jan tasks
-      const jan30Tasks = hubspotTasks.filter(t => {
+      const jan30Tasks = hubspotTasks.filter((t) => {
         const tsRaw = t?.properties?.hs_timestamp;
         if (!tsRaw) return false;
         let tsNum = Number(tsRaw);
@@ -999,14 +1168,15 @@ const importHubSpotTasksToDb = async (req, res) => {
         const dueDate = new Date(tsNum);
         return dueDate.getDate() === 30 && dueDate.getMonth() === 0; // 30 Jan (month 0 = January)
       });
-      
+
       if (jan30Tasks.length > 0) {
         console.log(`\n✅ Found ${jan30Tasks.length} task(s) for 30 Jan:`);
         jan30Tasks.forEach((t, idx) => {
-          const subj = (t?.properties?.hs_task_subject || '').trim() || 'No subject';
-          const taskId = String(t?.id || '').trim() || 'No ID';
+          const subj =
+            (t?.properties?.hs_task_subject || "").trim() || "No subject";
+          const taskId = String(t?.id || "").trim() || "No ID";
           const tsRaw = t?.properties?.hs_timestamp;
-          let timeStr = '';
+          let timeStr = "";
           if (tsRaw) {
             let tsNum = Number(tsRaw);
             if (tsNum > 0 && tsNum < 946684800000) {
@@ -1014,14 +1184,14 @@ const importHubSpotTasksToDb = async (req, res) => {
             }
             if (!isNaN(tsNum) && tsNum > 0) {
               const dueDate = new Date(tsNum);
-              timeStr = ` (${String(dueDate.getHours()).padStart(2, '0')}:${String(dueDate.getMinutes()).padStart(2, '0')})`;
+              timeStr = ` (${String(dueDate.getHours()).padStart(2, "0")}:${String(dueDate.getMinutes()).padStart(2, "0")})`;
             }
           }
           console.log(`   ${idx + 1}. Task ${taskId}: "${subj}"${timeStr}`);
         });
-        
+
         // Specifically check for 13:00 tasks
-        const jan30_13_00_tasks = jan30Tasks.filter(t => {
+        const jan30_13_00_tasks = jan30Tasks.filter((t) => {
           const tsRaw = t?.properties?.hs_timestamp;
           if (!tsRaw) return false;
           let tsNum = Number(tsRaw);
@@ -1032,18 +1202,25 @@ const importHubSpotTasksToDb = async (req, res) => {
           const dueDate = new Date(tsNum);
           return dueDate.getHours() === 13 && dueDate.getMinutes() === 0;
         });
-        
+
         if (jan30_13_00_tasks.length > 0) {
-          console.log(`\n   📌 Specifically, ${jan30_13_00_tasks.length} task(s) with time 13:00:`);
+          console.log(
+            `\n   📌 Specifically, ${jan30_13_00_tasks.length} task(s) with time 13:00:`,
+          );
           jan30_13_00_tasks.forEach((t, idx) => {
-            const subj = (t?.properties?.hs_task_subject || '').trim() || 'No subject';
-            const taskId = String(t?.id || '').trim() || 'No ID';
+            const subj =
+              (t?.properties?.hs_task_subject || "").trim() || "No subject";
+            const taskId = String(t?.id || "").trim() || "No ID";
             console.log(`      ${idx + 1}. Task ${taskId}: "${subj}"`);
           });
         }
       } else {
-        console.log(`\n⚠️ No tasks found for 30 Jan in fetched results. This might indicate a date filtering issue.`);
-        console.log(`   Check if the date range includes 30 Jan and if there are more than ${limit} tasks in the range.`);
+        console.log(
+          `\n⚠️ No tasks found for 30 Jan in fetched results. This might indicate a date filtering issue.`,
+        );
+        console.log(
+          `   Check if the date range includes 30 Jan and if there are more than ${limit} tasks in the range.`,
+        );
       }
     }
     console.log(`\n✅ Imported Fields:`);
@@ -1056,11 +1233,13 @@ const importHubSpotTasksToDb = async (req, res) => {
     console.log(`   - Reminder: ✅`);
     console.log(`   - Due Date (with time): ✅`);
     console.log(`   - Notes: ✅`);
-    console.log(`   - Filter: ${currentMonthOnly ? (weekWise ? '✅ Current Month Weeks (Previous, Current, Next)' : '✅ Current Month Only') : '❌ All Tasks'}\n`);
+    console.log(
+      `   - Filter: ${currentMonthOnly ? (weekWise ? "✅ Current Month Weeks (Previous, Current, Next)" : "✅ Current Month Only") : "❌ All Tasks"}\n`,
+    );
 
     return res.status(200).json({
       success: true,
-      message: `HubSpot tasks imported to Follow-Ups successfully${currentMonthOnly ? (weekWise ? ' (current month: previous week, current week, next week)' : ' (current month only)') : ''}`,
+      message: `HubSpot tasks imported to Follow-Ups successfully${currentMonthOnly ? (weekWise ? " (current month: previous week, current week, next week)" : " (current month only)") : ""}`,
       data: {
         fetchedFromHubSpot: hubspotTasks.length,
         created,
@@ -1074,7 +1253,7 @@ const importHubSpotTasksToDb = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Error importing HubSpot tasks to DB',
+      message: error.message || "Error importing HubSpot tasks to DB",
     });
   }
 };
@@ -1084,23 +1263,29 @@ const importHubSpotTasksToDb = async (req, res) => {
 // @access  Private/Admin
 const getHubSpotOrdersRequiredFields = async (req, res) => {
   try {
-    const axios = require('axios');
-    const config = require('../../config');
-    const hubspotOAuthService = require('../../services/hubspotOAuthService');
+    const axios = require("axios");
+    const config = require("../../config");
+    const hubspotOAuthService = require("../../services/hubspotOAuthService");
 
-    let token = '';
-    if (config.HUBSPOT_AUTH_MODE === 'oauth') {
+    let token = "";
+    if (config.HUBSPOT_AUTH_MODE === "oauth") {
       token = await hubspotOAuthService.getValidAccessToken();
     } else {
-      token = config.HUBSPOT_TOKEN || config.HUBSPOT_ACCESS_TOKEN || config.HUBSPOT_API_KEY;
+      token =
+        config.HUBSPOT_TOKEN ||
+        config.HUBSPOT_ACCESS_TOKEN ||
+        config.HUBSPOT_API_KEY;
     }
 
     const headers = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     };
 
-    const propsRes = await axios.get('https://api.hubapi.com/crm/v3/properties/orders', { headers });
+    const propsRes = await axios.get(
+      "https://api.hubapi.com/crm/v3/properties/orders",
+      { headers },
+    );
     const props = propsRes.data?.results || [];
     const required = props
       .filter((p) => p?.required && !p?.readOnly)
@@ -1120,7 +1305,10 @@ const getHubSpotOrdersRequiredFields = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.response?.data?.message || error.message || 'Error fetching orders required fields',
+      message:
+        error.response?.data?.message ||
+        error.message ||
+        "Error fetching orders required fields",
       error: error.response?.data,
     });
   }
@@ -1143,7 +1331,7 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
       : {
           $or: [
             { hubspotOrderId: { $exists: false } },
-            { hubspotOrderId: '' },
+            { hubspotOrderId: "" },
             { hubspotLastSyncError: /associat|404/i },
           ],
         };
@@ -1161,11 +1349,11 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
 
       try {
         // Build contact info from order
-        const customerName = order.customerName || '';
-        const firstname = customerName.split(' ')[0] || customerName || '';
-        const lastname = customerName.split(' ').slice(1).join(' ') || '';
-        const email = (order.emailAddress || '').toLowerCase().trim();
-        const phone = (order.phoneNumber || '').trim();
+        const customerName = order.customerName || "";
+        const firstname = customerName.split(" ")[0] || customerName || "";
+        const lastname = customerName.split(" ").slice(1).join(" ") || "";
+        const email = (order.emailAddress || "").toLowerCase().trim();
+        const phone = (order.phoneNumber || "").trim();
 
         let contactId = null;
         if (email) {
@@ -1173,10 +1361,14 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
         }
         if (!contactId && (firstname || lastname || email)) {
           const contact = await hubspotService.createOrUpdateContact({
-            name: `${firstname} ${lastname}`.trim() || firstname || lastname || email,
+            name:
+              `${firstname} ${lastname}`.trim() ||
+              firstname ||
+              lastname ||
+              email,
             email,
             phone,
-            address: order.billingAddress || '',
+            address: order.billingAddress || "",
           });
           contactId = contact?.id || null;
         }
@@ -1190,32 +1382,42 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
             {
               name: `Sales Order ${order.soNumber}`,
               amount: String(order.grandTotal || 0),
-              status: order.orderStatus || 'COMPLETED',
+              status: order.orderStatus || "COMPLETED",
               description: order.orderNotes || `SO: ${order.soNumber}`,
-              closedate: order.orderDate ? new Date(order.orderDate).toISOString() : new Date().toISOString(),
+              closedate: order.orderDate
+                ? new Date(order.orderDate).toISOString()
+                : new Date().toISOString(),
             },
-            contactId
+            contactId,
           );
         }
 
         if (!hubspotOrderId) {
-          order.hubspotLastSyncError = 'HubSpot order creation failed (no id returned)';
+          order.hubspotLastSyncError =
+            "HubSpot order creation failed (no id returned)";
           order.hubspotLastSyncedAt = new Date();
           await order.save();
-          failures.push({ soNumber: order.soNumber, message: order.hubspotLastSyncError });
+          failures.push({
+            soNumber: order.soNumber,
+            message: order.hubspotLastSyncError,
+          });
           continue;
         }
 
         // Always attempt association (safe to retry).
         if (contactId && hubspotOrderId) {
-          const ok = await hubspotService.associateOrderToContact(hubspotOrderId, contactId);
+          const ok = await hubspotService.associateOrderToContact(
+            hubspotOrderId,
+            contactId,
+          );
           if (!ok) {
-            order.hubspotLastSyncError = 'Association failed (will auto-retry on next push-orders)';
+            order.hubspotLastSyncError =
+              "Association failed (will auto-retry on next push-orders)";
           } else {
-            order.hubspotLastSyncError = '';
+            order.hubspotLastSyncError = "";
           }
         } else if (!contactId) {
-          order.hubspotLastSyncError = 'No contactId available to associate';
+          order.hubspotLastSyncError = "No contactId available to associate";
         }
 
         order.hubspotOrderId = hubspotOrderId;
@@ -1223,7 +1425,7 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
         await order.save();
         synced += 1;
       } catch (e) {
-        const msg = e.response?.data?.message || e.message || 'Unknown error';
+        const msg = e.response?.data?.message || e.message || "Unknown error";
         try {
           order.hubspotLastSyncError = msg;
           order.hubspotLastSyncedAt = new Date();
@@ -1235,7 +1437,7 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Sales orders push to HubSpot completed',
+      message: "Sales orders push to HubSpot completed",
       data: {
         force,
         attempted,
@@ -1248,7 +1450,7 @@ const pushSalesOrdersToHubSpot = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Error pushing sales orders to HubSpot',
+      message: error.message || "Error pushing sales orders to HubSpot",
     });
   }
 };
@@ -1261,7 +1463,7 @@ const repairOrderAssociations = async (req, res) => {
   try {
     const limit = Number(req.body?.limit || 0);
 
-    const query = { hubspotOrderId: { $exists: true, $ne: '' } };
+    const query = { hubspotOrderId: { $exists: true, $ne: "" } };
     let q = SalesOrder.find(query).sort({ updatedAt: -1 });
     if (limit && !Number.isNaN(limit)) q = q.limit(limit);
     const orders = await q;
@@ -1273,42 +1475,52 @@ const repairOrderAssociations = async (req, res) => {
     for (const order of orders) {
       attempted += 1;
       try {
-        const email = (order.emailAddress || '').toLowerCase().trim();
-        const phone = (order.phoneNumber || '').trim();
-        const customerName = order.customerName || '';
-        const firstname = customerName.split(' ')[0] || customerName || '';
-        const lastname = customerName.split(' ').slice(1).join(' ') || '';
+        const email = (order.emailAddress || "").toLowerCase().trim();
+        const phone = (order.phoneNumber || "").trim();
+        const customerName = order.customerName || "";
+        const firstname = customerName.split(" ")[0] || customerName || "";
+        const lastname = customerName.split(" ").slice(1).join(" ") || "";
 
         let contactId = null;
         if (email) contactId = await hubspotService.findContactByEmail(email);
         if (!contactId && (firstname || lastname || email)) {
           const contact = await hubspotService.createOrUpdateContact({
-            name: `${firstname} ${lastname}`.trim() || firstname || lastname || email,
+            name:
+              `${firstname} ${lastname}`.trim() ||
+              firstname ||
+              lastname ||
+              email,
             email,
             phone,
-            address: order.billingAddress || '',
+            address: order.billingAddress || "",
           });
           contactId = contact?.id || null;
         }
 
         if (!contactId) {
-          failures.push({ soNumber: order.soNumber, message: 'Could not resolve/create HubSpot contact for association' });
+          failures.push({
+            soNumber: order.soNumber,
+            message: "Could not resolve/create HubSpot contact for association",
+          });
           continue;
         }
 
-        const ok = await hubspotService.associateOrderToContact(order.hubspotOrderId, contactId);
+        const ok = await hubspotService.associateOrderToContact(
+          order.hubspotOrderId,
+          contactId,
+        );
         order.hubspotLastSyncedAt = new Date();
         if (ok) {
           associated += 1;
-          order.hubspotLastSyncError = '';
+          order.hubspotLastSyncError = "";
         } else {
-          const msg = 'Association failed (see server logs)';
+          const msg = "Association failed (see server logs)";
           order.hubspotLastSyncError = msg;
           failures.push({ soNumber: order.soNumber, message: msg });
         }
         await order.save();
       } catch (e) {
-        const msg = e.response?.data?.message || e.message || 'Unknown error';
+        const msg = e.response?.data?.message || e.message || "Unknown error";
         try {
           order.hubspotLastSyncError = msg;
           order.hubspotLastSyncedAt = new Date();
@@ -1320,7 +1532,7 @@ const repairOrderAssociations = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Repair order associations completed',
+      message: "Repair order associations completed",
       data: {
         attempted,
         associated,
@@ -1331,7 +1543,7 @@ const repairOrderAssociations = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Error repairing order associations',
+      message: error.message || "Error repairing order associations",
     });
   }
 };
@@ -1344,9 +1556,18 @@ const pushCustomersToHubSpot = async (req, res) => {
   try {
     const force = Boolean(req.body?.force || false);
     const limit = Number(req.body?.limit || 0);
-    const myContactsOnly = req.body?.myContactsOnly === true || req.body?.myContactsOnly === 'true';
-    const customerIds = Array.isArray(req.body?.customerIds) ? req.body.customerIds : null;
-    console.log('Pushing customers to HubSpot (My Contacts Only:', myContactsOnly, ', Customer IDs:', customerIds, ')');
+    const myContactsOnly =
+      req.body?.myContactsOnly === true || req.body?.myContactsOnly === "true";
+    const customerIds = Array.isArray(req.body?.customerIds)
+      ? req.body.customerIds
+      : null;
+    console.log(
+      "Pushing customers to HubSpot (My Contacts Only:",
+      myContactsOnly,
+      ", Customer IDs:",
+      customerIds,
+      ")",
+    );
 
     let query = {};
     if (customerIds && customerIds.length > 0) {
@@ -1366,7 +1587,9 @@ const pushCustomersToHubSpot = async (req, res) => {
     for (const c of customers) {
       attempted += 1;
       try {
-        const email = String(c.email || '').trim().toLowerCase();
+        const email = String(c.email || "")
+          .trim()
+          .toLowerCase();
         const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
         // Strongly prefer email-based upsert to avoid duplicates
@@ -1375,40 +1598,48 @@ const pushCustomersToHubSpot = async (req, res) => {
           continue;
         }
 
-        const name = c.firstName || c.name || (email ? email.split('@')[0] : 'Customer');
+        const name =
+          c.firstName || c.name || (email ? email.split("@")[0] : "Customer");
 
         // createOrUpdateContact already searches by email and updates if exists
         // If myContactsOnly is true, assign contact to current user
-        const hsContact = await hubspotService.createOrUpdateContact({
-          name,
-          email,
-          phone: c.phone,
-          address: c.address,
-          city: c.city,
-          state: c.state,
-          pincode: c.postcode || c.pincode,
-          company: c.company,
-          status: c.status,
-          notes: c.notes,
-          force,
-        }, {
-          assignToMe: myContactsOnly, // Assign to current user if myContactsOnly is true
-        });
+        const hsContact = await hubspotService.createOrUpdateContact(
+          {
+            name,
+            email,
+            phone: c.phone,
+            address: c.address,
+            city: c.city,
+            state: c.state,
+            pincode: c.postcode || c.pincode,
+            company: c.company,
+            status: c.status,
+            notes: c.notes,
+            force,
+          },
+          {
+            assignToMe: myContactsOnly, // Assign to current user if myContactsOnly is true
+          },
+        );
 
         if (hsContact?.id) {
           synced += 1;
         } else {
-          failures.push({ customerId: c._id, email, message: 'HubSpot contact sync returned null' });
+          failures.push({
+            customerId: c._id,
+            email,
+            message: "HubSpot contact sync returned null",
+          });
         }
       } catch (e) {
-        const msg = e.response?.data?.message || e.message || 'Unknown error';
+        const msg = e.response?.data?.message || e.message || "Unknown error";
         failures.push({ customerId: c._id, email: c.email, message: msg });
       }
     }
 
     return res.status(200).json({
       success: true,
-      message: 'Customers push to HubSpot completed',
+      message: "Customers push to HubSpot completed",
       data: {
         attempted,
         synced,
@@ -1421,7 +1652,7 @@ const pushCustomersToHubSpot = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message || 'Error pushing customers to HubSpot',
+      message: error.message || "Error pushing customers to HubSpot",
     });
   }
 };
@@ -1437,12 +1668,12 @@ const pushTasksToHubSpot = async (req, res) => {
 
     // Only push approved tasks that don't have hubspotTaskId yet
     const query = force
-      ? { approvalStatus: 'Approved' }
+      ? { approvalStatus: "Approved" }
       : {
-          approvalStatus: 'Approved',
+          approvalStatus: "Approved",
           $or: [
             { hubspotTaskId: { $exists: false } },
-            { hubspotTaskId: '' },
+            { hubspotTaskId: "" },
             { hubspotTaskId: null },
           ],
         };
@@ -1466,21 +1697,21 @@ const pushTasksToHubSpot = async (req, res) => {
         }
 
         const subject = task.description || `Follow-up: ${task.customerName}`;
-        const body = task.notes || '';
+        const body = task.notes || "";
 
         // Map local priority to HubSpot priority values
-        let hsPriority = 'NONE';
-        const pr = (task.priority || '').toLowerCase();
-        if (pr === 'urgent' || pr === 'high') hsPriority = 'HIGH';
-        else if (pr === 'medium') hsPriority = 'MEDIUM';
-        else if (pr === 'low') hsPriority = 'LOW';
+        let hsPriority = "NONE";
+        const pr = (task.priority || "").toLowerCase();
+        if (pr === "urgent" || pr === "high") hsPriority = "HIGH";
+        else if (pr === "medium") hsPriority = "MEDIUM";
+        else if (pr === "low") hsPriority = "LOW";
 
         const hubspotTaskId = await hubspotService.createTaskObjectInHubSpot({
           subject,
           body,
-          status: 'NOT_STARTED',
+          status: "NOT_STARTED",
           priority: hsPriority,
-          type: 'TODO',
+          type: "TODO",
           dueDate: task.dueDate,
         });
 
@@ -1492,11 +1723,11 @@ const pushTasksToHubSpot = async (req, res) => {
           failures.push({
             taskId: task._id,
             followUpNumber: task.followUpNumber,
-            message: 'HubSpot task creation returned null',
+            message: "HubSpot task creation returned null",
           });
         }
       } catch (e) {
-        const msg = e.response?.data?.message || e.message || 'Unknown error';
+        const msg = e.response?.data?.message || e.message || "Unknown error";
         failures.push({
           taskId: task._id,
           followUpNumber: task.followUpNumber,
@@ -1517,10 +1748,10 @@ const pushTasksToHubSpot = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error pushing tasks to HubSpot:', error);
+    console.error("Error pushing tasks to HubSpot:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || 'Error pushing tasks to HubSpot',
+      message: error.message || "Error pushing tasks to HubSpot",
     });
   }
 };

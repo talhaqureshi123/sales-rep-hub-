@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import UserList from '../components/UserList'
 import AddUserForm from '../components/AddUserForm'
 import { getUsers, createUser, updateUser, deleteUser } from '../../services/adminservices/userService'
+import Swal from 'sweetalert2'
 
 const UserManagement = () => {
   const [users, setUsers] = useState([])
@@ -46,15 +47,51 @@ const UserManagement = () => {
       }
 
       if (result.success) {
-        alert(editingUser ? 'User updated successfully!' : 'User created successfully!')
+        const setupLink = result.data?.setupLink
+        if (!editingUser && setupLink) {
+          await Swal.fire({
+            icon: 'success',
+            title: 'Salesman created!',
+            html: `
+              <p class="text-left mb-3">Send this link to the salesman to set their password:</p>
+              <div class="bg-gray-100 p-3 rounded text-left text-sm break-all select-all font-mono">${setupLink}</div>
+              <p class="text-left text-xs text-gray-500 mt-2">Link expires in 24 hours. You can also generate a new link from User List → "Generate Password Setup Link".</p>
+            `,
+            confirmButtonColor: '#e9931c',
+            width: '520px',
+          })
+          if (navigator.clipboard?.writeText) {
+            try {
+              await navigator.clipboard.writeText(setupLink)
+              Swal.fire({ icon: 'info', title: 'Copied!', text: 'Link copied to clipboard. Paste and send to the salesman.', confirmButtonColor: '#e9931c', timer: 2000, timerProgressBar: true })
+            } catch (_) {}
+          }
+        } else {
+          await Swal.fire({
+            icon: 'success',
+            title: 'Success',
+            text: editingUser ? 'Salesman updated successfully!' : 'Salesman created successfully!',
+            confirmButtonColor: '#e9931c',
+          })
+        }
         setEditingUser(null)
         loadUsers() // Reload users from backend
       } else {
-        alert(result.message || 'Failed to save user')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to save user',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error saving user:', error)
-      alert('Error saving user')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error saving user. Please try again.',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -65,25 +102,48 @@ const UserManagement = () => {
   }
 
   const handleDelete = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) {
-      return
-    }
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Salesman?',
+      text: 'Are you sure you want to delete this user? This action cannot be undone.',
+      showCancelButton: true,
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+    })
+    if (!confirmResult.isConfirmed) return
 
     setLoading(true)
     try {
       const result = await deleteUser(userId)
       if (result.success) {
-        alert('User deleted successfully!')
+        await Swal.fire({
+          icon: 'success',
+          title: 'Deleted',
+          text: 'Salesman deleted successfully!',
+          confirmButtonColor: '#e9931c',
+        })
         if (editingUser && (editingUser._id === userId || editingUser.id === userId)) {
           setEditingUser(null)
         }
         loadUsers() // Reload users from backend
       } else {
-        alert(result.message || 'Failed to delete user')
+        await Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to delete user',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (error) {
       console.error('Error deleting user:', error)
-      alert('Error deleting user')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting user. Please try again.',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }

@@ -728,8 +728,8 @@ const LiveTracking = () => {
 
       {/* Salesman Detail Modal */}
       {showDetailModal && selectedSalesman && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-6xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
               <div className="flex items-center justify-between">

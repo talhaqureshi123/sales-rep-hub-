@@ -558,8 +558,8 @@ const SalesOrders = () => {
 
       {/* View Sales Order Modal */}
       {viewOrderId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-3xl w-full max-h-[90vh] overflow-auto my-auto">
             <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
               <h3 className="text-xl font-semibold text-gray-800">View Sales Order</h3>
               <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
@@ -683,8 +683,8 @@ const SalesOrders = () => {
 
       {/* Create Order Modal (Legacy - can be removed) */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">Create New Order</h3>
               <button

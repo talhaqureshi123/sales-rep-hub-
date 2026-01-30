@@ -1395,8 +1395,8 @@ const SalesSubmissions = () => {
 
       {/* Customer View Modal */}
       {showCustomerView && selectedCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
                 <FaUser className="w-5 h-5 text-[#e9931c]" />
@@ -1407,7 +1407,7 @@ const SalesSubmissions = () => {
                   setShowCustomerView(false)
                   setSelectedCustomer(null)
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 rounded-lg"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1500,13 +1500,13 @@ const SalesSubmissions = () => {
 
       {/* Video Player Modal */}
       {playingVideo && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">{playingVideo.title}</h3>
               <button
                 onClick={() => setPlayingVideo(null)}
-                className="text-gray-500 hover:text-gray-700"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 rounded-lg"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

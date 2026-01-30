@@ -12,53 +12,39 @@ const getLocalDateString = (d = new Date()) => {
   return `${y}-${m}-${day}`
 }
 
-// Calculate start and end dates based on period (starting from today)
+// Period = fixed days: Week 7, Month 30, Quarter 90, Yearly 365
+const getPeriodDays = (period) => {
+  switch (period) {
+    case 'Daily': return 0
+    case 'Weekly': return 7
+    case 'Monthly': return 30
+    case 'Quarterly': return 90  // 3 months × 30 days
+    case 'Yearly': return 365
+    default: return 0
+  }
+}
+
+// End date = start date + period days (startDateStr in YYYY-MM-DD)
+const calculateEndDateFromStart = (startDateStr, period) => {
+  if (!startDateStr || !period) return ''
+  const days = getPeriodDays(period)
+  const start = new Date(startDateStr)
+  if (isNaN(start.getTime())) return ''
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + days)
+  return getLocalDateString(end)
+}
+
+// Calculate start and end dates based on period (starting from today) – Month 30 din, Week 7 din, Quarter 90 din
 const calculatePeriodDates = (period) => {
   const today = new Date()
-  today.setHours(0, 0, 0, 0) // Set to start of day
-  
-  let startDate = new Date(today)
-  let endDate = new Date(today)
-  
-  switch (period) {
-    case 'Daily':
-      // Today to today
-      endDate = new Date(today)
-      break
-      
-    case 'Weekly':
-      // Today to end of current week (Sunday)
-      const dayOfWeek = today.getDay() // 0 = Sunday, 6 = Saturday
-      const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
-      endDate = new Date(today)
-      endDate.setDate(today.getDate() + daysUntilSunday)
-      endDate.setHours(23, 59, 59, 999) // End of day
-      break
-      
-    case 'Monthly':
-      // Today to end of current month
-      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0) // Last day of current month (day 0 of next month)
-      break
-      
-    case 'Quarterly':
-      // Today to end of current quarter
-      const currentQuarter = Math.floor(today.getMonth() / 3) // 0, 1, 2, or 3
-      const quarterEndMonth = (currentQuarter + 1) * 3 - 1 // Month index (0-11) of last month in quarter
-      endDate = new Date(today.getFullYear(), quarterEndMonth + 1, 0) // Last day of quarter (day 0 of next month)
-      break
-      
-    case 'Yearly':
-      // Today to end of current year (December 31)
-      endDate = new Date(today.getFullYear(), 11, 31) // December 31
-      break
-      
-    default:
-      return { startDate: '', endDate: '' }
-  }
-  
+  today.setHours(0, 0, 0, 0)
+  const startStr = getLocalDateString(today)
+  const endStr = calculateEndDateFromStart(startStr, period) || startStr
   return {
-    startDate: getLocalDateString(startDate),
-    endDate: getLocalDateString(endDate)
+    startDate: startStr,
+    endDate: endStr
   }
 }
 
@@ -143,11 +129,18 @@ const SalesTargets = () => {
       [name]: value,
     }
     
-    // Auto-fill dates when period is selected
+    // Period = 30 din month, 7 din week, 90 din quarter – end date auto from start
     if (name === 'period' && value) {
-      const dates = calculatePeriodDates(value)
-      updatedFormData.startDate = dates.startDate
-      updatedFormData.endDate = dates.endDate
+      if (updatedFormData.startDate) {
+        updatedFormData.endDate = calculateEndDateFromStart(updatedFormData.startDate, value) || updatedFormData.endDate
+      } else {
+        const dates = calculatePeriodDates(value)
+        updatedFormData.startDate = dates.startDate
+        updatedFormData.endDate = dates.endDate
+      }
+    }
+    if (name === 'startDate' && value && formData.period) {
+      updatedFormData.endDate = calculateEndDateFromStart(value, formData.period) || updatedFormData.endDate
     }
     
     setFormData(updatedFormData)
@@ -210,15 +203,21 @@ const SalesTargets = () => {
       if (result.success && result.data) {
         const target = result.data
         setSelectedTarget(target)
+        const startStr = target.startDate ? getLocalDateString(new Date(target.startDate)) : ''
+        const period = target.period || ''
+        // End date = start + period days (Month 30, Week 7, Quarter 90)
+        const endStr = startStr && period
+          ? calculateEndDateFromStart(startStr, period)
+          : (target.endDate ? getLocalDateString(new Date(target.endDate)) : '')
         setFormData({
           salesman: target.salesman._id || target.salesman,
           targetName: target.targetName || '',
           targetType: target.targetType || '',
           targetValue: target.targetValue || 0,
           targetAmount: target.targetAmount || '',
-          period: target.period || '',
-          startDate: target.startDate ? getLocalDateString(new Date(target.startDate)) : '',
-          endDate: target.endDate ? getLocalDateString(new Date(target.endDate)) : '',
+          period,
+          startDate: startStr,
+          endDate: endStr,
         })
         setShowEditModal(true)
       }
@@ -648,8 +647,8 @@ const SalesTargets = () => {
 
       {/* Create Target Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-xl font-semibold text-gray-800">Create New Target</h3>
@@ -756,6 +755,7 @@ const SalesTargets = () => {
                     <option key={period} value={period}>{period}</option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">Week = 7 days, Month = 30 days, Quarter = 90 days, Year = 365 days</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -820,8 +820,8 @@ const SalesTargets = () => {
 
       {/* Edit Target Modal */}
       {showEditModal && selectedTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">Edit Target</h3>
               <button
@@ -900,6 +900,7 @@ const SalesTargets = () => {
                     <option key={period} value={period}>{period}</option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">Week = 7 days, Month = 30 days, Quarter = 90 days, Year = 365 days</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

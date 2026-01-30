@@ -28,8 +28,11 @@ const GoogleMapView = ({
   const lastBoundsKeyRef = useRef('')
   const trackingCenterSetRef = useRef(false) // When tracking, set center only once to avoid map blinking
   const prevIsTrackingRef = useRef(false)
+  const lastSelectedTargetIdRef = useRef(null) // When user clicks a different visit, allow map to center on it
+  const userHasManuallyMovedMapRef = useRef(false) // Once user zooms/pans, don't override until they click a visit or start tracking
   const userMarkerRef = useRef(null) // Keep user marker ref to update position in place during tracking (avoids blink)
   const markerLibraryRef = useRef(null) // Cache Advanced Marker library
+  const lastUserInteractionRef = useRef(0) // When user zooms/pans, don't override their view for a few seconds
 
   const getMarkerLibrary = async () => {
     if (!window.google?.maps?.importLibrary) return null
@@ -48,6 +51,26 @@ const GoogleMapView = ({
     div.style.border = '3px solid white'
     div.style.boxShadow = '0 1px 3px rgba(0,0,0,0.3)'
     div.style.pointerEvents = 'none'
+    return div
+  }
+
+  // Visit target marker: pin icon (visit-icon.png) so it shows clearly on map
+  const createVisitPinContent = (size = 32) => {
+    const div = document.createElement('div')
+    div.style.width = `${size}px`
+    div.style.height = `${size}px`
+    div.style.display = 'flex'
+    div.style.alignItems = 'center'
+    div.style.justifyContent = 'center'
+    div.style.pointerEvents = 'none'
+    const img = document.createElement('img')
+    img.src = '/visit-icon.png'
+    img.alt = 'Visit'
+    img.style.width = '100%'
+    img.style.height = '100%'
+    img.style.objectFit = 'contain'
+    img.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))'
+    div.appendChild(img)
     return div
   }
 
@@ -152,7 +175,7 @@ const GoogleMapView = ({
           zoomControl: true,
           zoomControlOptions: {
             position: window.google.maps.ControlPosition.RIGHT_CENTER,
-            style: window.google.maps.ZoomControlStyle.SMALL
+            style: window.google.maps.ZoomControlStyle.DEFAULT
           },
           streetViewControl: false,
           fullscreenControl: true,
@@ -160,7 +183,7 @@ const GoogleMapView = ({
             position: window.google.maps.ControlPosition.RIGHT_TOP
           },
           mapTypeControl: false,
-          gestureHandling: 'cooperative', // Better mobile experience
+          gestureHandling: 'greedy', // Scroll wheel zooms; pinch/double-tap zoom on mobile
           clickableIcons: false, // Disable POI clicks
           keyboardShortcuts: true,
           draggable: true,
@@ -207,27 +230,30 @@ const GoogleMapView = ({
         const directionsServiceInstance = new window.google.maps.DirectionsService()
         setDirectionsService(directionsServiceInstance)
 
-        // Initialize Directions Renderer
+        // Initialize Directions Renderer – route path style (clean orange line + arrows)
+        const ROUTE_STROKE_COLOR = '#ea580c'
+        const ROUTE_STROKE_WEIGHT = 6
+        const ROUTE_ARROW_REPEAT = '80px'
         const directionsRendererInstance = new window.google.maps.DirectionsRenderer({
           map: mapInstance,
-          suppressMarkers: true, // Hide Google A/B/C markers – we use our own markers
-          preserveViewport: true, // We call fitBounds ourselves – avoids double zoom/blink
+          suppressMarkers: true,
+          preserveViewport: true,
           polylineOptions: {
-            strokeColor: '#e9931c', // Orange color matching app theme
-            strokeWeight: 6, // Clean line thickness
-            strokeOpacity: 0.9, // Slightly transparent for better look
+            strokeColor: ROUTE_STROKE_COLOR,
+            strokeWeight: ROUTE_STROKE_WEIGHT,
+            strokeOpacity: 0.95,
             zIndex: 1000,
             icons: [{
               icon: {
                 path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                scale: 4, // Clean arrow size
+                scale: 4.5,
                 strokeColor: '#ffffff',
                 strokeWeight: 2,
-                fillColor: '#e9931c',
+                fillColor: ROUTE_STROKE_COLOR,
                 fillOpacity: 1,
               },
               offset: '100%',
-              repeat: '80px', // Clean arrow spacing
+              repeat: ROUTE_ARROW_REPEAT,
             }],
           },
         })
@@ -298,38 +324,71 @@ const GoogleMapView = ({
     }
   }, []) // Only run once on mount
 
+  // Track user zoom/pan – once they move/zoom the map, don't override until they click a visit or start tracking
+  useEffect(() => {
+    if (!map) return
+    const onUserInteraction = () => {
+      lastUserInteractionRef.current = Date.now()
+      userHasManuallyMovedMapRef.current = true // Zoom/pan = user chose view; keep it
+    }
+    const listeners = [
+      window.google.maps.event.addListener(map, 'zoom_changed', onUserInteraction),
+      window.google.maps.event.addListener(map, 'dragend', onUserInteraction),
+    ]
+    return () => {
+      listeners.forEach((l) => window.google.maps.event.removeListener(l))
+    }
+  }, [map])
+
   // Minimum zoom so map never goes too far out (avoids grey blank map when sidebar selection has far-apart points)
   const MIN_ZOOM = 12
+  const ZOOM_SPECIFIC_PLACE = 14 // Closer zoom when user selects a specific target
+
+  // When user clicks a different visit (selectedTarget changes), allow map to center on it
+  const selectedTargetId = selectedTarget ? (selectedTarget._id || selectedTarget.id)?.toString() : null
+  useEffect(() => {
+    if (selectedTargetId && selectedTargetId !== lastSelectedTargetIdRef.current) {
+      lastSelectedTargetIdRef.current = selectedTargetId
+      trackingCenterSetRef.current = false
+      userHasManuallyMovedMapRef.current = false // Allow one center update to show the clicked visit
+    }
+    if (!selectedTargetId) lastSelectedTargetIdRef.current = null
+  }, [selectedTargetId])
 
   // Update map center - Show both user location and selected target (debounce bounds to reduce blinking)
   // When tracking is on: set center only ONCE so map does not blink/shiver on every GPS update
+  // Once user zooms/pans to check road, view stays – no snap back until they click a visit or start tracking
   const centerTimeoutRef = useRef(null)
   useEffect(() => {
     if (!map) return
+    // Once user has zoomed/panned, never override their view until they click a visit or start tracking
+    if (userHasManuallyMovedMapRef.current) return
     if (!isTracking) {
       trackingCenterSetRef.current = false
       prevIsTrackingRef.current = false
     }
-    // When user just clicked Start Tracking (false -> true), allow one center update so map sets correctly, then no blink
+    // When user just clicked Start Tracking (false -> true), allow one center update and reset manual flag so map sets correctly
     if (isTracking && !prevIsTrackingRef.current) {
       trackingCenterSetRef.current = false
       prevIsTrackingRef.current = true
+      userHasManuallyMovedMapRef.current = false
     }
-    // Once center is set during tracking, do not run any branch – keeps map completely stable (no blink)
+    // Once center is set during tracking, do not run any branch – keeps map stable (no blink)
+    // Exception: when user clicks a visit (selectedTarget changed), we reset trackingCenterSetRef above so map moves
     if (isTracking && trackingCenterSetRef.current) {
       if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
       centerTimeoutRef.current = null
       return
     }
 
-    // Priority 1: If we have both user location and selected target - center on selected target with fixed zoom
+    // Priority 1: If we have both user location and selected target - center on selected target with closer zoom (specific place)
     if (userLocation && selectedTarget && selectedTarget.latitude && selectedTarget.longitude) {
       if (isTracking && trackingCenterSetRef.current) return () => {} // No re-center on every GPS update – avoids blink
       if (centerTimeoutRef.current) clearTimeout(centerTimeoutRef.current)
       const selLat = parseFloat(selectedTarget.latitude)
       const selLng = parseFloat(selectedTarget.longitude)
       map.setCenter({ lat: selLat, lng: selLng })
-      map.setZoom(MIN_ZOOM)
+      map.setZoom(ZOOM_SPECIFIC_PLACE)
       if (isTracking) trackingCenterSetRef.current = true
       const t = setTimeout(() => {
         if (map.getZoom() < MIN_ZOOM) map.setZoom(MIN_ZOOM)
@@ -385,7 +444,14 @@ const GoogleMapView = ({
       map.setCenter({ lat: userLocation.latitude, lng: userLocation.longitude })
       map.setZoom(11) // Reduced from 13 - wider view to show more area around user
       if (isTracking) trackingCenterSetRef.current = true
-    } 
+    }
+    // Priority 4b: User clicked a visit but no GPS – still center map on that visit
+    else if (selectedTarget && selectedTarget.latitude != null && selectedTarget.longitude != null) {
+      const selLat = parseFloat(selectedTarget.latitude)
+      const selLng = parseFloat(selectedTarget.longitude)
+      map.setCenter({ lat: selLat, lng: selLng })
+      map.setZoom(ZOOM_SPECIFIC_PLACE)
+    }
     // Priority 5: Only targets available
     else if (milestones.length > 0 || visitTargets.length > 0) {
       // Filter out completed targets for map bounds calculation
@@ -660,7 +726,7 @@ const GoogleMapView = ({
       validTargets.forEach((target, index) => {
         const isCompleted = target.status === 'Completed' || target.status === 'completed'
         const isPending = target.status === 'Pending' || target.status === 'In Progress'
-        const fillColor = isCompleted ? '#6b7280' : '#e9931c'
+        const fillColor = isCompleted ? '#6b7280' : '#eab308'
         const lat = parseFloat(target.latitude)
         const lng = parseFloat(target.longitude)
         const position = { lat, lng }
@@ -685,7 +751,7 @@ const GoogleMapView = ({
             map,
             position,
             title: target.name || 'Visit Target',
-            content: createCircleMarkerContent(fillColor, isPending ? 10 : 8),
+            content: createVisitPinContent(isPending ? 36 : 30),
           })
           visitTargetMarker.addListener('click', () => {
             infoWindow.open(map, visitTargetMarker)
@@ -697,12 +763,9 @@ const GoogleMapView = ({
             position,
             map,
             icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: isPending ? 10 : 8,
-              fillColor,
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 3,
+              url: '/visit-icon.png',
+              scaledSize: new window.google.maps.Size(isPending ? 36 : 30, isPending ? 36 : 30),
+              anchor: new window.google.maps.Point((isPending ? 36 : 30) / 2, (isPending ? 36 : 30) / 2),
             },
             title: target.name || 'Visit Target',
             zIndex: (isPending ? 1900 : 1400) + index,
@@ -737,58 +800,45 @@ const GoogleMapView = ({
       setDirectionsService(directionsServiceInstance)
     }
 
-    // Initialize Directions Renderer if not already done
+        // Route path style – clean orange line, good visibility
+    const ROUTE_STROKE_COLOR = '#ea580c'
+    const ROUTE_STROKE_WEIGHT = 6
+    const ROUTE_ARROW_REPEAT = '80px'
+    const routePolylineOptions = {
+      strokeColor: ROUTE_STROKE_COLOR,
+      strokeWeight: ROUTE_STROKE_WEIGHT,
+      strokeOpacity: 0.95,
+      zIndex: 1000,
+      icons: [{
+        icon: {
+          path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 4.5,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+          fillColor: ROUTE_STROKE_COLOR,
+          fillOpacity: 1,
+        },
+        offset: '100%',
+        repeat: ROUTE_ARROW_REPEAT,
+      }],
+    }
+
     if (!directionsRenderer) {
       const directionsRendererInstance = new window.google.maps.DirectionsRenderer({
         map: map,
-        suppressMarkers: true, // Don't show Google A/B/C – show only our visit markers (dono visits + user)
-        preserveViewport: true, // We call fitBounds ourselves – single zoom update, no double blink
-        polylineOptions: {
-          strokeColor: '#e9931c', // Orange color matching app theme
-          strokeWeight: 7, // Thicker line for better visibility
-          strokeOpacity: 1.0, // Full opacity for sharpness
-          zIndex: 1000,
-          icons: [{
-            icon: {
-              path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-              scale: 5, // Larger arrows
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-              fillColor: '#e9931c',
-              fillOpacity: 1,
-            },
-            offset: '100%',
-            repeat: '60px', // More frequent arrows
-          }],
-        },
+        suppressMarkers: true,
+        preserveViewport: true,
+        polylineOptions: routePolylineOptions,
       })
       setDirectionsRenderer(directionsRendererInstance)
     }
 
-    // Wait for services to be ready
     const currentDirectionsService = directionsService || new window.google.maps.DirectionsService()
     const currentDirectionsRenderer = directionsRenderer || new window.google.maps.DirectionsRenderer({
       map: map,
       suppressMarkers: true,
-      preserveViewport: true, // We call fitBounds ourselves – single zoom update
-      polylineOptions: {
-        strokeColor: '#e9931c', // Orange color matching app theme
-        strokeWeight: 7, // Thicker line for better visibility
-        strokeOpacity: 1.0, // Full opacity for sharpness
-        zIndex: 1000,
-        icons: [{
-          icon: {
-            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 5, // Larger arrows
-            strokeColor: '#ffffff',
-            strokeWeight: 2,
-            fillColor: '#e9931c',
-            fillOpacity: 1,
-          },
-          offset: '100%',
-          repeat: '60px', // More frequent arrows
-        }],
-      },
+      preserveViewport: true,
+      polylineOptions: routePolylineOptions,
     })
 
     const request = {
@@ -842,18 +892,20 @@ const GoogleMapView = ({
           onRouteInfoChange(routeInfoData)
         }
 
-        const bounds = new window.google.maps.LatLngBounds()
-        result.routes[0].overview_path.forEach((point) => {
-          bounds.extend(point)
-        })
-        bounds.extend({ lat: routeToMilestone.from.lat, lng: routeToMilestone.from.lng })
-        bounds.extend({ lat: routeToMilestone.to.lat, lng: routeToMilestone.to.lng })
-        map.fitBounds(bounds, { padding: 80 })
-        const minZoom = 12
-        setTimeout(() => {
-          if (map.getZoom() > 16) map.setZoom(16)
-          if (map.getZoom() < minZoom) map.setZoom(minZoom)
-        }, 100)
+        // Only fit bounds if user hasn't zoomed/panned – so they can zoom to check road and view stays
+        if (!userHasManuallyMovedMapRef.current) {
+          const bounds = new window.google.maps.LatLngBounds()
+          result.routes[0].overview_path.forEach((point) => {
+            bounds.extend(point)
+          })
+          bounds.extend({ lat: routeToMilestone.from.lat, lng: routeToMilestone.from.lng })
+          bounds.extend({ lat: routeToMilestone.to.lat, lng: routeToMilestone.to.lng })
+          map.fitBounds(bounds, { padding: 80 })
+          const minZoom = 10
+          setTimeout(() => {
+            if (map.getZoom() < minZoom) map.setZoom(minZoom)
+          }, 100)
+        }
       } else {
         console.error('Directions request failed:', status)
         setRouteInfo(null)
@@ -1014,30 +1066,66 @@ const GoogleMapView = ({
         </div>
       )}
       
-      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: 0, flex: 1, position: 'relative' }} />
+      <div ref={mapRef} style={{ height: '100%', width: '100%', minHeight: 0, flex: 1, position: 'relative', touchAction: 'none' }} />
       
-      {/* Route Info Display - with close button */}
+      {/* Custom zoom buttons – visible so map zoom works (scroll wheel + these) */}
+      {map && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-[11]">
+          <button
+            type="button"
+            onClick={() => {
+              if (map) {
+                map.setZoom(Math.min(map.getZoom() + 1, 21))
+                lastUserInteractionRef.current = Date.now()
+                userHasManuallyMovedMapRef.current = true
+              }
+            }}
+            className="w-10 h-10 rounded-lg bg-white border-2 border-gray-200 shadow-md hover:bg-gray-50 hover:border-[#e9931c] flex items-center justify-center text-xl font-bold text-gray-700 hover:text-[#e9931c]"
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (map) {
+                map.setZoom(Math.max(map.getZoom() - 1, 1))
+                lastUserInteractionRef.current = Date.now()
+                userHasManuallyMovedMapRef.current = true
+              }
+            }}
+            className="w-10 h-10 rounded-lg bg-white border-2 border-gray-200 shadow-md hover:bg-gray-50 hover:border-[#e9931c] flex items-center justify-center text-xl font-bold text-gray-700 hover:text-[#e9931c]"
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+        </div>
+      )}
+      
+      {/* Route Info Display – improved UI */}
       {routeInfo && routeToMilestone && showRouteInfoCard && (
-        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 pr-10 z-10 border-2 border-[#e9931c] max-w-sm">
+        <div className="absolute top-4 left-4 bg-white/95 backdrop-blur rounded-xl shadow-xl p-4 pr-10 z-10 border border-[#e9931c]/30 max-w-sm ring-1 ring-black/5">
           <button
             type="button"
             onClick={() => setShowRouteInfoCard(false)}
-            className="absolute top-2 right-2 p-1 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+            className="absolute top-2 right-2 p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-2xl">📍</span>
-            <div>
-              <h3 className="font-bold text-gray-800 text-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-[#e9931c]/10 flex items-center justify-center">
+              <img src="/visit-icon.png" alt="Visit" className="w-7 h-7 object-contain" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-gray-800 text-sm truncate">
                 {routeToMilestone.waypoints && routeToMilestone.waypoints.length > 0
                   ? `Route – ${(routeToMilestone.waypoints.length + 1)} stops`
                   : `Route to ${routeToMilestone.milestone?.name || 'target'}`}
               </h3>
-              <p className="text-xs text-gray-600" title="Destination (last stop)">
+              <p className="text-xs text-gray-600 truncate" title="Destination (last stop)">
                 {(() => {
                   const d = routeToMilestone.destinationTarget || routeToMilestone.milestone
                   return d?.name || d?.address || (d?.city && d?.state ? `${d.city}, ${d.state}` : '') || 'Destination'
@@ -1045,17 +1133,17 @@ const GoogleMapView = ({
               </p>
             </div>
           </div>
-          <div className="flex gap-4 mt-3 pt-3 border-t border-gray-200">
-            <div>
-              <p className="text-xs text-gray-500">Distance (route)</p>
-              <p className="text-lg font-bold text-[#e9931c]">{routeInfo.distance}</p>
+          <div className="flex gap-4 py-3 border-t border-gray-100">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Distance</p>
+              <p className="text-lg font-bold text-[#e9931c] mt-0.5">{routeInfo.distance}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Time</p>
-              <p className="text-lg font-bold text-[#e9931c]">{routeInfo.duration}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Time</p>
+              <p className="text-lg font-bold text-[#e9931c] mt-0.5">{routeInfo.duration}</p>
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-gray-200">
+          <div className="pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-500">
               Destination: {routeToMilestone.to?.lat != null && routeToMilestone.to?.lng != null
                 ? `${Number(routeToMilestone.to.lat).toFixed(6)}, ${Number(routeToMilestone.to.lng).toFixed(6)}`

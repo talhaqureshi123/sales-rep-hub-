@@ -324,8 +324,8 @@ const MilestoneManagement = () => {
 
       {/* Create/Edit Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto my-auto">
             <div className="p-6">
               <h3 className="text-xl font-bold text-gray-800 mb-4">
                 {editingMilestone ? 'Edit Milestone' : 'Create New Milestone'}
@@ -510,13 +510,13 @@ const MilestoneManagement = () => {
 
       {/* Map Picker Modal */}
       {showMapPicker && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-4xl max-h-[90vh] flex flex-col my-auto overflow-hidden">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-xl font-bold text-gray-800">Select Location on Map</h3>
               <button
                 onClick={handleMapPickerClose}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 transition-colors rounded-lg"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

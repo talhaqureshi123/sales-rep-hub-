@@ -1337,8 +1337,8 @@ const AssignTarget = () => {
 
         {/* Map Picker Modal */}
         {showMapPicker && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ margin: 'auto' }}>
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-3 sm:p-4 md:p-5 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
               <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-800">Select Location on Map</h3>
                 <button

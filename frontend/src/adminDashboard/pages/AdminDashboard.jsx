@@ -5,7 +5,6 @@ import ProductCatalog from './ProductCatalog'
 import ProductVideos from './ProductVideos'
 import SalesOrders from './SalesOrders'
 import Quotes from './Quotes'
-import SampleTracker from './SampleTracker'
 import SalesTargets from './SalesTargets'
 // import MilestoneManagement from './MilestoneManagement' // COMMENTED OUT
 import CustomerManagement from './CustomerManagement'
@@ -35,7 +34,7 @@ const AdminDashboard = ({ onLogout }) => {
   // Listen for navigation events from dashboard
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sample-tracker', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
+      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
         setActivePage(event.detail)
       }
     }
@@ -60,8 +59,6 @@ const AdminDashboard = ({ onLogout }) => {
         return <SalesOrders />
       case 'quotes':
         return <Quotes />
-      case 'sample-tracker':
-        return <SampleTracker />
       case 'sales-targets':
         return <SalesTargets />
       case 'sales-submissions':

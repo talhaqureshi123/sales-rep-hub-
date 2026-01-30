@@ -26,10 +26,13 @@
   overflow: hidden;
 }#root {
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
   margin: 0;
   padding: 0;
   background-color: white;
+  /* Safe area for notched devices (mobile/tablet) */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }/* Leaflet Map Custom Styles */
 .leaflet-container {
   font-family: inherit;

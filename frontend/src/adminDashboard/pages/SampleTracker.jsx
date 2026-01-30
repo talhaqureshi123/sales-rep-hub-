@@ -734,20 +734,37 @@ const SampleTracker = () => {
                     return null
                   })()}
                   
-                  {/* Delete Button */}
-                  <button
-                    onClick={() => handleDeleteSample(sample._id || sample.id)}
-                    className={`w-full mt-4 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm ${
-                      (() => {
-                        const approvalStatus = sample.approvalStatus || 'Approved'
-                        const createdByRole = sample.createdBy?.role
-                        const needsApproval = approvalStatus === 'Pending' || (createdByRole === 'salesman' && !sample.approvalStatus)
-                        return needsApproval ? 'mt-2' : ''
-                      })()
-                    }`}
-                  >
-                    Delete Sample
-                  </button>
+                  {/* Status hint when Pending */}
+                  {sample.status === 'Pending' && (
+                    <p className="text-xs text-gray-500 mt-2 mb-1">
+                      Sample given; mark &quot;Received&quot; or &quot;Converted&quot; via Edit when done.
+                    </p>
+                  )}
+                  {/* Edit + Delete Buttons */}
+                  <div className="flex gap-2 mt-4">
+                    <button
+                      onClick={() => handleEditSample(sample._id || sample.id)}
+                      className="flex-1 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors text-sm flex items-center justify-center gap-2"
+                      title="Edit status (e.g. Pending → Received / Converted)"
+                    >
+                      <FaEdit className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSample(sample._id || sample.id)}
+                      className={`flex-1 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm flex items-center justify-center gap-2 ${
+                        (() => {
+                          const approvalStatus = sample.approvalStatus || 'Approved'
+                          const createdByRole = sample.createdBy?.role
+                          const needsApproval = approvalStatus === 'Pending' || (createdByRole === 'salesman' && !sample.approvalStatus)
+                          return needsApproval ? '' : ''
+                        })()
+                      }`}
+                    >
+                      <FaTrash className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -757,8 +774,8 @@ const SampleTracker = () => {
 
       {/* Edit Sample Modal */}
       {showEditModal && selectedSample && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">Edit Sample</h3>
               <button
@@ -863,8 +880,8 @@ const SampleTracker = () => {
 
       {/* Create Sample Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-3xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">Create New Sample</h3>
               <button

@@ -379,8 +379,8 @@ const ProductVideos = () => {
 
       {/* Video Player Modal */}
       {showVideoPlayer && playingVideo && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-5xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-xl font-semibold text-gray-800">{playingVideo.title}</h3>
@@ -395,7 +395,7 @@ const ProductVideos = () => {
                   setShowVideoPlayer(false)
                   setPlayingVideo(null)
                 }}
-                className="text-gray-500 hover:text-gray-700 transition-colors p-2 hover:bg-gray-100 rounded-full"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 transition-colors hover:bg-gray-100 rounded-full"
                 aria-label="Close video player"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

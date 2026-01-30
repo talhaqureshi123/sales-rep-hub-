@@ -332,12 +332,24 @@ const HubSpotConnect = () => {
 
       {connectionStatus === 'disconnected' && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-          <FaCheckCircle className="text-red-500 text-2xl mt-1" />
-          <div className="flex-1">
+          <FaCheckCircle className="text-red-500 text-2xl mt-1 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-red-800 mb-1">Connection Failed</h3>
             <p className="text-red-700 text-sm">
               {testResult?.message || 'Unable to connect to HubSpot. Please check your configuration.'}
             </p>
+            {testResult?.config?.hint && (
+              <p className="mt-2 text-sm text-red-600">{testResult.config.hint}</p>
+            )}
+            {testResult?.config?.authMode === 'oauth' && (
+              <a
+                href="/api/hubspot/authorize"
+                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-[#ff7a59] text-white rounded-lg font-medium hover:bg-[#e66a4a] transition-colors text-sm"
+              >
+                <FaLink className="w-4 h-4" />
+                Connect with HubSpot
+              </a>
+            )}
             {testResult?.directApiTest?.error && (
               <div className="mt-2 text-sm text-red-600">
                 <p>Error: {testResult.directApiTest.error.message || 'Unknown error'}</p>

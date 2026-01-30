@@ -9,7 +9,7 @@ import { startTracking, stopTracking, getActiveTracking } from '../services/sale
 import { getMyFollowUps } from '../services/salemanservices/followUpService'
 import { getMyCustomers } from '../services/salemanservices/customerService'
 import { createWorker } from 'tesseract.js'
-import { FaPlay, FaStop, FaPause, FaMapMarkerAlt, FaClock, FaCheckCircle, FaCalendarAlt, FaExclamationTriangle, FaArrowRight, FaTimes, FaTasks, FaFlask, FaSyncAlt } from 'react-icons/fa'
+import { FaPlay, FaStop, FaPause, FaClock, FaCheckCircle, FaCalendarAlt, FaExclamationTriangle, FaArrowRight, FaTimes, FaTasks, FaFlask, FaSyncAlt, FaMapPin } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const SHIFT_STARTED_DATE_KEY = 'salesTracking_shiftStartedDate'
@@ -74,6 +74,7 @@ const SalesTracking = () => {
     pincode: '',
     priority: 'Medium',
     visitDate: '',
+    visitTime: '09:00',
     latitude: '',
     longitude: '',
     notes: '',
@@ -103,20 +104,21 @@ const SalesTracking = () => {
   const mountedAtRef = useRef(Date.now()) // When component mounted (reload/tab) – don't auto-pause in first 5s
   const isAnyModalOpenRef = useRef(false) // Skip location state updates when modal open to prevent modal blink
   const shiftEndSubmittedRef = useRef(false) // Ensure End shift runs only once per shift
+  const shiftStartKilometersRef = useRef(null) // Original odometer when shift started – used for total km (never overwrite on visit complete)
   const [isSubmittingShiftEnd, setIsSubmittingShiftEnd] = useState(false) // Prevent double submit on End shift (reload/tab) – don’t auto-pause in first 5s
 
   const getCurrentUserEmail = () => {
     return localStorage.getItem('userEmail') || ''
   }
 
-  // Distance = postcode-based when available so 75400 vs 75500 show different km
+  // Distance from user to this visit – PREFER address/postcode geocoded (resolved) so each visit shows its own distance
   const getDistanceToVisitTarget = (target) => {
     if (!userLocation) return null
     const id = target._id || target.id
     const resolved = resolvedVisitCoords[id]
-    const useResolved = target.pincode && resolved?.latitude != null && resolved?.longitude != null
-    const lat = useResolved ? parseFloat(resolved.latitude) : (target.latitude != null ? parseFloat(target.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-    const lng = useResolved ? parseFloat(resolved.longitude) : (target.longitude != null ? parseFloat(target.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+    const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
+    const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(target.latitude) : NaN))
+    const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(target.longitude) : NaN))
     if (isNaN(lat) || isNaN(lng)) return null
     const distance = calculateDistance(userLocation.latitude, userLocation.longitude, lat, lng)
     return formatDistance(distance)
@@ -135,12 +137,17 @@ const SalesTracking = () => {
 
   const isReasonableOdometer = (n) => n >= ODOMETER_MIN && n <= ODOMETER_MAX
 
-  // Group visits by date (timezone-safe: compare local date strings so "today" works correctly)
+  // Group visits by date (timezone-safe). Today = current day; Yesterday = pending when day changes; Past = older.
   const groupVisitsByDate = (targets) => {
     const now = new Date()
     const todayStr = toLocalDateString(now)
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     today.setHours(0, 0, 0, 0)
+
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    yesterday.setHours(0, 0, 0, 0)
+    const yesterdayStr = toLocalDateString(yesterday)
 
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -154,6 +161,7 @@ const SalesTracking = () => {
 
     const grouped = {
       today: [],
+      yesterday: [],
       tomorrow: [],
       thisWeek: [],
       upcoming: [],
@@ -177,9 +185,11 @@ const SalesTracking = () => {
 
         if (visitStr === todayStr) {
           grouped.today.push(target)
+        } else if (visitStr === yesterdayStr) {
+          grouped.yesterday.push(target)
         } else if (visitStr === tomorrowStr) {
           grouped.tomorrow.push(target)
-        } else if (visitStr < todayStr) {
+        } else if (visitStr < yesterdayStr) {
           grouped.past.push(target)
         } else if (visitStr > tomorrowStr && visitStr <= endOfWeekStr) {
           grouped.thisWeek.push(target)
@@ -219,11 +229,14 @@ const SalesTracking = () => {
         case 'Today':
           filtered = dedupe(grouped.today)
           break
+        case 'Yesterday':
+          filtered = dedupe(grouped.yesterday)
+          break
         case 'Tomorrow':
           filtered = dedupe(grouped.tomorrow)
           break
         case 'This Week':
-          filtered = dedupe([...grouped.today, ...grouped.tomorrow, ...grouped.thisWeek])
+          filtered = dedupe([...grouped.today, ...grouped.yesterday, ...grouped.tomorrow, ...grouped.thisWeek])
           break
         case 'Upcoming':
           filtered = dedupe(grouped.upcoming)
@@ -253,9 +266,9 @@ const SalesTracking = () => {
       const getLatLng = (t) => {
         const id = t._id || t.id
         const resolved = resolvedVisitCoords[id]
-        const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-        const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-        const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+        const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+        const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+        const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
         return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
       }
       sorted = [...sorted].sort((a, b) => {
@@ -275,28 +288,24 @@ const SalesTracking = () => {
   // Keep function for backward compatibility
   const getFilteredVisits = () => filteredVisits
 
-  // Helper: target has valid lat/long (from record or resolved geocode)
+  // Helper: target has valid lat/long – PREFER address/postcode geocoded (resolved), else stored
   const hasValidCoords = (target) => {
     const id = target._id || target.id
     const resolved = resolvedVisitCoords[id]
-    const useResolved = target.pincode && resolved?.latitude != null && resolved?.longitude != null
-    const lat = useResolved ? parseFloat(resolved.latitude) : (target.latitude != null ? parseFloat(target.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-    const lng = useResolved ? parseFloat(resolved.longitude) : (target.longitude != null ? parseFloat(target.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+    const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
+    const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(target.latitude) : NaN))
+    const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(target.longitude) : NaN))
     return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
   }
 
-  // Map coords: prefer postcode-based (resolved) when visit has pincode so 75400 and 75500 alag dikhen
+  // Map coords: PREFER resolved (address/postcode geocode), else stored – taaki location address/postcode se aaye
   const visitsForMap = useMemo(() => {
     const withCoords = filteredVisits.map(target => {
       const id = target._id || target.id
       const resolved = resolvedVisitCoords[id]
-      const useResolved = target.pincode && resolved?.latitude != null && resolved?.longitude != null
-      let lat = useResolved ? (resolved?.latitude != null ? parseFloat(resolved.latitude) : null) : (target.latitude != null ? parseFloat(target.latitude) : null)
-      let lng = useResolved ? (resolved?.longitude != null ? parseFloat(resolved.longitude) : null) : (target.longitude != null ? parseFloat(target.longitude) : null)
-      if ((lat == null || isNaN(lat) || lng == null || isNaN(lng)) && id && resolved?.latitude != null && resolved?.longitude != null) {
-        lat = parseFloat(resolved.latitude)
-        lng = parseFloat(resolved.longitude)
-      }
+      const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
+      let lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(target.latitude) : null))
+      let lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(target.longitude) : null))
       if (lat == null || lng == null || isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
       return { ...target, latitude: lat, longitude: lng }
     }).filter(Boolean)
@@ -310,21 +319,28 @@ const SalesTracking = () => {
       if (!byPos[k]) byPos[k] = []
       byPos[k].push(t)
     })
+    const routeDestId = routeToVisitTarget?.target?._id ?? routeToVisitTarget?.target?.id
     const result = []
     Object.values(byPos).forEach(group => {
       if (group.length === 1) {
         result.push(group[0])
       } else {
         group.forEach((t, i) => {
-          const angle = (i * 360) / Math.max(group.length, 1) * (Math.PI / 180)
-          const offsetLat = OFFSET_DEG * Math.cos(angle)
-          const offsetLng = OFFSET_DEG * Math.sin(angle)
-          result.push({ ...t, latitude: Number(t.latitude) + offsetLat, longitude: Number(t.longitude) + offsetLng })
+          const tid = t._id ?? t.id
+          const isRouteDestination = routeDestId != null && tid === routeDestId
+          if (isRouteDestination) {
+            result.push({ ...t, latitude: Number(t.latitude), longitude: Number(t.longitude) })
+          } else {
+            const angle = (i * 360) / Math.max(group.length, 1) * (Math.PI / 180)
+            const offsetLat = OFFSET_DEG * Math.cos(angle)
+            const offsetLng = OFFSET_DEG * Math.sin(angle)
+            result.push({ ...t, latitude: Number(t.latitude) + offsetLat, longitude: Number(t.longitude) + offsetLng })
+          }
         })
       }
     })
     return result
-  }, [filteredVisits, resolvedVisitCoords])
+  }, [filteredVisits, resolvedVisitCoords, routeToVisitTarget?.target?._id, routeToVisitTarget?.target?.id])
 
   // Pending targets with valid coords for route – order: nearest first (kareeb wala pehle), so route = start → nearest visit → next → … → last (last par end meter)
   const pendingTargetsWithLocation = useMemo(() => {
@@ -337,9 +353,9 @@ const SalesTracking = () => {
     const getLatLng = (t) => {
       const id = t._id || t.id
       const resolved = resolvedVisitCoords[id]
-      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
       return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
     }
 
@@ -381,9 +397,9 @@ const SalesTracking = () => {
     const getLatLng = (t) => {
       const id = t._id || t.id
       const resolved = resolvedVisitCoords[id]
-      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
       return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
     }
 
@@ -421,9 +437,9 @@ const SalesTracking = () => {
     const getLatLng = (t) => {
       const id = t._id || t.id
       const resolved = resolvedVisitCoords[id]
-      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
       return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
     }
 
@@ -593,48 +609,58 @@ const SalesTracking = () => {
     loadData()
   }, [])
 
-  // Geocode by postcode so 75400 and 75500 get different locations (distance sahi ho). Run for: no stored coords OR has pincode (re-resolve by postcode)
+  // Geocode from address / postcode only – pehle full address, phir postcode fallback; Pakistan bias
   useEffect(() => {
     if (typeof window === 'undefined' || !window.google?.maps?.Geocoder) return
+    const trim = (s) => (s != null && typeof s === 'string' ? s.trim() : '')
     const needGeocode = filteredVisits.filter(t => {
       if (!(t._id || t.id)) return false
-      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-      if (hasStored && !t.pincode) return false
-      if (t.pincode) return true
-      const parts = [t.address, t.city, t.state, t.pincode].filter(Boolean)
-      return parts.length > 0 || !!t.name
+      const hasAddress = !!(trim(t.address) || trim(t.city) || trim(t.state))
+      const hasPostcode = !!(trim(t.pincode) || trim(t.postcode))
+      if (!hasAddress && !hasPostcode) return false
+      return true
     })
     if (needGeocode.length === 0) return
     const geocoder = new window.google.maps.Geocoder()
     let cancelled = false
+    const boundsPK = new window.google.maps.LatLngBounds(
+      new window.google.maps.LatLng(23.5, 60.5),
+      new window.google.maps.LatLng(37.0, 77.0)
+    )
     needGeocode.forEach((target, idx) => {
       const id = target._id || target.id
-      // Prefer postcode for location so 75400 and 75500 resolve to different points (not same "karachi pakistan")
-      let addr = ''
-      if (target.pincode) {
-        const city = target.city || 'Karachi'
-        addr = `${target.pincode}, ${city}, Pakistan`
-      }
-      if (!addr.trim()) {
-        addr = [target.address, target.city, target.state, target.pincode].filter(Boolean).join(', ')
-      }
-      if (!addr.trim()) {
-        if (target.pincode && target.name) addr = `${target.name}, ${target.pincode}, Pakistan`
-        else if (target.pincode) addr = `${target.pincode}, Pakistan`
-        else if (target.name) addr = `${target.name}, Pakistan`
-      }
-      if (!addr.trim()) return
-      setTimeout(() => {
-        if (cancelled) return
-        geocoder.geocode({ address: addr }, (results, status) => {
-          if (cancelled) return
-          if (status === 'OK' && results?.[0]?.geometry?.location) {
-            const lat = results[0].geometry.location.lat()
-            const lng = results[0].geometry.location.lng()
-            setResolvedVisitCoords(prev => ({ ...prev, [id]: { latitude: lat, longitude: lng } }))
+      const addressPart = trim(target.address)
+      const cityPart = trim(target.city) || 'Karachi'
+      const statePart = trim(target.state)
+      const pincodePart = trim(target.pincode) || trim(target.postcode)
+      // 1) Full address first (exact) – address, city, state, pincode/postcode
+      const fullParts = [addressPart, cityPart, statePart, pincodePart].filter(Boolean)
+      const fullAddress = fullParts.length > 0 ? fullParts.join(', ') + ', Pakistan' : ''
+      // 2) Postcode fallback – pincode/postcode, city, Pakistan
+      const pincodeOnly = pincodePart ? `${pincodePart}, ${cityPart}, Pakistan` : ''
+      const tryGeocode = (addr, isFallback) => {
+        if (!addr || cancelled) return
+        geocoder.geocode(
+          {
+            address: addr,
+            region: 'PK',
+            bounds: boundsPK,
+          },
+          (results, status) => {
+            if (cancelled) return
+            if (status === 'OK' && results?.[0]?.geometry?.location) {
+              const lat = results[0].geometry.location.lat()
+              const lng = results[0].geometry.location.lng()
+              setResolvedVisitCoords(prev => ({ ...prev, [id]: { latitude: lat, longitude: lng } }))
+            } else if (!isFallback && pincodeOnly && fullAddress !== pincodeOnly) {
+              tryGeocode(pincodeOnly, true)
+            }
           }
-        })
-      }, idx * 250)
+        )
+      }
+      const addr = fullAddress || pincodeOnly
+      if (!addr) return
+      setTimeout(() => tryGeocode(addr, false), idx * 280)
     })
     return () => { cancelled = true }
   }, [filteredVisits])
@@ -767,6 +793,16 @@ const SalesTracking = () => {
         return
       }
 
+      if (!requestForm.visitDate || !requestForm.visitDate.trim()) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Visit Date Required',
+          text: 'Please select a visit date. Use the "Today" button or the calendar picker.',
+          confirmButtonColor: '#e9931c'
+        })
+        return
+      }
+
       const lat = requestForm.latitude ? Number(requestForm.latitude) : Number(userLocation?.latitude)
       const lng = requestForm.longitude ? Number(requestForm.longitude) : Number(userLocation?.longitude)
       if (Number.isNaN(lat) || Number.isNaN(lng)) {
@@ -779,6 +815,11 @@ const SalesTracking = () => {
         return
       }
 
+      // Combine visit date + time for backend (visitDate is full datetime)
+      const timePart = (requestForm.visitTime || '09:00').trim()
+      const timeStr = timePart.length === 5 ? `${timePart}:00` : timePart || '09:00:00'
+      const visitDateTime = `${requestForm.visitDate}T${timeStr}`
+
       setRequestSubmitting(true)
       const payload = {
         name: requestForm.name,
@@ -789,7 +830,7 @@ const SalesTracking = () => {
         state: requestForm.state || '',
         pincode: requestForm.pincode || '',
         priority: requestForm.priority || 'Medium',
-        visitDate: requestForm.visitDate || undefined,
+        visitDate: visitDateTime,
         notes: requestForm.notes || '',
         latitude: lat,
         longitude: lng,
@@ -821,6 +862,7 @@ const SalesTracking = () => {
           pincode: '',
           priority: 'Medium',
           visitDate: '',
+          visitTime: '09:00',
           latitude: '',
           longitude: '',
           notes: '',
@@ -1001,8 +1043,10 @@ const SalesTracking = () => {
             localStorage.setItem(SHIFT_STARTED_DATE_KEY, toLocalDateString(new Date()))
           } catch (_) {}
           if (active.startingKilometers) {
-            setStartingKilometers(active.startingKilometers.toString())
-            setMeterReading(active.startingKilometers.toString())
+            const startKm = active.startingKilometers.toString()
+            setStartingKilometers(startKm)
+            setMeterReading(startKm)
+            shiftStartKilometersRef.current = parseFloat(active.startingKilometers)
           }
           console.log('Active tracking restored after reload:', active._id || active.id)
         }
@@ -1035,7 +1079,8 @@ const SalesTracking = () => {
       setRouteToVisitTarget({
         from,
         to: { lat: parseFloat(t.latitude), lng: parseFloat(t.longitude) },
-        target: t
+        target: t,
+        destinationTarget: t
       })
       console.log('Route restored for tracking:', t.name)
     } else {
@@ -1314,19 +1359,40 @@ const SalesTracking = () => {
     setIsTracking(false)
   }, [activeTrackingId, userLocation, meterReading, startingKilometers])
 
-  // Handle visit target click – snapshot distance/route so modal stays stable (no blink on re-renders)
+  // Handle visit target click – sidebar/slider se click par map pe visit show ho; coords milte hi map center
+  // Merge resolved coords when target has pincode but no lat/lng so map can center on clicked visit
   const handleVisitTargetClick = (target) => {
-    if (!target || !target.latitude || !target.longitude) return
-
-    setSelectedVisitTarget(target)
+    if (!target) return
+    const id = target._id || target.id
+    const resolved = resolvedVisitCoords[id]
+    const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
+    const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(target.latitude) : NaN))
+    const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(target.longitude) : NaN))
+    const hasCoords = !isNaN(lat) && !isNaN(lng)
+    const targetWithCoords = hasCoords ? { ...target, latitude: lat, longitude: lng } : { ...target }
+    setSelectedVisitTarget(targetWithCoords)
     setVisitTargetModalSnapshot({
       distance: getDistanceToVisitTarget(target) ?? null,
       routeDistanceKm: routeDistanceKm ?? null,
     })
     setShowVisitTargetModal(true)
-
-    // When tracking is active, route shows all targets – don't change route on click; keep map center on user
+    // Map will center on this visit when selectedTarget has lat/lng (or when resolvedVisitCoords updates – see useEffect below)
   }
+
+  // Jab resolved coords aayein (geocode complete) aur selected visit abhi bhi bina coords hai, selected ko update karo taake map us par center ho sake
+  useEffect(() => {
+    if (!selectedVisitTarget || !showVisitTargetModal) return
+    const id = selectedVisitTarget._id || selectedVisitTarget.id
+    const hasStored = selectedVisitTarget.latitude != null && selectedVisitTarget.longitude != null &&
+      !isNaN(parseFloat(selectedVisitTarget.latitude)) && !isNaN(parseFloat(selectedVisitTarget.longitude))
+    if (hasStored) return
+    const resolved = resolvedVisitCoords[id]
+    if (resolved?.latitude == null || resolved?.longitude == null) return
+    const lat = parseFloat(resolved.latitude)
+    const lng = parseFloat(resolved.longitude)
+    if (isNaN(lat) || isNaN(lng)) return
+    setSelectedVisitTarget(prev => (prev && (prev._id === id || prev.id === id) ? { ...prev, latitude: lat, longitude: lng } : prev))
+  }, [resolvedVisitCoords, selectedVisitTarget?._id, selectedVisitTarget?.id, showVisitTargetModal])
 
   // Handle mark as completed - with meter reading; proximity check (allow when near, warn when far)
   const handleMarkAsCompleted = async () => {
@@ -1362,6 +1428,8 @@ const SalesTracking = () => {
     setEndingKilometers('')
     setEndingMeterImage(null)
     setRemainingPendingAfterComplete(null)
+    setVisitedAreaImage(null)
+    setVisitedAreaImages([])
     setShowCompletionModal(true)
   }
 
@@ -1451,9 +1519,9 @@ const SalesTracking = () => {
       const result = await updateVisitTargetStatus(selectedVisitTarget._id || selectedVisitTarget.id, updateData)
 
       if (result.success) {
-        // Update local state
+        const completedId = (selectedVisitTarget._id || selectedVisitTarget.id)?.toString()
         const updatedTargets = visitTargets.map(target => 
-          target._id === selectedVisitTarget._id || target.id === selectedVisitTarget.id
+          (target._id || target.id)?.toString() === completedId
             ? { ...target, status: 'Completed', completedAt: new Date(), ...updateData }
             : target
         )
@@ -1469,22 +1537,21 @@ const SalesTracking = () => {
         }
         setSelectedVisitTarget(completedVisitData)
         
-        // Find next pending visit for automatic route setting
-        const todayForNext = new Date()
-        todayForNext.setHours(0, 0, 0, 0)
+        // Find next pending visit for route (nearest today, or any pending)
+        const todayStrNext = toLocalDateString(new Date())
         const todayPendingTarget = updatedTargets.find(t => {
           if (t.status !== 'Pending' && t.status !== 'In Progress') return false
-          if (t._id === selectedVisitTarget._id || t.id === selectedVisitTarget.id) return false // Exclude just completed
+          if ((t._id || t.id)?.toString() === completedId) return false
           if (!t.visitDate) return false
           const visitDate = new Date(t.visitDate)
-          const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-          return visitDateOnly.getTime() === todayForNext.getTime()
+          if (isNaN(visitDate.getTime())) return false
+          return toLocalDateString(visitDate) === todayStrNext
         })
         
-        const nextPendingTarget = todayPendingTarget || updatedTargets.find(t => 
-          (t.status === 'Pending' || t.status === 'In Progress') && 
-          (t._id !== selectedVisitTarget._id && t.id !== selectedVisitTarget.id)
-        )
+        const nextPendingTarget = todayPendingTarget || updatedTargets.find(t => {
+          const tid = (t._id || t.id)?.toString()
+          return (t.status === 'Pending' || t.status === 'In Progress') && tid && tid !== completedId
+        })
         
         // Set ending kilometers as starting kilometers for next visit
         // Use route distance + starting kilometers if available (meterReading = value saved at Start)
@@ -1498,16 +1565,34 @@ const SalesTracking = () => {
           }
         }
         
-        // Auto-set route to next visit if available (route will show all remaining when Play is pressed)
-        if (nextPendingTarget && userLocation && isTracking) {
-          setRouteToVisitTarget({
-            from: { lat: userLocation.latitude, lng: userLocation.longitude },
-            to: { lat: parseFloat(nextPendingTarget.latitude), lng: parseFloat(nextPendingTarget.longitude) },
-            target: nextPendingTarget
-          })
+        // Set route to next (near) visit so map always shows path to next target (even when tracking paused)
+        const getLatLngForRoute = (t) => {
+          const id = t._id || t.id
+          const resolved = resolvedVisitCoords[id]
+          const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+          const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+          const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
+          return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+        }
+        if (nextPendingTarget) {
+          const nextPos = getLatLngForRoute(nextPendingTarget)
+          if (nextPos) {
+            const fromLat = userLocation?.latitude ?? selectedVisitTarget?.latitude ?? nextPos.lat
+            const fromLng = userLocation?.longitude ?? selectedVisitTarget?.longitude ?? nextPos.lng
+            if (fromLat != null && fromLng != null) {
+              setRouteToVisitTarget({
+                from: { lat: fromLat, lng: fromLng },
+                to: { lat: nextPos.lat, lng: nextPos.lng },
+                target: nextPendingTarget,
+                destinationTarget: nextPendingTarget
+              })
+            }
+          }
+        } else {
+          setRouteToVisitTarget(null)
         }
         
-        // Auto-pause tracking after one target is completed (image uploaded). User clicks Play to go to next.
+        // Auto-pause tracking after one target is completed (image uploaded). User clicks "Go to next visit" to resume.
         setIsTracking(false)
         
         // Close modals but keep completion modal open to show continue option
@@ -1536,14 +1621,13 @@ const SalesTracking = () => {
           type: 'success',
         })
 
-        // Check if all visits are completed
-        const todayForCheck = new Date()
-        todayForCheck.setHours(0, 0, 0, 0)
+        // Check if all visits are completed (use toLocalDateString so timezone matches sidebar/modal)
+        const todayStrCheck = toLocalDateString(new Date())
         const allTodayVisits = updatedTargets.filter(t => {
           if (!t.visitDate) return false
           const visitDate = new Date(t.visitDate)
-          const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate())
-          return visitDateOnly.getTime() === todayForCheck.getTime()
+          if (isNaN(visitDate.getTime())) return false
+          return toLocalDateString(visitDate) === todayStrCheck
         })
         const completedTodayVisits = allTodayVisits.filter(t => t.status === 'Completed')
         const pendingTodayVisits = allTodayVisits.filter(t => t.status === 'Pending' || t.status === 'In Progress')
@@ -1552,9 +1636,9 @@ const SalesTracking = () => {
         const getLatLngForSort = (t) => {
           const id = t._id || t.id
           const resolved = resolvedVisitCoords[id]
-          const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-          const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : (resolved?.latitude != null ? parseFloat(resolved.latitude) : NaN))
-          const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : (resolved?.longitude != null ? parseFloat(resolved.longitude) : NaN))
+          const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+          const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+          const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
           return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
         }
         const sortedRemaining = userLocation?.latitude != null && userLocation?.longitude != null
@@ -2200,7 +2284,8 @@ const SalesTracking = () => {
         return
       }
 
-      const start = parseFloat(startingKilometers || meterReading || '0')
+      // Use original shift start (when user clicked Start) for total – not startingKilometers which gets updated after each visit
+      const start = shiftStartKilometersRef.current ?? parseFloat(startingKilometers || meterReading || '0')
       const end = parseFloat(shiftEndingKilometers)
       
       if (isNaN(end) || end <= 0) {
@@ -2246,6 +2331,7 @@ const SalesTracking = () => {
       })
       setShowShiftEndModal(false)
       setIsSubmittingShiftEnd(false)
+      shiftStartKilometersRef.current = null // Clear so next shift uses fresh start
       try {
         localStorage.removeItem(SHIFT_STARTED_DATE_KEY)
       } catch (_) {}
@@ -2548,7 +2634,11 @@ const SalesTracking = () => {
       // Start countdown immediately
       setShowCountdown(true)
       setCountdown(5)
-      setMeterReading(startingKilometers)
+      const startKmVal = startingKilometers.trim()
+      setMeterReading(startKmVal)
+      // Store original shift start for total km at shift end (do not overwrite when completing visits)
+      const startNum = parseFloat(startKmVal)
+      if (!isNaN(startNum)) shiftStartKilometersRef.current = startNum
 
       // Mark shift started today – Start modal only once per day
       try {
@@ -2688,13 +2778,13 @@ const SalesTracking = () => {
 
     setRouteDistanceKm(null)
     const from = { lat: userLocation.latitude, lng: userLocation.longitude }
-    // Effective coords = postcode-based (resolved) when available, else stored – same as sidebar/map
+    // Effective coords = PREFER address/postcode geocoded (resolved), else stored
     const getEffective = (t) => {
       const id = t._id || t.id
       const resolved = resolvedVisitCoords[id]
-      const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-      const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : NaN)
-      const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : NaN)
+      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
       return { lat, lng }
     }
     const withEffective = pendingTargetsWithLocation.map(t => ({ target: t, ...getEffective(t) })).filter(p => !isNaN(p.lat) && !isNaN(p.lng))
@@ -2709,7 +2799,8 @@ const SalesTracking = () => {
     setRouteToVisitTarget({
       from,
       to: { lat, lng },
-      target: t
+      target: t,
+      destinationTarget: t
     })
   }, [pendingTargetsWithLocation, userLocation, isTracking, resolvedVisitCoords])
 
@@ -2880,7 +2971,7 @@ const SalesTracking = () => {
               className="px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 bg-gray-600 text-white hover:bg-gray-700"
               title="Request a new target (admin approval required)"
             >
-              <FaMapMarkerAlt className="w-4 h-4" />
+              <FaMapPin className="w-4 h-4 text-white" />
               <span className="hidden md:inline text-sm" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Request Visit</span>
             </button>
             <button
@@ -2897,10 +2988,10 @@ const SalesTracking = () => {
                   }
                 }
               }}
-              className={`px-2 md:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+              className={`px-2 md:px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-md ${
                 isTracking
-                  ? 'bg-gray-600 text-white hover:bg-gray-700'
-                  : 'bg-gray-600 text-white hover:bg-gray-700'
+                  ? 'bg-gray-600 text-white hover:bg-gray-700 hover:shadow-lg'
+                  : 'bg-[#e9931c] text-white hover:bg-[#d98518] hover:shadow-lg'
               }`}
               title={isTracking ? 'Pause Tracking' : 'Start Tracking'}
             >
@@ -2922,11 +3013,12 @@ const SalesTracking = () => {
         {/* Map area - fills remaining space */}
         <div className="relative flex flex-col gap-0 flex-1 min-h-0">
           {/* Visit Targets label - compact */}
-          <div className="flex-shrink-0 px-2 sm:px-4 pb-1">
+          <div className="flex-shrink-0 px-2 sm:px-4 pb-1 flex items-center gap-2">
+            <FaMapPin className="w-5 h-5 text-[#e9931c]" />
             <h3 className="text-sm font-semibold text-gray-700">Visit Targets</h3>
           </div>
-          {/* Map container - takes all remaining space */}
-          <div className="flex-1 min-h-0 w-full flex flex-col" style={{ minHeight: 0 }}>
+          {/* Map container - takes all remaining space; overlay bar for Go there / Next / End shift */}
+          <div className="flex-1 min-h-0 w-full flex flex-col relative" style={{ minHeight: 0 }}>
             {userLocation || visitTargets.length > 0 ? (
               <GoogleMapView
                 milestones={[]}
@@ -2938,7 +3030,7 @@ const SalesTracking = () => {
                 height="100%"
                 showUserLocation={true}
                 showRadius={false}
-                routeToMilestone={routeToVisitTarget && isTracking ? {
+                routeToMilestone={routeToVisitTarget ? {
                   from: routeToVisitTarget.from,
                   to: routeToVisitTarget.to,
                   milestone: routeToVisitTarget.target,
@@ -2962,6 +3054,102 @@ const SalesTracking = () => {
                 </div>
               </div>
             )}
+            {/* Floating action bar – hide when ANY modal open so End shift bar never shows below modals */}
+            {selectedVisitTarget?.status === 'Completed' && !showCompletionModal && !showVisitTargetModal && !showShiftEndModal && !showStartModal && (userLocation || visitTargets.length > 0) && (() => {
+              const remainingVisits = remainingPendingAfterComplete !== null ? remainingPendingAfterComplete : todayPendingVisitsOrdered
+              const todayStr = toLocalDateString(new Date())
+              const todayTargets = (visitTargets || []).filter(t => t.visitDate && toLocalDateString(new Date(t.visitDate)) === todayStr)
+              const allTodayCompleted = todayTargets.length > 0 && todayTargets.every(t => (t.status === 'Completed' || t.status === 'completed'))
+              const hasMore = remainingVisits.length > 0 && !allTodayCompleted
+              const nextVisit = remainingVisits[0] || null
+              const getLatLng = (t) => {
+                const id = t._id || t.id
+                const resolved = resolvedVisitCoords[id]
+                const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+                const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+                const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
+                return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+              }
+              const handleNextVisit = async () => {
+                setRemainingPendingAfterComplete(null)
+                setShowCompletionModal(false)
+                setVisitedAreaImage(null)
+                setVisitedAreaImages([])
+                setSelectedVisitTarget(nextVisit)
+                setIsTracking(true)
+                setRouteToVisitTarget(null)
+                setRouteDistanceKm(null)
+                let loc = null
+                try { loc = await getCurrentLocation(); if (loc?.latitude != null && loc?.longitude != null) setUserLocation(loc) } catch (_) {}
+                const nextPos = getLatLng(nextVisit)
+                const distStr = (loc && nextPos) ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng)) : null
+                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
+                setShowVisitTargetModal(true)
+                addNotification({ message: `📍 Next target: ${nextVisit.name}. Upload visited image when you reach.`, type: 'info' })
+              }
+              const handleGoThere = async () => {
+                setRemainingPendingAfterComplete(null)
+                setShowCompletionModal(false)
+                setVisitedAreaImage(null)
+                setVisitedAreaImages([])
+                setSelectedVisitTarget(nextVisit)
+                setIsTracking(true)
+                setRouteToVisitTarget(null)
+                setRouteDistanceKm(null)
+                let loc = null
+                try { loc = await getCurrentLocation(); if (loc?.latitude != null && loc?.longitude != null) setUserLocation(loc) } catch (_) {}
+                const nextPos = getLatLng(nextVisit)
+                const distStr = (loc && nextPos) ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng)) : null
+                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
+                setShowVisitTargetModal(true)
+                addNotification({ message: `📍 Navigating to: ${nextVisit.name}. Upload visited image when you reach.`, type: 'info' })
+              }
+              const handleEndShift = () => {
+                setRemainingPendingAfterComplete(null)
+                setShowCompletionModal(false)
+                setShowShiftEndModal(true)
+                const currentStart = meterReading || startingKilometers
+                if (currentStart && estimatedKilometers) {
+                  const startKm = parseFloat(currentStart)
+                  const estKm = parseFloat(estimatedKilometers)
+                  if (!isNaN(startKm) && !isNaN(estKm) && estKm > 0) setShiftEndingKilometers((startKm + estKm).toFixed(2))
+                }
+              }
+              if (hasMore && nextVisit) {
+                return (
+                  <div className="absolute bottom-3 left-3 right-3 z-20 flex gap-2 pointer-events-auto">
+                    <button
+                      type="button"
+                      onClick={handleNextVisit}
+                      className="flex-1 px-3 py-2.5 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-[0.98] transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
+                    >
+                      <FaArrowRight className="w-4 h-4" />
+                      <span>Go to next visit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGoThere}
+                      className="flex-1 px-3 py-2.5 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-[0.98] transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
+                    >
+                      <FaMapPin className="w-4 h-4" />
+                      <span>Go there</span>
+                    </button>
+                  </div>
+                )
+              }
+              return (
+                <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={handleEndShift}
+                    className="w-full px-4 py-2.5 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-[0.98] transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5"
+                  >
+                    <FaCheckCircle className="w-5 h-5" />
+                    <span>End shift</span>
+                  </button>
+                </div>
+              )
+            })()}
           </div>
         </div>
 
@@ -3030,6 +3218,18 @@ const SalesTracking = () => {
               paddingRight: '24px'
             }}
           >
+            {/* Close button – slider band karne ke liye */}
+            <div className="sticky top-0 z-10 flex items-center justify-end gap-2 mb-2 -mt-1 pb-2 bg-white border-b border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowRightPanel(false)}
+                className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+                aria-label="Close panel"
+                title="Close panel (map dikhane ke liye)"
+              >
+                <FaTimes className="w-6 h-6" />
+              </button>
+            </div>
             <div>
               {/* Tabs */}
               <div
@@ -3043,27 +3243,27 @@ const SalesTracking = () => {
                 }}
               >
                 {/* Tabs */}
-                <div className="flex border-b border-gray-200 mb-4 bg-gray-50 rounded-t-lg">
+                <div className="flex border-b border-gray-200 mb-4 bg-gray-50/80 rounded-t-xl overflow-hidden">
                   <button
                     onClick={() => setRightPanelTab('visits')}
-                    className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                    className={`flex-1 px-4 py-3 font-semibold transition-all flex items-center justify-center gap-2 rounded-tl-xl ${
                       rightPanelTab === 'visits'
-                        ? 'bg-white text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                        ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c] shadow-sm'
+                        : 'text-gray-600 hover:text-[#e9931c] hover:bg-white/50'
                     }`}
                   >
-                    <FaMapMarkerAlt className="w-4 h-4" />
+                    <FaMapPin className="w-4 h-4 text-[#e9931c]" />
                     Targets
                   </button>
-                  <button
+                    <button
                     onClick={() => {
                       setRightPanelTab('tasks')
                       loadFollowUps()
                     }}
-                    className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                    className={`flex-1 px-4 py-3 font-semibold transition-all flex items-center justify-center gap-2 ${
                       rightPanelTab === 'tasks'
-                        ? 'bg-white text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                        ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c] shadow-sm'
+                        : 'text-gray-600 hover:text-[#e9931c] hover:bg-white/50'
                     }`}
                   >
                     <FaTasks className="w-4 h-4" />
@@ -3076,10 +3276,10 @@ const SalesTracking = () => {
                         loadSamples()
                       }
                     }}
-                    className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                    className={`flex-1 px-4 py-3 font-semibold transition-all flex items-center justify-center gap-2 rounded-tr-xl ${
                       rightPanelTab === 'samples'
-                        ? 'bg-white text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
+                        ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c] shadow-sm'
+                        : 'text-gray-600 hover:text-[#e9931c] hover:bg-white/50'
                     }`}
                   >
                     <FaFlask className="w-4 h-4" />
@@ -3091,7 +3291,12 @@ const SalesTracking = () => {
                 {rightPanelTab === 'visits' && (
                   <>
                     <div className="flex items-center justify-between gap-2 mb-4">
-                      <h3 className="text-lg font-semibold text-gray-700">Targets</h3>
+                      <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span className="w-8 h-8 rounded-lg bg-[#e9931c]/10 flex items-center justify-center">
+                          <FaMapPin className="w-4 h-4 text-[#e9931c]" />
+                        </span>
+                        Visit Targets
+                      </h3>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -3108,6 +3313,7 @@ const SalesTracking = () => {
                         >
                           <option value="All">All Dates</option>
                           <option value="Today">Today</option>
+                          <option value="Yesterday">Yesterday</option>
                           <option value="Tomorrow">Tomorrow</option>
                           <option value="This Week">This Week</option>
                           <option value="Upcoming">Upcoming</option>
@@ -3171,6 +3377,7 @@ const SalesTracking = () => {
                       if (dateFilter === 'All' && grouped) {
                         const sections = [
                           { key: 'today', title: '📅 Today', visits: grouped.today, color: 'bg-blue-50 border-blue-200' },
+                          { key: 'yesterday', title: '📅 Yesterday', visits: grouped.yesterday, color: 'bg-amber-50 border-amber-200' },
                           { key: 'tomorrow', title: '📅 Tomorrow', visits: grouped.tomorrow, color: 'bg-green-50 border-green-200' },
                           { key: 'thisWeek', title: '📅 This Week', visits: grouped.thisWeek, color: 'bg-yellow-50 border-yellow-200' },
                           { key: 'upcoming', title: '📅 Upcoming', visits: grouped.upcoming, color: 'bg-purple-50 border-purple-200' },
@@ -3244,7 +3451,7 @@ const SalesTracking = () => {
                                 <div className="text-sm text-gray-600 mb-2">
                                   {target.address && (
                                     <p className="flex items-center gap-1">
-                                      <FaMapMarkerAlt className="w-3 h-3" />
+                                      <FaMapPin className="w-3 h-3 text-[#e9931c] flex-shrink-0" />
                                       {target.address}
                                       {target.city && `, ${target.city}`}
                                       {target.state && `, ${target.state}`}
@@ -3348,10 +3555,10 @@ const SalesTracking = () => {
                                   handleVisitTargetClick(target)
                                   if (!isTracking) setRouteToVisitTarget(null)
                                 }}
-                                className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all shadow-sm ${
                                   isSelected
-                                    ? 'border-[#e9931c] bg-orange-50 shadow-md'
-                                    : 'border-gray-200 hover:border-[#e9931c] hover:bg-orange-50'
+                                    ? 'border-[#e9931c] bg-orange-50/80 shadow-md ring-2 ring-[#e9931c]/20'
+                                    : 'border-gray-200 bg-white hover:border-[#e9931c]/60 hover:bg-orange-50/50 hover:shadow'
                                 }`}
                               >
                                 <div className="flex items-start justify-between mb-2">
@@ -3378,7 +3585,7 @@ const SalesTracking = () => {
                                     <div className="text-sm text-gray-600 mb-2">
                                       {target.address && (
                                         <p className="flex items-center gap-1">
-                                          <FaMapMarkerAlt className="w-3 h-3" />
+                                          <FaMapPin className="w-3 h-3 text-[#e9931c] flex-shrink-0" />
                                           {target.address}
                                           {target.city && `, ${target.city}`}
                                           {target.state && `, ${target.state}`}
@@ -3617,29 +3824,27 @@ const SalesTracking = () => {
           </div>
       </div>
 
-      {/* Start Tracking Modal - no animation class to avoid blink on re-render */}
+      {/* Start Tracking Modal - mobile/tablet responsive + Close button */}
       {showStartModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
-          <div key="start-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-auto" style={{ contain: 'layout style paint' }}>
-            {/* Modal Header - Removed colored header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">Start Tracking</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="start-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] mx-auto flex flex-col overflow-hidden my-auto" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-800 truncate pr-2">Start Tracking</h3>
               <button
                 onClick={() => {
                   setShowStartModal(false)
                   setUploadedImage(null)
                   setStartingKilometers('')
                 }}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
                 📸 Starting meter: use <strong>Camera</strong>, <strong>Upload document</strong>, or <strong>Manual entry</strong> below
               </p>
@@ -3738,43 +3943,43 @@ const SalesTracking = () => {
                   </p>
                 )}
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t-2 border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowStartModal(false)
-                    setUploadedImage(null)
-                    setVisitedAreaImage(null)
-          setVisitedAreaImages([])
-                    setStartingKilometers('')
-                  }}
-                  className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleStartTracking()
-                  }}
-                  disabled={!startingKilometers || startingKilometers.trim() === '' || isExtracting}
-                  className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
-                >
-                  {isExtracting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent"></div>
-                      <span>Processing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FaPlay className="w-5 h-5" />
-                      <span>Start Tracking</span>
-                    </>
-                  )}
-                </button>
-              </div>
+            {/* Footer – buttons always visible (sale tracking modals) */}
+            <div className="px-4 sm:px-6 py-4 border-t-2 border-gray-200 bg-gray-50/80 flex-shrink-0 rounded-b-2xl flex gap-3">
+              <button
+                onClick={() => {
+                  setShowStartModal(false)
+                  setUploadedImage(null)
+                  setVisitedAreaImage(null)
+                  setVisitedAreaImages([])
+                  setStartingKilometers('')
+                }}
+                className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleStartTracking()
+                }}
+                disabled={!startingKilometers || startingKilometers.trim() === '' || isExtracting}
+                className="flex-1 px-3 py-3 sm:py-3.5 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+              >
+                {isExtracting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent"></div>
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaPlay className="w-5 h-5" />
+                    <span>Start Tracking</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -3782,11 +3987,10 @@ const SalesTracking = () => {
 
       {/* Tracking Completion Modal – no animation class to avoid blink on re-render */}
       {showCompletionModal && selectedVisitTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
-          <div key={`completion-${selectedVisitTarget._id || selectedVisitTarget.id || 'modal'}`} className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-auto" style={{ contain: 'layout style paint' }}>
-            {/* Modal Header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key={`completion-${selectedVisitTarget._id || selectedVisitTarget.id || 'modal'}`} className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col mx-auto my-auto overflow-hidden" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-800 truncate pr-2">
                 Complete: {selectedVisitTarget.name}
               </h3>
               <button
@@ -3795,23 +3999,28 @@ const SalesTracking = () => {
                   setShowCompletionModal(false)
                   setEndingKilometers('')
                   setEndingMeterImage(null)
+                  setVisitedAreaImage(null)
+                  setVisitedAreaImages([])
                   setEstimatedKilometers('')
                 }}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
-            {/* Modal Body - scrollable; buttons stay visible in footer */}
+            {/* Body - scrollable; footer stays visible */}
             <div className="p-4 sm:p-6 overflow-y-auto min-h-0 flex-1">
               <p className="text-sm sm:text-base text-gray-700 mb-2 text-center leading-relaxed font-medium">
                 Please upload visited area picture to complete this visit.
               </p>
+              <p className="text-xs text-gray-500 mb-1 text-center">
+                Each visit needs its own picture. Ending meter only at Shift End (after last visit).
+              </p>
               <p className="text-xs text-gray-500 mb-5 sm:mb-6 text-center">
-                Ending meter reading will be asked only when all today&apos;s visits are completed (Shift End).
+                Flow: Start → Complete (picture) → Next visit → … → Last visit → End shift.
               </p>
 
               {/* Starting Kilometers Display - use meterReading (saved when Start was clicked) or startingKilometers */}
@@ -3978,17 +4187,17 @@ const SalesTracking = () => {
               </div>
             </div>
 
-            {/* Footer – buttons always visible, no scroll needed */}
-            <div className="px-4 sm:px-6 py-4 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl flex-shrink-0">
+            {/* Footer – buttons always visible at bottom (sale tracking modals) */}
+            <div className="px-4 sm:px-6 py-4 border-t-2 border-gray-200 bg-gray-50/80 flex-shrink-0 rounded-b-2xl">
               <div className="flex gap-3">
                 {selectedVisitTarget && selectedVisitTarget.status === 'Completed' ? (
-                  // After one target complete: show End shift when no more pending today (fallback: all today completed)
+                  // After one target complete: show "Go to next visit" when any remaining; "End shift" only when none left
                   (() => {
                     const remainingVisits = remainingPendingAfterComplete !== null ? remainingPendingAfterComplete : todayPendingVisitsOrdered
                     const todayStr = toLocalDateString(new Date())
                     const todayTargets = (visitTargets || []).filter(t => t.visitDate && toLocalDateString(new Date(t.visitDate)) === todayStr)
                     const allTodayCompleted = todayTargets.length > 0 && todayTargets.every(t => (t.status === 'Completed' || t.status === 'completed'))
-                    const hasMore = !allTodayCompleted && remainingVisits.length > 0
+                    const hasMore = remainingVisits.length > 0 && !allTodayCompleted
                     const nextVisit = remainingVisits[0] || null
 
                     return (
@@ -4027,9 +4236,9 @@ const SalesTracking = () => {
                                 const getLatLng = (t) => {
                                   const id = t._id || t.id
                                   const resolved = resolvedVisitCoords[id]
-                                  const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-                                  const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : NaN)
-                                  const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : NaN)
+                                  const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+                                  const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+                                  const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
                                   return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
                                 }
                                 const nextPos = getLatLng(nextVisit)
@@ -4043,7 +4252,7 @@ const SalesTracking = () => {
                                   type: 'info',
                                 })
                               }}
-                              className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
+                              className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
                             >
                               <FaArrowRight className="w-4 h-4" />
                               <span>Go to next visit</span>
@@ -4069,9 +4278,9 @@ const SalesTracking = () => {
                                 const getLatLng = (t) => {
                                   const id = t._id || t.id
                                   const resolved = resolvedVisitCoords[id]
-                                  const useResolved = t.pincode && resolved?.latitude != null && resolved?.longitude != null
-                                  const lat = useResolved ? parseFloat(resolved.latitude) : (t.latitude != null ? parseFloat(t.latitude) : NaN)
-                                  const lng = useResolved ? parseFloat(resolved.longitude) : (t.longitude != null ? parseFloat(t.longitude) : NaN)
+                                  const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+                                  const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+                                  const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
                                   return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
                                 }
                                 const nextPos = getLatLng(nextVisit)
@@ -4085,9 +4294,9 @@ const SalesTracking = () => {
                                   type: 'info',
                                 })
                               }}
-                              className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all text-sm font-medium shadow-lg flex items-center justify-center gap-1.5"
+                              className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
                             >
-                              <FaMapMarkerAlt className="w-4 h-4" />
+                              <FaMapPin className="w-4 h-4 text-white" />
                               <span>Go there</span>
                             </button>
                           </>
@@ -4124,6 +4333,8 @@ const SalesTracking = () => {
                         setShowCompletionModal(false)
                         setEndingKilometers('')
                         setEndingMeterImage(null)
+                        setVisitedAreaImage(null)
+                        setVisitedAreaImages([])
                         setEstimatedKilometers('')
                       }}
                       className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
@@ -4146,28 +4357,27 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Visit Target Action Modal - containment to avoid blink on re-render */}
+      {/* Visit Target Modal – mobile/tablet responsive + Close */}
       {showVisitTargetModal && selectedVisitTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 overflow-y-auto" style={{ contain: 'layout style paint' }}>
-          <div key={selectedVisitTarget._id || selectedVisitTarget.id || 'visit-modal'} className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto my-auto" style={{ contain: 'layout style paint' }}>
-            {/* Header removed - simple border */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-gray-800">{selectedVisitTarget.name}</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key={selectedVisitTarget._id || selectedVisitTarget.id || 'visit-modal'} className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-4xl max-h-[90vh] sm:max-h-[85vh] flex flex-col my-auto overflow-hidden" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl font-semibold text-gray-800 truncate pr-2">{selectedVisitTarget.name}</h3>
               <button
                 onClick={() => {
                   setShowVisitTargetModal(false)
                   setSelectedVisitTarget(null)
                   setVisitTargetModalSnapshot(null)
                 }}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               {/* Target Info – use snapshot so distance doesn't change on re-renders */}
               <div className="mb-6">
                 <div className="bg-gray-50 rounded-lg p-4 mb-4">
@@ -4310,24 +4520,23 @@ const SalesTracking = () => {
       )}
 
       {/* Achievement Modal - Shown after completion */}
-      {/* Request Visit Modal - no animation to avoid blink */}
+      {/* Request Visit Modal – mobile/tablet + Close */}
       {showRequestVisitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 overflow-y-auto" style={{ contain: 'layout style paint' }}>
-          <div key="request-visit-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col my-auto" style={{ contain: 'layout style paint' }}>
-            {/* Header removed - simple border */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h3 className="text-xl font-semibold text-gray-800">Request a Visit</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="request-visit-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col my-auto overflow-hidden" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl font-semibold text-gray-800 truncate pr-2">Request a Visit</h3>
               <button
                 onClick={() => setShowRequestVisitModal(false)}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
-            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Select Customer *</label>
@@ -4444,13 +4653,36 @@ const SalesTracking = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Visit Date</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Visit Date *</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={requestForm.visitDate}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, visitDate: e.target.value }))}
+                      min={toLocalDateString(new Date())}
+                      className="flex-1 min-w-0 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] focus:ring-2 focus:ring-[#e9931c]/20"
+                      placeholder="YYYY-MM-DD"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRequestForm(prev => ({ ...prev, visitDate: toLocalDateString(new Date()) }))}
+                      className="px-3 py-2.5 bg-[#e9931c]/10 text-[#e9931c] border-2 border-[#e9931c]/40 rounded-lg font-medium hover:bg-[#e9931c]/20 transition-colors whitespace-nowrap"
+                      title="Set to today"
+                    >
+                      Today
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Click calendar icon or use &quot;Today&quot; to select date.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Visit Time</label>
                   <input
-                    type="date"
-                    value={requestForm.visitDate}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, visitDate: e.target.value }))}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    type="time"
+                    value={requestForm.visitTime || '09:00'}
+                    onChange={(e) => setRequestForm(prev => ({ ...prev, visitTime: e.target.value }))}
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] focus:ring-2 focus:ring-[#e9931c]/20"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Select time for the visit</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Latitude</label>
@@ -4505,34 +4737,41 @@ const SalesTracking = () => {
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-2 flex-shrink-0 border-t border-gray-200 mt-4">
-                <button
-                  onClick={() => setShowRequestVisitModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubmitVisitRequest}
-                  disabled={requestSubmitting}
-                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50"
-                >
-                  {requestSubmitting ? 'Submitting...' : 'Submit Request'}
-                </button>
-              </div>
+            {/* Footer – buttons always visible at bottom (sale tracking modals) */}
+            <div className="px-4 sm:px-6 py-4 border-t-2 border-gray-200 bg-gray-50/80 flex-shrink-0 rounded-b-2xl flex gap-3">
+              <button
+                onClick={() => setShowRequestVisitModal(false)}
+                className="flex-1 px-4 py-3 sm:py-3.5 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitVisitRequest}
+                disabled={requestSubmitting}
+                className="flex-1 px-4 py-3 sm:py-3.5 bg-[#e9931c] text-white rounded-xl font-semibold hover:bg-[#d98518] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+              >
+                {requestSubmitting ? (
+                  <>Submitting...</>
+                ) : (
+                  <>
+                    <FaCheckCircle className="w-5 h-5" />
+                    Submit Request
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Unified Assign Modal - no animation to avoid blink */}
+      {/* Assign Modal – mobile/tablet + Close */}
       {showVisitAssignmentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 overflow-y-auto" style={{ contain: 'layout style paint' }}>
-          <div key="assign-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col my-auto" style={{ contain: 'layout style paint' }}>
-            {/* Header removed - simple border */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h3 className="text-xl font-semibold text-gray-800">Assign</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="assign-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-4xl max-h-[90vh] sm:max-h-[85vh] flex flex-col my-auto overflow-hidden" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl font-semibold text-gray-800 truncate pr-2">Assign</h3>
               <button
                 onClick={() => {
                   setShowVisitAssignmentModal(false)
@@ -4543,9 +4782,11 @@ const SalesTracking = () => {
                   setSelectedDateForView('')
                   setAssignModalActiveTab('visits')
                 }}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-2 transition-colors"
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <FaTimes className="w-6 h-6" />
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
@@ -4563,7 +4804,7 @@ const SalesTracking = () => {
                     : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100'
                 }`}
               >
-                <FaMapMarkerAlt className="w-4 h-4" />
+                <FaMapPin className="w-4 h-4 text-[#e9931c]" />
                 Visits
               </button>
               <button
@@ -5638,31 +5879,31 @@ const SalesTracking = () => {
       )}
 
       {showAchievementModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4" style={{ contain: 'layout style paint' }}>
-          <div key="achievement-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-md" style={{ contain: 'layout style paint' }}>
-            <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md">
-                    <span className="text-3xl">🎉</span>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="achievement-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-md max-h-[90vh] my-auto flex flex-col overflow-hidden" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl flex-shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-md flex-shrink-0">
+                    <span className="text-2xl sm:text-3xl">🎉</span>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Visit Target Completed!</h3>
-                    <p className="text-sm text-green-100 mt-0.5">Great job!</p>
+                  <div className="min-w-0">
+                    <h3 className="text-base sm:text-xl font-bold text-white truncate">Visit Target Completed!</h3>
+                    <p className="text-xs sm:text-sm text-green-100 mt-0.5">Great job!</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowAchievementModal(false)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+                  className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-white hover:bg-white hover:bg-opacity-20 transition-colors touch-manipulation flex-shrink-0"
+                  aria-label="Close"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <FaTimes className="w-6 h-6" />
+                  <span className="ml-2 font-semibold sm:hidden">Close</span>
                 </button>
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               <div className="text-center mb-6">
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-5xl">🎉</span>
@@ -5731,13 +5972,12 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Shift End Modal - no animation to avoid blink */}
+      {/* Shift End Modal – mobile/tablet + Close */}
       {showShiftEndModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
-          <div key="shift-end-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-auto" style={{ contain: 'layout style paint' }}>
-            {/* Modal Header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[10001] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="shift-end-modal" className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] mx-auto flex flex-col overflow-hidden my-auto" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-800 truncate pr-2">
                 End Shift – Ending Kilometer & Picture
               </h3>
               <button
@@ -5746,16 +5986,15 @@ const SalesTracking = () => {
                   setShiftEndingKilometers('')
                   setShiftEndingMeterImage(null)
                 }}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 max-h-[75vh] sm:max-h-[70vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
                 All visits done. Enter ending kilometers and upload ending meter picture to complete the shift.
               </p>
@@ -5777,13 +6016,15 @@ const SalesTracking = () => {
                 <p className="text-xs text-gray-500 mt-1">Enter odometer reading or use image upload below</p>
               </div>
 
-              {/* Starting Kilometers Display */}
+              {/* Starting Kilometers Display – use original shift start (when user clicked Start) for correct total */}
               <div className="mb-5 sm:mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                <p className="text-sm font-semibold text-blue-800 mb-1">Starting Reading</p>
+                <p className="text-sm font-semibold text-blue-800 mb-1">Starting Reading (at shift start)</p>
                 <p className="text-2xl font-bold text-blue-700">
-                  {startingKilometers && !isNaN(parseFloat(startingKilometers)) && parseFloat(startingKilometers) > 0 
-                    ? `${startingKilometers} km` 
-                    : meterReading || 'Not set'}
+                  {shiftStartKilometersRef.current != null && !isNaN(shiftStartKilometersRef.current)
+                    ? `${shiftStartKilometersRef.current} km`
+                    : startingKilometers && !isNaN(parseFloat(startingKilometers)) && parseFloat(startingKilometers) > 0
+                      ? `${startingKilometers} km`
+                      : meterReading || 'Not set'}
                 </p>
               </div>
 
@@ -5857,13 +6098,13 @@ const SalesTracking = () => {
                 </div>
               )}
 
-              {/* Total Distance Display */}
-              {shiftEndingKilometers && startingKilometers && (
+              {/* Total Distance Display – use original shift start for correct total km */}
+              {shiftEndingKilometers && (shiftStartKilometersRef.current != null || startingKilometers || meterReading) && (
                 <div className="mb-5 sm:mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
                   <p className="text-sm font-semibold text-green-800 mb-1">Total Shift Distance</p>
                   <p className="text-2xl font-bold text-green-700">
                     {(() => {
-                      const start = parseFloat(startingKilometers || meterReading || '0')
+                      const start = shiftStartKilometersRef.current ?? parseFloat(startingKilometers || meterReading || '0')
                       const end = parseFloat(shiftEndingKilometers)
                       if (!isNaN(start) && !isNaN(end) && end >= start) {
                         return `${(end - start).toFixed(2)} km`
@@ -5874,65 +6115,61 @@ const SalesTracking = () => {
                   <p className="text-xs text-green-600 mt-1">Total distance for all visits today</p>
                 </div>
               )}
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t-2 border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowShiftEndModal(false)
-                    setShiftEndingKilometers('')
-                    setShiftEndingMeterImage(null)
-                  }}
-                  className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors font-bold text-sm sm:text-base"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleShiftEnd}
-                  disabled={!shiftEndingKilometers || shiftEndingKilometers.trim() === '' || isExtractingShiftEnd || isSubmittingShiftEnd}
-                  className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 active:scale-95 transition-all text-sm font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
-                >
-                  {isSubmittingShiftEnd ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                      <span>Ending...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FaCheckCircle className="w-5 h-5" />
-                      <span>Complete Shift</span>
-                    </>
-                  )}
-                </button>
-              </div>
+            {/* Footer – buttons always visible at bottom (sale tracking modals) */}
+            <div className="px-4 sm:px-6 py-4 border-t-2 border-gray-200 bg-gray-50/80 flex-shrink-0 rounded-b-2xl flex gap-3">
+              <button
+                onClick={() => {
+                  setShowShiftEndModal(false)
+                  setShiftEndingKilometers('')
+                  setShiftEndingMeterImage(null)
+                }}
+                className="flex-1 px-4 py-3 sm:py-3.5 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-colors font-bold text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleShiftEnd}
+                disabled={!shiftEndingKilometers || shiftEndingKilometers.trim() === '' || isExtractingShiftEnd || isSubmittingShiftEnd}
+                className="flex-1 px-3 py-3 sm:py-3.5 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-1.5"
+              >
+                {isSubmittingShiftEnd ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                    <span>Ending...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaCheckCircle className="w-5 h-5" />
+                    <span>Complete Shift</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Shift Photo Collage Modal */}
+      {/* Shift Photo Collage Modal – mobile/tablet + Close */}
       {showShiftPhotoCollage && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4" style={{ contain: 'layout style paint' }}>
-          <div key="shift-photo-collage" className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-auto" style={{ contain: 'layout style paint' }}>
-            {/* Modal Header */}
-            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ contain: 'layout style paint' }}>
+          <div key="shift-photo-collage" className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-5xl max-h-[90vh] sm:max-h-[85vh] mx-auto flex flex-col overflow-hidden my-auto" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-800 truncate pr-2">
                 Shift Photo Collage - All Proof Images
               </h3>
               <button
-                onClick={() => {
-                  setShowShiftPhotoCollage(false)
-                }}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-1.5 sm:p-2 transition-colors"
+                onClick={() => setShowShiftPhotoCollage(false)}
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors touch-manipulation"
+                aria-label="Close"
               >
-                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FaTimes className="w-6 h-6 flex-shrink-0" />
+                <span className="ml-2 font-semibold sm:hidden">Close</span>
               </button>
             </div>
 
-            {/* Modal Body - Collage */}
-            <div className="p-4 sm:p-6 max-h-[80vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               {(() => {
                 const today = new Date()
                 today.setHours(0, 0, 0, 0)

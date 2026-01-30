@@ -301,8 +301,8 @@ const ConversionsTracking = () => {
 
       {/* Detail Modal */}
       {selectedTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto my-auto">
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl">
               <div className="flex items-center justify-between">
                 <div>
@@ -311,7 +311,7 @@ const ConversionsTracking = () => {
                 </div>
                 <button
                   onClick={() => setSelectedTarget(null)}
-                  className="text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-white hover:bg-white hover:bg-opacity-20 rounded-full transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

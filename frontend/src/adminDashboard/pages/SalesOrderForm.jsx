@@ -21,6 +21,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
   const [customerSearch, setCustomerSearch] = useState('')
   const [showProductDropdown, setShowProductDropdown] = useState({})
   const [productSearch, setProductSearch] = useState({})
+  const [productModalForIndex, setProductModalForIndex] = useState(null) // Row index for which product selection modal is open
   const signatureCanvasRef = useRef(null)
   const [isDrawing, setIsDrawing] = useState(false)
 
@@ -522,6 +523,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
     setFormData(prev => ({ ...prev, items: updatedItems }))
     setShowProductDropdown(prev => ({ ...prev, [itemIndex]: false }))
     setProductSearch(prev => ({ ...prev, [itemIndex]: '' }))
+    setProductModalForIndex(null) // Close modal when selected from modal
   }
 
   const handleItemChange = (index, field, value) => {
@@ -1057,19 +1059,31 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                                 setShowProductDropdown(prev => ({ ...prev, [index]: false }))
                               }, 220)
                             }}
-                            className="w-full px-2 py-1 pr-8 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
-                            placeholder={initialLoading ? "Loading..." : "Search or select product..."}
+                            className="w-full px-2 py-1 pr-24 border border-gray-200 rounded focus:outline-none focus:border-[#e9931c]"
+                            placeholder={initialLoading ? "Loading..." : "Search or pick from list"}
                             required
                             disabled={initialLoading}
                           />
                           <button
                             type="button"
                             onClick={() => openProductDropdown(index, '')}
-                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded text-gray-500 hover:bg-[#e9931c] hover:text-white transition-colors"
-                            title="Select product from catalog"
+                            className="absolute right-9 top-1/2 -translate-y-1/2 p-1.5 rounded text-gray-500 hover:bg-[#e9931c] hover:text-white transition-colors"
+                            title="Search / dropdown"
                             disabled={initialLoading}
                           >
                             <FaSearch className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProductModalForIndex(index)
+                              setProductSearch(prev => ({ ...prev, [index]: (formData.items[index]?.productName || formData.items[index]?.productCode || '') }))
+                            }}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 px-2 py-1.5 rounded text-xs font-medium text-[#e9931c] border border-[#e9931c] hover:bg-[#e9931c] hover:text-white transition-colors"
+                            title="Open product list (modal)"
+                            disabled={initialLoading}
+                          >
+                            List
                           </button>
                         </div>
                       </div>
@@ -1495,6 +1509,64 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
         </div>
       </form>
       </div>
+
+      {/* Product selection modal – sahi se product select karne ke liye */}
+      {productModalForIndex !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4" onClick={() => setProductModalForIndex(null)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-800">Select Product</h3>
+              <button
+                type="button"
+                onClick={() => setProductModalForIndex(null)}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                aria-label="Close"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 border-b border-gray-100">
+              <input
+                type="text"
+                value={productSearch[productModalForIndex] ?? ''}
+                onChange={(e) => setProductSearch(prev => ({ ...prev, [productModalForIndex]: e.target.value }))}
+                placeholder="Search by name or code..."
+                className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#e9931c]"
+                autoFocus
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 min-h-0">
+              {getFilteredProducts(productModalForIndex).length > 0 ? (
+                getFilteredProducts(productModalForIndex).map((product) => (
+                  <button
+                    type="button"
+                    key={product._id || product.id}
+                    onClick={() => handleProductSelect(product, productModalForIndex)}
+                    className="w-full text-left px-4 py-3 rounded-xl hover:bg-[#fff5eb] border-b border-gray-100 last:border-0 transition-colors"
+                  >
+                    <p className="font-semibold text-gray-800">{product.name}</p>
+                    <p className="text-sm text-gray-600 mt-0.5">
+                      Code: {product.productCode || product.code || 'N/A'} · £{Number(product.price || product.unitPrice || 0).toFixed(2)}
+                      {product.category && ` · ${product.category}`}
+                    </p>
+                    {product.description && (
+                      <p className="text-xs text-gray-500 mt-1 truncate">{product.description}</p>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <div className="py-8 text-center text-gray-500">
+                  <p className="font-medium">No products found</p>
+                  <p className="text-sm mt-1">Type name or code above to search</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

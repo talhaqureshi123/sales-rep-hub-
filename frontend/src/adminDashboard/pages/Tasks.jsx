@@ -3209,8 +3209,8 @@ const Tasks = () => {
 
       {/* Create Task Form Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+          <div className="bg-white rounded-lg shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="sticky top-0 flex items-center justify-between p-6 border-b" style={{ backgroundColor: appTheme.primary.main, borderColor: appTheme.border.light }}>
               <h3 className="text-xl font-bold text-white">Create Task</h3>
               <button
@@ -5782,13 +5782,13 @@ const Tasks = () => {
 
       {/* Note Creation Modal */}
       {showNoteModal && (
-        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[calc(100%-0.75rem)] sm:max-w-md max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Create Note</h3>
               <button
                 onClick={() => setShowNoteModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 rounded-lg"
               >
                 <FaTimes className="w-5 h-5" />
               </button>
@@ -5962,9 +5962,9 @@ const Tasks = () => {
       {/* Meeting Creation Modal */}
       {/* Start Task Modal with Meter Picture */}
       {showStartTaskModal && taskToStart && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-900">Start Task</h2>
                 <button
@@ -6085,13 +6085,13 @@ const Tasks = () => {
       )}
 
       {showMeetingModal && (
-        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[calc(100%-0.75rem)] sm:max-w-md max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Create Google Meeting</h3>
               <button
                 onClick={() => setShowMeetingModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 rounded-lg"
               >
                 <FaTimes className="w-5 h-5" />
               </button>

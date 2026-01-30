@@ -44,27 +44,31 @@ const CustomerAllotment = () => {
     setLoading(true)
     try {
       const params = {}
-      if (filterSalesman) params.salesman = filterSalesman
+      // When "Unassigned" is selected, fetch all customers and filter on frontend; don't pass salesman
+      if (filterSalesman && filterStatus !== 'unassigned') params.salesman = filterSalesman
       if (filterStatus && filterStatus !== 'all') {
         if (filterStatus === 'unassigned' || filterStatus === 'assigned') {
-          // We'll filter unassigned on frontend
+          // Filter unassigned/assigned on frontend using allottedSalesman from API response
         } else {
           params.status = filterStatus
         }
       }
       const searchTrimmed = (debouncedSearchTerm || '').trim()
       if (searchTrimmed) params.search = searchTrimmed
+      if (filterCreatedBy) params.createdBy = filterCreatedBy
 
       const result = await getCustomers(params)
       if (result.success && result.data) {
         const raw = Array.isArray(result.data) ? result.data : []
         setAllCustomers(raw)
 
+        // Use allottedSalesman from API response for status filter (not stale customerSalesmanMap)
+        const hasAllotted = (c) => !!(c.allottedSalesman?._id || c.allottedSalesman)
         let filteredCustomers = raw
-        if (filterStatus === 'unassigned') filteredCustomers = raw.filter(c => !customerSalesmanMap[c._id] && !c.assignedSalesman)
-        if (filterStatus === 'assigned') filteredCustomers = raw.filter(c => !!customerSalesmanMap[c._id] || !!c.assignedSalesman)
+        if (filterStatus === 'unassigned') filteredCustomers = raw.filter(c => !hasAllotted(c))
+        if (filterStatus === 'assigned') filteredCustomers = raw.filter(c => hasAllotted(c))
         
-        // Filter by admin who created the customer
+        // Filter by admin who created the customer (if not already filtered by API)
         if (filterCreatedBy) {
           filteredCustomers = filteredCustomers.filter(c => {
             const createdById = c.createdBy?._id || c.createdBy
@@ -112,13 +116,7 @@ const CustomerAllotment = () => {
     try {
       const result = await getUsers({ role: 'admin' })
       if (result.success && result.data) {
-        // Filter to show only usmanabid admin (by name or email containing 'usmanabid')
-        const filteredAdmins = result.data.filter(admin => {
-          const name = (admin.name || '').toLowerCase()
-          const email = (admin.email || '').toLowerCase()
-          return name.includes('usmanabid') || email.includes('usmanabid')
-        })
-        setAdmins(filteredAdmins)
+        setAdmins(result.data)
       }
     } catch (error) {
       console.error('Error loading admins:', error)
@@ -388,14 +386,9 @@ const CustomerAllotment = () => {
   }
 
   const toggleSelectAll = () => {
-    const selectable =
-      filterStatus === 'unassigned'
-        ? customers.filter(c => !customerSalesmanMap[c._id] && !c.assignedSalesman)
-        : filterStatus === 'assigned'
-          ? customers.filter(c => !!customerSalesmanMap[c._id] || !!c.assignedSalesman)
-          : []
-
-    if (selectedCustomers.length === selectable.length) {
+    // Selectable = current filtered list (customers is already filtered by Unassigned/Assigned/All/etc.)
+    const selectable = customers
+    if (selectedCustomers.length === selectable.length && selectable.length > 0) {
       setSelectedCustomers([])
     } else {
       setSelectedCustomers(selectable.map(c => c._id))
@@ -450,8 +443,8 @@ const CustomerAllotment = () => {
 
         {/* Bulk Allotment Modal */}
         {showBulkAllot && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
               <h3 className="text-xl font-bold text-gray-800 mb-4">Bulk Allot Customers</h3>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -614,7 +607,7 @@ const CustomerAllotment = () => {
             <h3 className="text-lg font-semibold text-gray-700">
               Customers ({customers.length})
             </h3>
-            {(filterStatus === 'unassigned' || filterStatus === 'assigned') && customers.length > 0 && (
+            {customers.length > 0 && (
               <button
                 onClick={toggleSelectAll}
                 className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
@@ -647,16 +640,15 @@ const CustomerAllotment = () => {
               <table className="w-full min-w-full table-fixed">
                 <thead>
                   <tr className="border-b-2 border-gray-200 bg-gray-50">
-                    {(filterStatus === 'unassigned' || filterStatus === 'assigned') && (
-                      <th className="text-left py-3 px-3 text-gray-700 font-semibold w-12">
-                        <input
-                          type="checkbox"
-                          checked={selectedCustomers.length === customers.length && customers.length > 0}
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4 text-[#e9931c] border-gray-300 rounded focus:ring-[#e9931c]"
-                        />
-                      </th>
-                    )}
+                    <th className="text-left py-3 px-3 text-gray-700 font-semibold w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedCustomers.length === customers.length && customers.length > 0}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 text-[#e9931c] border-gray-300 rounded focus:ring-[#e9931c]"
+                        title={selectedCustomers.length === customers.length ? 'Deselect all' : 'Select all'}
+                      />
+                    </th>
                     <th className="text-left py-3 px-3 text-gray-700 font-semibold w-48">Name</th>
                     <th className="text-left py-3 px-3 text-gray-700 font-semibold w-48">Contact</th>
                     <th className="text-left py-3 px-3 text-gray-700 font-semibold w-40">Company</th>
@@ -683,16 +675,15 @@ const CustomerAllotment = () => {
                           isSelected ? 'bg-blue-50' : ''
                         }`}
                       >
-                        {(filterStatus === 'unassigned' || filterStatus === 'assigned') && (
-                          <td className="py-3 px-3 align-middle">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleCustomerSelection(customer._id)}
-                              className="w-4 h-4 text-[#e9931c] border-gray-300 rounded focus:ring-[#e9931c]"
-                            />
-                          </td>
-                        )}
+                        <td className="py-3 px-3 align-middle">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleCustomerSelection(customer._id)}
+                            className="w-4 h-4 text-[#e9931c] border-gray-300 rounded focus:ring-[#e9931c]"
+                            title={isSelected ? 'Deselect' : 'Select for bulk allot'}
+                          />
+                        </td>
                         <td className="py-3 px-3 align-top">
                           <div className="font-semibold text-gray-800 whitespace-nowrap truncate" title={customer.name}>{customer.name}</div>
                           {customer.address && (

@@ -148,7 +148,7 @@ const createSample = async (req, res) => {
       });
     }
 
-    // Verify customer exists and is related to this salesman (via task or visit) if provided
+    // Verify customer exists and is related to this salesman (via task, visit, or Customer Allotment) if provided
     if (customer) {
       const customerDoc = await Customer.findById(customer);
       if (!customerDoc) {
@@ -157,9 +157,11 @@ const createSample = async (req, res) => {
           message: 'Customer not found',
         });
       }
+      const allottedId = customerDoc.allottedSalesman?._id || customerDoc.allottedSalesman;
+      const allottedToMe = allottedId && allottedId.toString() === req.user._id.toString();
       const hasTaskOrVisit = await FollowUp.findOne({ salesman: req.user._id, customer: customer }) ||
         await VisitTarget.findOne({ salesman: req.user._id, customerId: customer });
-      if (!hasTaskOrVisit) {
+      if (!allottedToMe && !hasTaskOrVisit) {
         return res.status(400).json({
           success: false,
           message: 'Customer not assigned to you (no task or visit with this customer)',

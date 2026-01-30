@@ -49,7 +49,7 @@ const CustomerManagement = () => {
     associatedCompanyName: '',
     lastContact: '',
     lastEngagement: '',
-    view: 'admin_salesman', // View access: 'admin', 'salesman', 'admin_salesman'
+    view: 'salesman', // Default: only salesman can view (admin view option removed – sirf admin allot karta hai)
   })
 
   const statusOptions = [
@@ -141,7 +141,7 @@ const CustomerManagement = () => {
         associatedCompanyName: formData.associatedCompanyName || '',
         lastContact: formData.lastContact || undefined,
         lastEngagement: formData.lastEngagement || undefined,
-        view: formData.view || 'admin_salesman',
+        view: formData.view || 'salesman',
       }
 
       const result = await createCustomer(customerData)
@@ -224,7 +224,7 @@ const CustomerManagement = () => {
         associatedCompanyName: formData.associatedCompanyName || '',
         lastContact: formData.lastContact || undefined,
         lastEngagement: formData.lastEngagement || undefined,
-        view: formData.view || 'admin_salesman',
+        view: formData.view || 'salesman',
       }
 
       const result = await updateCustomer(editingCustomer._id, customerData)
@@ -611,8 +611,8 @@ const CustomerManagement = () => {
 
       {/* Add/Edit Customer Form Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">
                 {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
@@ -847,25 +847,7 @@ const CustomerManagement = () => {
                 />
               </div>
 
-              {/* View Access Dropdown - Only Admin can set (sirf admin ko show) */}
-              {userRole === 'admin' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">View Access *</label>
-                  <select
-                    name="view"
-                    value={formData.view}
-                    onChange={handleInputChange}
-                    disabled={loading}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  >
-                    <option value="admin_salesman">Admin and Salesman</option>
-                    <option value="admin">Admin Only</option>
-                    <option value="salesman">Salesman Only</option>
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">Select who can view this customer</p>
-                </div>
-              )}
+              {/* View Access: removed from form – only admin allots; new customers default to salesman view */}
 
               <div className="flex gap-3 justify-end pt-4">
                 <button
@@ -1264,8 +1246,8 @@ const CustomerManagement = () => {
 
       {/* Customer Detail Modal */}
       {showCustomerDetailModal && selectedCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col animate-slideUp my-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-7xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
               <div className="flex items-center justify-between">

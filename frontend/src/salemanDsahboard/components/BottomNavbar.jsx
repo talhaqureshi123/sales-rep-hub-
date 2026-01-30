@@ -8,8 +8,7 @@ import {
   FaBullseye,
   FaShoppingCart,
   FaVideo,
-  FaBell,
-  FaFlask
+  FaBell
 } from 'react-icons/fa'
 import { useNotificationCount } from '../hooks/useNotificationCount'
 
@@ -23,7 +22,6 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },
     { id: 'customers', label: 'Customers', icon: FaUsers },
     { id: 'tasks', label: 'Tasks', icon: FaTasks },
-    { id: 'sample-tracker', label: 'Samples', icon: FaFlask },
     { id: 'sales-targets', label: 'Targets', icon: FaBullseye },
     { id: 'sales-orders', label: 'Orders', icon: FaShoppingCart },
     { id: 'product-videos', label: 'Videos', icon: FaVideo },
@@ -31,8 +29,8 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
   ]
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 lg:hidden">
-      <div className="flex items-center h-16 overflow-x-auto scrollbar-hide">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 lg:hidden pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center h-16 min-h-[64px] overflow-x-auto scrollbar-hide">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id

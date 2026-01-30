@@ -2,10 +2,10 @@ const MilestoneModal = ({ milestone, onClose, onQuotation, onAchievement, onConv
   if (!milestone) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-md max-h-[90vh] overflow-y-auto my-auto">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold text-gray-800">{milestone.name}</h3>
@@ -13,7 +13,7 @@ const MilestoneModal = ({ milestone, onClose, onQuotation, onAchievement, onConv
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

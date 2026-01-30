@@ -600,8 +600,8 @@ const SalesSubmissions = () => {
 
       {/* Approve Modal */}
       {showApproveModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Approve Sales Order</h3>
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">
@@ -661,8 +661,8 @@ const SalesSubmissions = () => {
 
       {/* Reject Modal */}
       {showRejectModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Reject Sales Order</h3>
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">
