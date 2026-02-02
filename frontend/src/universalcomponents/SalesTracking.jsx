@@ -3147,24 +3147,6 @@ const SalesTracking = () => {
                 setShowVisitTargetModal(true)
                 addNotification({ message: `📍 Next target: ${nextVisit.name}. Upload visited image when you reach.`, type: 'info' })
               }
-              const handleGoThere = async () => {
-                setRemainingPendingAfterComplete(null)
-                setShowCompletionModal(false)
-                setVisitedAreaImage(null)
-                setVisitedAreaImages([])
-                setSelectedVisitTarget(nextVisit)
-                setIsTracking(true)
-                setRouteToVisitTarget(null)
-                setRouteDistanceKm(null)
-                setEstimatedKilometers('')
-                let loc = null
-                try { loc = await getCurrentLocation(); if (loc?.latitude != null && loc?.longitude != null) setUserLocation(loc) } catch (_) {}
-                const nextPos = getLatLng(nextVisit)
-                const distStr = (loc && nextPos) ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng)) : null
-                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
-                setShowVisitTargetModal(true)
-                addNotification({ message: `📍 Navigating to: ${nextVisit.name}. Upload visited image when you reach.`, type: 'info' })
-              }
               const handleEndShift = () => {
                 setRemainingPendingAfterComplete(null)
                 setShowCompletionModal(false)
@@ -3178,22 +3160,14 @@ const SalesTracking = () => {
               }
               if (hasMore && nextVisit) {
                 return (
-                  <div className="absolute bottom-3 left-3 right-3 z-20 flex gap-2 pointer-events-auto">
+                  <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-auto">
                     <button
                       type="button"
                       onClick={handleNextVisit}
-                      className="flex-1 px-3 py-2.5 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-[0.98] transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
+                      className="w-full px-4 py-3 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8820a] active:scale-[0.98] transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-2"
                     >
                       <FaArrowRight className="w-4 h-4" />
                       <span>Go to next visit</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGoThere}
-                      className="flex-1 px-3 py-2.5 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-[0.98] transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
-                    >
-                      <FaMapPin className="w-4 h-4" />
-                      <span>Go there</span>
                     </button>
                   </div>
                 )
@@ -3907,7 +3881,7 @@ const SalesTracking = () => {
 
             <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
               <p className="text-sm sm:text-base text-gray-700 mb-5 sm:mb-6 text-center leading-relaxed font-medium">
-                📸 Starting meter: use <strong>Camera</strong>, <strong>Upload document</strong>, or <strong>Manual entry</strong> below
+                📸 Starting meter: use <strong>Camera</strong> or <strong>Upload document</strong>
               </p>
 
               {/* Image Upload Area */}
@@ -3979,31 +3953,16 @@ const SalesTracking = () => {
                 </div>
               )}
 
-              {/* Starting Kilometers Input */}
-              <div className="mb-5 sm:mb-6">
-                <label className="block text-sm sm:text-base font-bold text-gray-800 mb-2.5">
-                  🚗 Starting Kilometers (km)
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={startingKilometers}
-                    onChange={(e) => setStartingKilometers(e.target.value)}
-                    placeholder="Will be auto-filled from image"
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all text-sm font-medium placeholder:text-gray-400"
-                  />
-                  {startingKilometers && (
-                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                      <span className="text-sm sm:text-base text-gray-600 font-semibold">km</span>
-                    </div>
-                  )}
-                </div>
-                {startingKilometers && (
-                  <p className="text-xs sm:text-sm text-green-600 mt-2.5 flex items-center gap-1.5 font-semibold">
-                    <span className="text-base">✓</span> Kilometers extracted successfully!
+              {/* Starting Kilometers – read-only from image extraction only (no manual entry) */}
+              {startingKilometers && startingKilometers.trim() !== '' && (
+                <div className="mb-5 sm:mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                  <p className="text-sm font-semibold text-green-800 mb-1">🚗 Starting Kilometers</p>
+                  <p className="text-2xl font-bold text-green-700">{startingKilometers} km</p>
+                  <p className="text-xs sm:text-sm text-green-600 mt-1 flex items-center gap-1.5 font-semibold">
+                    <span className="text-base">✓</span> Extracted from image
                   </p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Footer – buttons always visible (sale tracking modals) */}
@@ -4151,99 +4110,87 @@ const SalesTracking = () => {
                 })()
               )}
 
-              {/* Visited Area Image Upload - Required */}
+              {/* Visited Area Image Upload - Required; once uploaded no re-upload or remove */}
               <div className="mb-5 sm:mb-6">
                 <label className="block text-sm sm:text-base font-bold text-gray-800 mb-3">
                   Visited Area Picture * <span className="text-red-600">(Required)</span>
                 </label>
-                <div className="flex gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={handleVisitedAreaCameraCapture}
-                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Camera
-                  </button>
-                  <label
-                    htmlFor="visited-area-upload-completion"
-                    className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload
-                  </label>
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleVisitedAreaImageUpload}
-                  className="hidden"
-                  id="visited-area-upload-completion"
-                />
-                <label
-                  htmlFor="visited-area-upload-completion"
-                  className={`flex flex-col items-center justify-center w-full h-32 sm:h-40 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${
-                    (visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0))
-                      ? 'border-green-300 bg-green-50' 
-                      : 'border-red-300 bg-red-50 hover:border-[#e9931c] hover:bg-orange-50'
-                  }`}
-                >
-                  {(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) ? (
-                    <div className="w-full h-full flex items-center justify-center p-2 overflow-auto">
-                      {(() => {
-                        const uniqueImages = visitedAreaImages && visitedAreaImages.length > 0 ? [...new Set(visitedAreaImages)] : []
-                        const showGrid = uniqueImages.length > 1
-                        return showGrid ? (
-                          <div className="grid grid-cols-2 gap-1 w-full h-full">
-                            {uniqueImages.slice(0, 4).map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={img}
-                                alt={`Visited area ${idx + 1}`}
-                                className="w-full h-full rounded object-cover"
-                              />
-                            ))}
-                            {uniqueImages.length > 4 && (
-                              <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded text-xs font-semibold">
-                                +{uniqueImages.length - 4}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <img
-                            src={visitedAreaImage || (visitedAreaImages && visitedAreaImages[0])}
-                            alt="Visited area"
-                            className="max-w-full max-h-full rounded-lg object-contain"
-                          />
-                        )
-                      })()}
+                {!(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) ? (
+                  <>
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={handleVisitedAreaCameraCapture}
+                        className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Camera
+                      </button>
+                      <label
+                        htmlFor="visited-area-upload-completion"
+                        className="flex-1 px-4 py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Upload
+                      </label>
                     </div>
-                  ) : (
-                    <div className="text-center p-4">
-                      <svg className="w-8 h-8 sm:w-10 sm:h-10 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <p className="text-xs sm:text-sm text-red-700 font-semibold">⚠️ Required: Click to upload visited area picture(s)</p>
-                      <p className="text-xs text-red-600 mt-1">You can upload multiple images</p>
-                    </div>
-                  )}
-                </label>
-                {(visitedAreaImage || (visitedAreaImages && visitedAreaImages.length > 0)) && (
-                  <button
-                    onClick={() => {
-                      setVisitedAreaImage(null)
-                      setVisitedAreaImages([])
-                    }}
-                    className="mt-2 text-xs sm:text-sm text-red-600 hover:text-red-700 font-semibold"
-                  >
-                    Remove Image
-                  </button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleVisitedAreaImageUpload}
+                      className="hidden"
+                      id="visited-area-upload-completion"
+                    />
+                    <label
+                      htmlFor="visited-area-upload-completion"
+                      className="flex flex-col items-center justify-center w-full h-32 sm:h-40 border-2 border-dashed border-red-300 bg-red-50 rounded-xl cursor-pointer hover:border-[#e9931c] hover:bg-orange-50 transition-all duration-200"
+                    >
+                      <div className="text-center p-4">
+                        <svg className="w-8 h-8 sm:w-10 sm:h-10 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-xs sm:text-sm text-red-700 font-semibold">⚠️ Required: Click to upload visited area picture(s)</p>
+                        <p className="text-xs text-red-600 mt-1">You can upload multiple images</p>
+                      </div>
+                    </label>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center w-full h-32 sm:h-40 border-2 border-green-300 bg-green-50 rounded-xl p-2 overflow-auto pointer-events-none">
+                    {(() => {
+                      const uniqueImages = visitedAreaImages && visitedAreaImages.length > 0 ? [...new Set(visitedAreaImages)] : []
+                      const showGrid = uniqueImages.length > 1
+                      return showGrid ? (
+                        <div className="grid grid-cols-2 gap-1 w-full h-full">
+                          {uniqueImages.slice(0, 4).map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={img}
+                              alt={`Visited area ${idx + 1}`}
+                              className="w-full h-full rounded object-cover"
+                            />
+                          ))}
+                          {uniqueImages.length > 4 && (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded text-xs font-semibold">
+                              +{uniqueImages.length - 4}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <img
+                          src={visitedAreaImage || (visitedAreaImages && visitedAreaImages[0])}
+                          alt="Visited area"
+                          className="max-w-full max-h-full rounded-lg object-contain"
+                        />
+                      )
+                    })()}
+                    <p className="text-xs text-green-700 font-semibold mt-2">✓ Picture uploaded – proceed to Complete Target</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -4274,93 +4221,48 @@ const SalesTracking = () => {
                           {!hasMore ? 'Cancel' : 'Close'}
                         </button>
                         {hasMore && nextVisit ? (
-                          <>
-                            <button
-                              onClick={async () => {
-                                setRemainingPendingAfterComplete(null)
-                                setShowCompletionModal(false)
-                                setVisitedAreaImage(null)
-                                setVisitedAreaImages([])
-                                setSelectedVisitTarget(nextVisit)
-                                setIsTracking(true)
-                                setRouteToVisitTarget(null)
-                                setRouteDistanceKm(null)
-                                setEstimatedKilometers('')
-                                let loc = null
-                                try {
-                                  loc = await getCurrentLocation()
-                                  if (loc && loc.latitude != null && loc.longitude != null) {
-                                    setUserLocation(loc)
-                                  }
-                                } catch (_) {}
-                                // Snapshot for next-visit modal: distance from new location; route km will come when OSRM loads
-                                const getLatLng = (t) => {
-                                  const id = t._id || t.id
-                                  const resolved = resolvedVisitCoords[id]
-                                  const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-                                  const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
-                                  const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
-                                  return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+                          <button
+                            onClick={async () => {
+                              setRemainingPendingAfterComplete(null)
+                              setShowCompletionModal(false)
+                              setVisitedAreaImage(null)
+                              setVisitedAreaImages([])
+                              setSelectedVisitTarget(nextVisit)
+                              setIsTracking(true)
+                              setRouteToVisitTarget(null)
+                              setRouteDistanceKm(null)
+                              setEstimatedKilometers('')
+                              let loc = null
+                              try {
+                                loc = await getCurrentLocation()
+                                if (loc && loc.latitude != null && loc.longitude != null) {
+                                  setUserLocation(loc)
                                 }
-                                const nextPos = getLatLng(nextVisit)
-                                const distStr = (loc && nextPos)
-                                  ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng))
-                                  : null
-                                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
-                                setShowVisitTargetModal(true)
-                                addNotification({
-                                  message: `📍 Next target: ${nextVisit.name}. Upload visited image when you reach.`,
-                                  type: 'info',
-                                })
-                              }}
-                              className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
-                            >
-                              <FaArrowRight className="w-4 h-4" />
-                              <span>Go to next visit</span>
-                            </button>
-                            <button
-                              onClick={async () => {
-                                setRemainingPendingAfterComplete(null)
-                                setShowCompletionModal(false)
-                                setVisitedAreaImage(null)
-                                setVisitedAreaImages([])
-                                setSelectedVisitTarget(nextVisit)
-                                setIsTracking(true)
-                                setRouteToVisitTarget(null)
-                                setRouteDistanceKm(null)
-                                setEstimatedKilometers('')
-                                let loc = null
-                                try {
-                                  loc = await getCurrentLocation()
-                                  if (loc && loc.latitude != null && loc.longitude != null) {
-                                    setUserLocation(loc)
-                                  }
-                                } catch (_) {}
-                                const getLatLng = (t) => {
-                                  const id = t._id || t.id
-                                  const resolved = resolvedVisitCoords[id]
-                                  const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-                                  const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
-                                  const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
-                                  return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
-                                }
-                                const nextPos = getLatLng(nextVisit)
-                                const distStr = (loc && nextPos)
-                                  ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng))
-                                  : null
-                                setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
-                                setShowVisitTargetModal(true)
-                                addNotification({
-                                  message: `📍 Navigating to: ${nextVisit.name}. Upload visited image when you reach.`,
-                                  type: 'info',
-                                })
-                              }}
-                              className="flex-1 px-3 py-2 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8830a] active:scale-95 transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-1.5 border-2 border-[#d8830a]/30"
-                            >
-                              <FaMapPin className="w-4 h-4 text-white" />
-                              <span>Go there</span>
-                            </button>
-                          </>
+                              } catch (_) {}
+                              const getLatLng = (t) => {
+                                const id = t._id || t.id
+                                const resolved = resolvedVisitCoords[id]
+                                const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
+                                const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
+                                const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
+                                return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
+                              }
+                              const nextPos = getLatLng(nextVisit)
+                              const distStr = (loc && nextPos)
+                                ? formatDistance(calculateDistance(loc.latitude, loc.longitude, nextPos.lat, nextPos.lng))
+                                : null
+                              setVisitTargetModalSnapshot({ distance: distStr, routeDistanceKm: null })
+                              setShowVisitTargetModal(true)
+                              addNotification({
+                                message: `📍 Next target: ${nextVisit.name}. Upload visited image when you reach.`,
+                                type: 'info',
+                              })
+                            }}
+                            className="flex-1 px-4 py-2.5 sm:py-3 bg-[#e9931c] text-white rounded-xl hover:bg-[#d8820a] active:scale-95 transition-all text-sm font-semibold shadow-lg flex items-center justify-center gap-2"
+                          >
+                            <FaArrowRight className="w-4 h-4" />
+                            <span>Go to next visit</span>
+                          </button>
                         ) : (
                           <button
                             onClick={() => {
