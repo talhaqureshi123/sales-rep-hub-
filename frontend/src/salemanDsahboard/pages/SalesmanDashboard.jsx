@@ -83,14 +83,14 @@ const SalesmanDashboard = ({ onLogout }) => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Mobile Only */}
-        <div className="bg-white shadow-md px-4 py-3 flex items-center justify-between md:hidden">
+        {/* Header - Mobile Only; z-[70] so logout stays above SalesTracking slider/panel */}
+        <div className="relative z-[70] bg-white shadow-md px-4 py-3 flex items-center justify-between md:hidden">
           <h1 className="text-lg font-bold" style={{ color: '#e9931c' }}>
             Salesman Dashboard
           </h1>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -99,8 +99,8 @@ const SalesmanDashboard = ({ onLogout }) => {
           </button>
         </div>
 
-        {/* Main Content - full height for Sales Tracking map */}
-        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${activeTab === 'sales-tracking' ? 'p-0 h-full' : ''} ${activeTab === 'sales-tracking' ? '' : 'overflow-y-auto'} ${activeTab === 'quotation' ? 'p-0' : activeTab === 'sales-tracking' ? '' : 'p-2 sm:p-4'} ${activeTab === 'sales-tracking' ? '' : 'pb-20 md:pb-24 lg:pb-4'}`}>
+        {/* Main Content - full height for Sales Tracking map; top margin on mobile so tasks/forms don't hide */}
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${activeTab === 'sales-tracking' ? 'p-0 h-full' : ''} ${activeTab === 'sales-tracking' ? '' : 'overflow-y-auto'} ${activeTab === 'quotation' ? 'p-0' : activeTab === 'sales-tracking' ? '' : 'p-2 sm:p-4'} ${activeTab === 'sales-tracking' ? '' : 'pt-6 sm:pt-4 pb-20 md:pb-24 lg:pb-4 lg:pt-4'}`}>
           {activeTab === 'sales-tracking' ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
               {renderContent()}

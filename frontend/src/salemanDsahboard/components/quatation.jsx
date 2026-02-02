@@ -1332,8 +1332,8 @@ const Quotation = () => {
 
       {/* Product Selector Modal */}
       {showProductSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(2.75rem,calc(1rem+env(safe-area-inset-top)))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-lg sm:shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             <ProductSelector onSelectProduct={handleAddFromQR} onClose={() => setShowProductSelector(false)} />
           </div>
         </div>
@@ -1355,10 +1355,10 @@ const Quotation = () => {
 
       {/* Create Quotation Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(2.75rem,calc(1rem+env(safe-area-inset-top)))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-2xl sm:shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            {/* Modal Header – extra top padding on mobile so title/subtitle not cut off */}
+            <div className="flex-shrink-0 bg-white border-b-2 border-gray-200 px-4 md:px-6 pt-5 pb-3 md:py-4 flex items-center justify-between rounded-t-2xl md:rounded-t-2xl">
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg sm:text-xl font-bold text-gray-800">
                   {editingQuotation ? 'Edit Quotation' : 'Create New Quote'}
@@ -1369,7 +1369,9 @@ const Quotation = () => {
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                type="button"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1377,8 +1379,9 @@ const Quotation = () => {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+            {/* Modal Body – scrollable so buttons stay visible at bottom */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
               {/* Customer & Salesman Section */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
@@ -1612,12 +1615,13 @@ const Quotation = () => {
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 border-t border-gray-200">
+              </div>
+              {/* Modal Footer – always visible at bottom */}
+              <div className="flex-shrink-0 flex flex-wrap gap-2 sm:gap-3 p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl sm:rounded-b-2xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={handleSaveDraft}
-                  className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-500 text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+                  className="px-3 sm:px-4 py-2 sm:py-3 min-h-[36px] sm:min-h-[44px] bg-gray-500 text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none"
                   title="Save as Draft"
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1632,7 +1636,7 @@ const Quotation = () => {
                     setEditingQuotation(null)
                     resetForm()
                   }}
-                  className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-200 text-gray-700 rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+                  className="px-3 sm:px-4 py-2 sm:py-3 min-h-[36px] sm:min-h-[44px] bg-gray-200 text-gray-700 rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none"
                   title="Cancel"
                 >
                   <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1642,24 +1646,25 @@ const Quotation = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-[#e9931c] text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 min-w-0 px-3 sm:px-6 py-2 sm:py-3 min-h-[36px] sm:min-h-[44px] bg-[#e9931c] text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
                   title={editingQuotation ? "Update Quote" : "Create Quote"}
                 >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  <span>{editingQuotation ? 'Update Quote' : 'Create Quote'}</span>
+                  <span className="truncate">{editingQuotation ? 'Update Quote' : 'Create Quote'}</span>
                 </button>
                 {!editingQuotation && (
                   <button
                     type="button"
                     onClick={handleCreateAndSendEmail}
                     disabled={!(formData.customerEmail?.trim() || (formData.customer && customers.find(c => (c._id || c.id)?.toString() === formData.customer?.toString())?.email))}
-                    className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 min-w-0 px-3 sm:px-6 py-2 sm:py-3 min-h-[36px] sm:min-h-[44px] bg-blue-600 text-white rounded-lg text-sm sm:text-base font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                     title="Create quote and send link to customer email"
                   >
-                    <FaEnvelope className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>Create Quote & Send to Email</span>
+                    <FaEnvelope className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                    <span className="hidden sm:inline truncate">Create Quote & Send to Email</span>
+                    <span className="sm:hidden">Send Email</span>
                   </button>
                 )}
               </div>
@@ -1670,10 +1675,10 @@ const Quotation = () => {
 
       {/* View Quotation Modal */}
       {showViewModal && viewingQuotation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-3xl max-h-[90vh] overflow-y-auto my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-lg sm:shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div className="sticky top-0 z-10 flex-shrink-0 bg-white border-b border-gray-200 px-4 md:px-6 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-bold text-gray-800">Quotation Details</h3>
                 <p className="text-sm text-gray-600 mt-1">Quote #{viewingQuotation.quoteNumber || viewingQuotation.quotationNumber}</p>
@@ -1684,6 +1689,7 @@ const Quotation = () => {
                   setViewingQuotation(null)
                 }}
                 className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1691,8 +1697,8 @@ const Quotation = () => {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-6">
+            {/* Modal Body – scrollable on mobile */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6">
               {/* Customer Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1817,8 +1823,8 @@ const Quotation = () => {
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
+            {/* Modal Footer – extra bottom padding on mobile so buttons sit above bottom navbar */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3 pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-4">
               <button
                 onClick={() => {
                   setShowViewModal(false)

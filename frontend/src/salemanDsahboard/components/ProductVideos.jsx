@@ -379,9 +379,9 @@ const ProductVideos = () => {
 
       {/* Video Player Modal */}
       {showVideoPlayer && playingVideo && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-5xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-white sm:bg-black/75 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-5xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <div>
                 <h3 className="text-xl font-semibold text-gray-800">{playingVideo.title}</h3>
                 {playingVideo.category && (
@@ -457,7 +457,7 @@ const ProductVideos = () => {
             )}
             
             {/* Video Info */}
-            <div className="flex items-center gap-4 text-sm text-gray-600">
+            <div className="flex items-center gap-4 text-sm text-gray-600 px-4 sm:px-6 pb-4">
               {playingVideo.duration && (
                 <span>Duration: {playingVideo.duration}</span>
               )}

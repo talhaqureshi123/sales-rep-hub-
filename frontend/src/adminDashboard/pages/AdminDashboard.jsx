@@ -93,14 +93,14 @@ const AdminDashboard = ({ onLogout }) => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Mobile Only */}
-        <div className="bg-white shadow-md px-4 py-3 flex items-center justify-between md:hidden">
-          <h1 className="text-lg font-bold" style={{ color: '#e9931c' }}>
+        {/* Header - Mobile Only; safe area for notch */}
+        <div className="bg-white shadow-md px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between md:hidden flex-shrink-0 pt-[env(safe-area-inset-top)]">
+          <h1 className="text-base sm:text-lg font-bold truncate min-w-0" style={{ color: '#e9931c' }}>
             Admin Dashboard
           </h1>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+            className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs sm:text-sm flex-shrink-0"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -109,8 +109,8 @@ const AdminDashboard = ({ onLogout }) => {
           </button>
         </div>
 
-        {/* Main Content */}
-        <div className={`flex-1 overflow-y-auto min-w-0 ${activePage === 'user-management' ? 'p-4' : 'p-4 lg:p-6'} pb-20 lg:pb-4`}>
+        {/* Main Content – top margin on mobile so tasks/forms don't hide under header; bottom clearance for nav */}
+        <div className={`flex-1 overflow-y-auto min-w-0 ${activePage === 'user-management' ? 'p-3 sm:p-4' : 'p-3 sm:p-4 lg:p-6'} pt-6 sm:pt-4 pb-24 lg:pb-4 lg:pt-4`} style={{ WebkitOverflowScrolling: 'touch' }}>
           {renderContent()}
         </div>
 

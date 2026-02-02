@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { testHubSpotConnection, syncHubSpotData, importHubSpotCustomersToDb, importHubSpotTasksToDb, pushSalesOrdersToHubSpot, pushCustomersToHubSpot, pushTasksToHubSpot } from '../../services/adminservices/hubspotService'
-import { FaCheckCircle, FaUsers, FaCalendar, FaBullseye, FaChartLine, FaCloud, FaSync, FaSpinner, FaBell, FaShoppingCart, FaLink, FaTasks, FaUserPlus } from 'react-icons/fa'
+import { testHubSpotConnection, syncHubSpotData, importHubSpotCustomersToDb, importHubSpotTasksToDb, pushSalesOrdersToHubSpot, pushCustomersToHubSpot, pushTasksToHubSpot, pushQuotationsToHubSpot } from '../../services/adminservices/hubspotService'
+import { FaCheckCircle, FaUsers, FaCloud, FaSync, FaSpinner, FaBell, FaShoppingCart, FaLink, FaTasks, FaUserPlus, FaFileInvoice } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const HubSpotConnect = () => {
@@ -13,6 +13,7 @@ const HubSpotConnect = () => {
   const [pushingOrders, setPushingOrders] = useState(false)
   const [pushingCustomers, setPushingCustomers] = useState(false)
   const [pushingTasks, setPushingTasks] = useState(false)
+  const [pushingQuotations, setPushingQuotations] = useState(false)
   const [myContactsOnly, setMyContactsOnly] = useState(false)
 
   useEffect(() => {
@@ -296,17 +297,59 @@ const HubSpotConnect = () => {
     }
   }
 
+  const handlePushQuotations = async () => {
+    setPushingQuotations(true)
+    try {
+      const result = await pushQuotationsToHubSpot(false, 0)
+      if (result.success) {
+        const d = result.data || {}
+        Swal.fire({
+          icon: 'success',
+          title: 'Pushed Quotes to HubSpot',
+          html: d.attempted !== undefined ? `
+            <div style="text-align: left;">
+              <p><strong>Attempted:</strong> ${d.attempted || 0}</p>
+              <p><strong>Synced:</strong> ${d.synced || 0}</p>
+              <p><strong>Skipped:</strong> ${d.skipped || 0}</p>
+              <p><strong>Failed:</strong> ${d.failed || 0}</p>
+            </div>
+          ` : (d.message || 'Quotations pushed to HubSpot successfully.'),
+          confirmButtonColor: '#e9931c'
+        })
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Push Quotes Failed',
+          text: result.message || 'Unknown error',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error pushing quotations:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error pushing quotes to HubSpot. Please check console for details.',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setPushingQuotations(false)
+    }
+  }
+
   // Order linking is auto-retried inside the backend push-orders endpoint now.
 
   return (
-    <div className="p-6 bg-gradient-to-br from-slate-50 via-white to-slate-50 min-h-screen">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">HubSpot Connect</h1>
-        <p className="text-gray-600">Manage your HubSpot integration and sync data</p>
-      </div>
+    <div className="flex flex-col min-h-[100dvh] sm:min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      {/* Scrollable content */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">HubSpot Connect</h1>
+          <p className="text-gray-600">Manage your HubSpot integration and sync data</p>
+        </div>
 
-      {/* Connection Status */}
+        {/* Connection Status */}
       {connectionStatus === 'connected' && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-start gap-3">
           <FaCheckCircle className="text-green-500 text-2xl mt-1" />
@@ -359,27 +402,39 @@ const HubSpotConnect = () => {
         </div>
       )}
 
-      {/* Actions Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        {/* My Contacts Only Toggle */}
-        <div className="mb-4 pb-4 border-b border-gray-200">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={myContactsOnly}
-              onChange={(e) => setMyContactsOnly(e.target.checked)}
-              className="w-5 h-5 text-[#e9931c] rounded focus:ring-[#e9931c]"
-            />
-            <div>
-              <span className="text-sm font-semibold text-gray-800">My Contacts Only</span>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Import/export only contacts assigned to you in HubSpot
-              </p>
-            </div>
-          </label>
-        </div>
+        {/* Actions Section - options only; buttons in sticky footer below */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4">
+          {/* My Contacts Only Toggle */}
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={myContactsOnly}
+                onChange={(e) => setMyContactsOnly(e.target.checked)}
+                className="w-5 h-5 text-[#e9931c] rounded focus:ring-[#e9931c]"
+              />
+              <div>
+                <span className="text-sm font-semibold text-gray-800">My Contacts Only</span>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Import/export only contacts assigned to you in HubSpot
+                </p>
+              </div>
+            </label>
+          </div>
 
-        <div className="flex flex-wrap gap-3">
+          {/* Info Text */}
+          <div className="text-sm text-gray-600 flex items-start gap-2">
+            <FaLink className="mt-0.5 text-gray-500 flex-shrink-0" />
+            <p>
+              Orders are automatically linked to the matching HubSpot Contact (by email). If a link fails, it auto-retries on the next &quot;Push Orders&quot;.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky footer - always visible on mobile */}
+      <div className="flex-shrink-0 border-t-2 border-gray-200 bg-white p-4 sm:p-6 pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
+        <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
           {/* Test Connection Button */}
           <button
             onClick={handleTestConnection}
@@ -512,14 +567,26 @@ const HubSpotConnect = () => {
               </>
             )}
           </button>
-        </div>
 
-        {/* Info Text */}
-        <div className="mt-4 text-sm text-gray-600 flex items-start gap-2">
-          <FaLink className="mt-0.5 text-gray-500" />
-          <p>
-            Orders are automatically linked to the matching HubSpot Contact (by email). If a link fails, it auto-retries on the next "Push Orders".
-          </p>
+          {/* Push Quotes Button */}
+          <button
+            onClick={handlePushQuotations}
+            disabled={pushingQuotations || connectionStatus !== 'connected'}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+            title="Push quotations (quotes) to HubSpot"
+          >
+            {pushingQuotations ? (
+              <>
+                <FaSpinner className="animate-spin" />
+                Pushing Quotes...
+              </>
+            ) : (
+              <>
+                <FaFileInvoice />
+                Push Quotes
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

@@ -1756,6 +1756,27 @@ const pushTasksToHubSpot = async (req, res) => {
   }
 };
 
+// @desc    Push existing Quotations (Quotes) to HubSpot – stub for now
+// @route   POST /api/admin/hubspot/push-quotations
+// @access  Private/Admin
+// Body: { force?: boolean, limit?: number }
+const pushQuotationsToHubSpot = async (req, res) => {
+  try {
+    // Stub: HubSpot Quotes/Deals sync not implemented yet
+    return res.status(200).json({
+      success: false,
+      message: "Push quotations to HubSpot is not implemented yet. Coming soon.",
+      data: { attempted: 0, synced: 0, skipped: 0, failed: 0 },
+    });
+  } catch (error) {
+    console.error("Error pushing quotations to HubSpot:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Error pushing quotations to HubSpot",
+    });
+  }
+};
+
 module.exports = {
   createCustomerAndOrder,
   getHubSpotCustomers,
@@ -1769,5 +1790,6 @@ module.exports = {
   pushSalesOrdersToHubSpot,
   pushCustomersToHubSpot,
   pushTasksToHubSpot,
+  pushQuotationsToHubSpot,
   repairOrderAssociations,
 };

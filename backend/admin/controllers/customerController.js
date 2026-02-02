@@ -1,6 +1,6 @@
-const Customer = require('../../database/models/Customer');
-const User = require('../../database/models/User');
-const hubspotService = require('../../services/hubspotService');
+const Customer = require("../../database/models/Customer");
+const User = require("../../database/models/User");
+const hubspotService = require("../../services/hubspotService");
 
 // @desc    Get all customers with comprehensive filters
 // @route   GET /api/admin/customers
@@ -8,9 +8,9 @@ const hubspotService = require('../../services/hubspotService');
 // Query params: status, search, city, state, company, orderPotential, monthlySpendMin, monthlySpendMax, createdBy, createdFrom, createdTo, updatedFrom, updatedTo
 const getCustomers = async (req, res) => {
   try {
-    const { 
-      salesman, 
-      status, 
+    const {
+      salesman,
+      status,
       search,
       city,
       state,
@@ -22,34 +22,34 @@ const getCustomers = async (req, res) => {
       createdFrom,
       createdTo,
       updatedFrom,
-      updatedTo
+      updatedTo,
     } = req.query;
-    
+
     const filter = {};
 
     // Status filter
-    if (status && status !== 'All') {
+    if (status && status !== "All") {
       filter.status = status;
     }
 
     // City filter
     if (city) {
-      filter.city = { $regex: city, $options: 'i' };
+      filter.city = { $regex: city, $options: "i" };
     }
 
     // State filter
     if (state) {
-      filter.state = { $regex: state, $options: 'i' };
+      filter.state = { $regex: state, $options: "i" };
     }
 
     // Company filter
     if (company) {
-      filter.company = { $regex: company, $options: 'i' };
+      filter.company = { $regex: company, $options: "i" };
     }
 
     // Order Potential filter
     if (orderPotential) {
-      filter.orderPotential = { $regex: orderPotential, $options: 'i' };
+      filter.orderPotential = { $regex: orderPotential, $options: "i" };
     }
 
     // Monthly Spend range filter
@@ -96,18 +96,18 @@ const getCustomers = async (req, res) => {
     // Search filter (searches across multiple fields)
     if (search) {
       filter.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { company: { $regex: search, $options: 'i' } },
-        { contactPerson: { $regex: search, $options: 'i' } },
-        { address: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } },
-        { state: { $regex: search, $options: 'i' } },
-        { pincode: { $regex: search, $options: 'i' } },
-        { postcode: { $regex: search, $options: 'i' } },
-        { orderPotential: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+        { company: { $regex: search, $options: "i" } },
+        { contactPerson: { $regex: search, $options: "i" } },
+        { address: { $regex: search, $options: "i" } },
+        { city: { $regex: search, $options: "i" } },
+        { state: { $regex: search, $options: "i" } },
+        { pincode: { $regex: search, $options: "i" } },
+        { postcode: { $regex: search, $options: "i" } },
+        { orderPotential: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -117,8 +117,8 @@ const getCustomers = async (req, res) => {
     }
 
     const customers = await Customer.find(filter)
-      .populate('createdBy', 'name email role')
-      .populate('allottedSalesman', 'name email')
+      .populate("createdBy", "name email role")
+      .populate("allottedSalesman", "name email")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -126,32 +126,41 @@ const getCustomers = async (req, res) => {
       count: customers.length,
       data: customers,
       filters: {
-        status: status || 'All',
+        status: status || "All",
         city: city || null,
         state: state || null,
         company: company || null,
         orderPotential: orderPotential || null,
-        monthlySpendRange: monthlySpendMin || monthlySpendMax ? {
-          min: monthlySpendMin || 0,
-          max: monthlySpendMax || null
-        } : null,
+        monthlySpendRange:
+          monthlySpendMin || monthlySpendMax
+            ? {
+                min: monthlySpendMin || 0,
+                max: monthlySpendMax || null,
+              }
+            : null,
         createdBy: createdBy || null,
         dateRanges: {
-          created: createdFrom || createdTo ? {
-            from: createdFrom || null,
-            to: createdTo || null
-          } : null,
-          updated: updatedFrom || updatedTo ? {
-            from: updatedFrom || null,
-            to: updatedTo || null
-          } : null
-        }
-      }
+          created:
+            createdFrom || createdTo
+              ? {
+                  from: createdFrom || null,
+                  to: createdTo || null,
+                }
+              : null,
+          updated:
+            updatedFrom || updatedTo
+              ? {
+                  from: updatedFrom || null,
+                  to: updatedTo || null,
+                }
+              : null,
+        },
+      },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching customers',
+      message: error.message || "Error fetching customers",
     });
   }
 };
@@ -162,13 +171,13 @@ const getCustomers = async (req, res) => {
 const getCustomer = async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id)
-      .populate('createdBy', 'name email')
-      .populate('allottedSalesman', 'name email');
+      .populate("createdBy", "name email")
+      .populate("allottedSalesman", "name email");
 
     if (!customer) {
       return res.status(404).json({
         success: false,
-        message: 'Customer not found',
+        message: "Customer not found",
       });
     }
 
@@ -179,7 +188,7 @@ const getCustomer = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching customer',
+      message: error.message || "Error fetching customer",
     });
   }
 };
@@ -200,6 +209,8 @@ const createCustomer = async (req, res) => {
       state,
       pincode,
       postcode,
+      latitude,
+      longitude,
       company,
       orderPotential,
       monthlySpend,
@@ -214,7 +225,7 @@ const createCustomer = async (req, res) => {
     if (!customerName) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide customer first name',
+        message: "Please provide customer first name",
       });
     }
 
@@ -232,46 +243,58 @@ const createCustomer = async (req, res) => {
       state: state || undefined,
       pincode: pincode || postcode || undefined,
       postcode: postcode || pincode || undefined,
+      latitude:
+        latitude != null && !isNaN(parseFloat(latitude))
+          ? parseFloat(latitude)
+          : undefined,
+      longitude:
+        longitude != null && !isNaN(parseFloat(longitude))
+          ? parseFloat(longitude)
+          : undefined,
       company: company || undefined,
       orderPotential: orderPotential || undefined,
       monthlySpend: monthlySpend || 0,
       // REMOVED: assignedSalesman - Customers and Salesmen are separate
-      status: status || 'Not Visited',
+      status: status || "Not Visited",
       notes: notes || undefined,
       competitorInfo: competitorInfo || undefined,
-      view: view || 'admin_salesman', // Default: visible to both admin and salesman
+      view: view || "admin_salesman", // Default: visible to both admin and salesman
       createdBy: req.user._id,
-      source: 'app', // Mark app-created customers as 'app' source
+      source: "app", // Mark app-created customers as 'app' source
     });
 
-    const populatedCustomer = await Customer.findById(customer._id)
-      .populate('createdBy', 'name email');
+    const populatedCustomer = await Customer.findById(customer._id).populate(
+      "createdBy",
+      "name email"
+    );
 
     // Sync to HubSpot (async, non-blocking)
-    hubspotService.createOrUpdateContact({
-      name: populatedCustomer.firstName || populatedCustomer.name,
-      email: populatedCustomer.email,
-      phone: populatedCustomer.phone,
-      address: populatedCustomer.address,
-      city: populatedCustomer.city,
-      state: populatedCustomer.state,
-      pincode: populatedCustomer.postcode || populatedCustomer.pincode,
-      company: populatedCustomer.company,
-      status: populatedCustomer.status,
-      notes: populatedCustomer.notes,
-    }).catch(error => {
-      console.error('HubSpot sync error (non-blocking):', error.message);
-    });
+    hubspotService
+      .createOrUpdateContact({
+        name: populatedCustomer.firstName || populatedCustomer.name,
+        email: populatedCustomer.email,
+        phone: populatedCustomer.phone,
+        address: populatedCustomer.address,
+        city: populatedCustomer.city,
+        state: populatedCustomer.state,
+        pincode: populatedCustomer.postcode || populatedCustomer.pincode,
+        company: populatedCustomer.company,
+        status: populatedCustomer.status,
+        notes: populatedCustomer.notes,
+      })
+      .catch((error) => {
+        console.error("HubSpot sync error (non-blocking):", error.message);
+      });
 
     res.status(201).json({
       success: true,
-      message: 'Customer created successfully',
+      message: "Customer created successfully",
       data: populatedCustomer,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error creating customer',
+      message: error.message || "Error creating customer",
     });
   }
 };
@@ -292,6 +315,8 @@ const updateCustomer = async (req, res) => {
       state,
       pincode,
       postcode,
+      latitude,
+      longitude,
       company,
       orderPotential,
       monthlySpend,
@@ -307,7 +332,7 @@ const updateCustomer = async (req, res) => {
     if (!customer) {
       return res.status(404).json({
         success: false,
-        message: 'Customer not found',
+        message: "Customer not found",
       });
     }
 
@@ -327,6 +352,16 @@ const updateCustomer = async (req, res) => {
     if (state !== undefined) customer.state = state;
     if (pincode !== undefined) customer.pincode = pincode;
     if (postcode !== undefined) customer.postcode = postcode;
+    if (latitude !== undefined)
+      customer.latitude =
+        latitude != null && !isNaN(parseFloat(latitude))
+          ? parseFloat(latitude)
+          : null;
+    if (longitude !== undefined)
+      customer.longitude =
+        longitude != null && !isNaN(parseFloat(longitude))
+          ? parseFloat(longitude)
+          : null;
     if (company !== undefined) customer.company = company;
     if (orderPotential !== undefined) customer.orderPotential = orderPotential;
     if (monthlySpend !== undefined) customer.monthlySpend = monthlySpend;
@@ -334,23 +369,24 @@ const updateCustomer = async (req, res) => {
     if (notes !== undefined) customer.notes = notes;
     if (competitorInfo !== undefined) customer.competitorInfo = competitorInfo;
     if (view !== undefined) customer.view = view;
-    if (allottedSalesman !== undefined) customer.allottedSalesman = allottedSalesman || null;
+    if (allottedSalesman !== undefined)
+      customer.allottedSalesman = allottedSalesman || null;
 
     await customer.save();
 
     const populatedCustomer = await Customer.findById(customer._id)
-      .populate('createdBy', 'name email')
-      .populate('allottedSalesman', 'name email');
+      .populate("createdBy", "name email")
+      .populate("allottedSalesman", "name email");
 
     res.status(200).json({
       success: true,
-      message: 'Customer updated successfully',
+      message: "Customer updated successfully",
       data: populatedCustomer,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error updating customer',
+      message: error.message || "Error updating customer",
     });
   }
 };
@@ -365,7 +401,7 @@ const deleteCustomer = async (req, res) => {
     if (!customer) {
       return res.status(404).json({
         success: false,
-        message: 'Customer not found',
+        message: "Customer not found",
       });
     }
 
@@ -373,12 +409,12 @@ const deleteCustomer = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Customer deleted successfully',
+      message: "Customer deleted successfully",
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error deleting customer',
+      message: error.message || "Error deleting customer",
     });
   }
 };
@@ -389,73 +425,86 @@ const deleteCustomer = async (req, res) => {
 const getCustomerDetails = async (req, res) => {
   try {
     const customerId = req.params.id;
-    
+
     // Get customer
-    const customer = await Customer.findById(customerId)
-      .populate('createdBy', 'name email role');
-    
+    const customer = await Customer.findById(customerId).populate(
+      "createdBy",
+      "name email role"
+    );
+
     if (!customer) {
       return res.status(404).json({
         success: false,
-        message: 'Customer not found',
+        message: "Customer not found",
       });
     }
 
     // Get all related data in parallel
-    const FollowUp = require('../../database/models/FollowUp');
-    const VisitTarget = require('../../database/models/VisitTarget');
-    const Sample = require('../../database/models/Sample');
-    const Quotation = require('../../database/models/Quotation');
-    const SalesOrder = require('../../database/models/SalesOrder');
+    const FollowUp = require("../../database/models/FollowUp");
+    const VisitTarget = require("../../database/models/VisitTarget");
+    const Sample = require("../../database/models/Sample");
+    const Quotation = require("../../database/models/Quotation");
+    const SalesOrder = require("../../database/models/SalesOrder");
 
     // Build customer search criteria
-    const customerName = customer.name || customer.firstName || '';
-    const customerEmail = customer.email || '';
-    
+    const customerName = customer.name || customer.firstName || "";
+    const customerEmail = customer.email || "";
+
     const [tasks, visits, samples, quotations, orders] = await Promise.all([
       // Tasks related to this customer (by customer ObjectId)
       FollowUp.find({ customer: customerId })
-        .populate('salesman', 'name email')
-        .populate('createdBy', 'name email role')
-        .populate('approvedBy', 'name email')
+        .populate("salesman", "name email")
+        .populate("createdBy", "name email role")
+        .populate("approvedBy", "name email")
         .sort({ dueDate: -1, createdAt: -1 }),
-      
+
       // Visits related to this customer (by name match - VisitTarget doesn't have customer field)
       // Search by visit name matching customer name
       VisitTarget.find({
         $or: [
-          { name: { $regex: customerName, $options: 'i' } },
-          { address: customer.address ? { $regex: customer.address, $options: 'i' } : null }
-        ].filter(condition => condition !== null && Object.values(condition)[0] !== null)
+          { name: { $regex: customerName, $options: "i" } },
+          {
+            address: customer.address
+              ? { $regex: customer.address, $options: "i" }
+              : null,
+          },
+        ].filter(
+          (condition) =>
+            condition !== null && Object.values(condition)[0] !== null
+        ),
       })
-        .populate('salesman', 'name email')
-        .populate('createdBy', 'name email role')
+        .populate("salesman", "name email")
+        .populate("createdBy", "name email role")
         .sort({ visitDate: -1, createdAt: -1 }),
-      
+
       // Samples related to this customer (by customer ObjectId)
       Sample.find({ customer: customerId })
-        .populate('salesman', 'name email')
-        .populate('product', 'name')
-        .populate('createdBy', 'name email role')
+        .populate("salesman", "name email")
+        .populate("product", "name")
+        .populate("createdBy", "name email role")
         .sort({ createdAt: -1 }),
-      
+
       // Quotations related to this customer (by customerName or customerEmail)
       // Note: Quotation model doesn't have createdBy field
       Quotation.find({
         $or: [
-          customerName ? { customerName: { $regex: customerName, $options: 'i' } } : null,
-          customerEmail ? { customerEmail: customerEmail.toLowerCase() } : null
-        ].filter(condition => condition !== null)
+          customerName
+            ? { customerName: { $regex: customerName, $options: "i" } }
+            : null,
+          customerEmail ? { customerEmail: customerEmail.toLowerCase() } : null,
+        ].filter((condition) => condition !== null),
       })
-        .populate('salesman', 'name email')
+        .populate("salesman", "name email")
         .sort({ createdAt: -1 }),
-      
+
       // Orders related to this customer (by email or customer name)
       SalesOrder.find({
         $or: [
           customerEmail ? { emailAddress: customerEmail.toLowerCase() } : null,
-          customerName ? { customerName: { $regex: customerName, $options: 'i' } } : null
-        ].filter(condition => condition !== null)
+          customerName
+            ? { customerName: { $regex: customerName, $options: "i" } }
+            : null,
+        ].filter((condition) => condition !== null),
       })
         .sort({ orderDate: -1, createdAt: -1 })
         .limit(50), // Limit to recent 50 orders
@@ -478,13 +527,13 @@ const getCustomerDetails = async (req, res) => {
           samples: samples.length,
           quotations: quotations.length,
           orders: orders.length,
-        }
+        },
       },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching customer details',
+      message: error.message || "Error fetching customer details",
     });
   }
 };
@@ -496,29 +545,33 @@ const getCustomerDetails = async (req, res) => {
 const getCustomersBySalesman = async (req, res) => {
   try {
     const { salesmanId } = req.params;
-    
+
     const salesman = await User.findById(salesmanId);
-    if (!salesman || salesman.role !== 'salesman') {
+    if (!salesman || salesman.role !== "salesman") {
       return res.status(404).json({
         success: false,
-        message: 'Salesman not found',
+        message: "Salesman not found",
       });
     }
 
     // Get customers through tasks/visits assigned to this salesman
-    const FollowUp = require('../../database/models/FollowUp');
-    const VisitTarget = require('../../database/models/VisitTarget');
-    
+    const FollowUp = require("../../database/models/FollowUp");
+    const VisitTarget = require("../../database/models/VisitTarget");
+
     // Get unique customer IDs from tasks
-    const tasks = await FollowUp.find({ salesman: salesmanId }).distinct('customer');
+    const tasks = await FollowUp.find({ salesman: salesmanId }).distinct(
+      "customer"
+    );
     // Get unique customer IDs from visits (VisitTarget uses customerId)
-    const visits = await VisitTarget.find({ salesman: salesmanId }).distinct('customerId');
-    
+    const visits = await VisitTarget.find({ salesman: salesmanId }).distinct(
+      "customerId"
+    );
+
     // Combine and get unique customer IDs
-    const customerIds = [...new Set([...tasks, ...visits].filter(id => id))];
-    
+    const customerIds = [...new Set([...tasks, ...visits].filter((id) => id))];
+
     const customers = await Customer.find({ _id: { $in: customerIds } })
-      .populate('createdBy', 'name email')
+      .populate("createdBy", "name email")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -531,13 +584,13 @@ const getCustomersBySalesman = async (req, res) => {
         },
         customers,
         count: customers.length,
-        note: 'Customers shown are those with tasks/visits assigned to this salesman',
+        note: "Customers shown are those with tasks/visits assigned to this salesman",
       },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching customers',
+      message: error.message || "Error fetching customers",
     });
   }
 };
@@ -551,5 +604,3 @@ module.exports = {
   getCustomersBySalesman,
   getCustomerDetails,
 };
-
-

@@ -69,8 +69,8 @@ const AddUserForm = ({ onSave, editingUser, onCancel, loading }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 h-full">
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 h-full min-h-0">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">
         {editingUser ? 'Edit Salesman' : 'Add Salesman'}
       </h2>
       <p className="text-gray-600 mb-6">

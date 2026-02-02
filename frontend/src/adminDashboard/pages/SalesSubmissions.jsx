@@ -600,47 +600,49 @@ const SalesSubmissions = () => {
 
       {/* Approve Modal */}
       {showApproveModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Approve Sales Order</h3>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Order Number:</strong> {selectedSubmission.soNumber || selectedSubmission.invoiceNumber || 'N/A'}
-              </p>
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Customer:</strong> {selectedSubmission.customerName}
-              </p>
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Amount:</strong> £{Number(selectedSubmission.grandTotal || 0).toFixed(2)}
-              </p>
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-md sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Approve Sales Order</h3>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Order Number:</strong> {selectedSubmission.soNumber || selectedSubmission.invoiceNumber || 'N/A'}
+                </p>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Customer:</strong> {selectedSubmission.customerName}
+                </p>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Amount:</strong> £{Number(selectedSubmission.grandTotal || 0).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Admin Notes (Optional)
+                </label>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  rows="3"
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Add any notes about this approval..."
+                />
+              </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Admin Notes (Optional)
-              </label>
-              <textarea
-                value={adminNotes}
-                onChange={(e) => setAdminNotes(e.target.value)}
-                rows="3"
-                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                placeholder="Add any notes about this approval..."
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
+            <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
               <button
                 onClick={() => {
                   setShowApproveModal(false)
                   setSelectedSubmission(null)
                   setAdminNotes('')
                 }}
-                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApprove}
                 disabled={loading}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
                   <>
@@ -661,46 +663,48 @@ const SalesSubmissions = () => {
 
       {/* Reject Modal */}
       {showRejectModal && selectedSubmission && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Reject Sales Order</h3>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Order Number:</strong> {selectedSubmission.soNumber || selectedSubmission.invoiceNumber || 'N/A'}
-              </p>
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Customer:</strong> {selectedSubmission.customerName}
-              </p>
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Amount:</strong> £{Number(selectedSubmission.grandTotal || 0).toFixed(2)}
-              </p>
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-md sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Reject Sales Order</h3>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Order Number:</strong> {selectedSubmission.soNumber || selectedSubmission.invoiceNumber || 'N/A'}
+                </p>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Customer:</strong> {selectedSubmission.customerName}
+                </p>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Amount:</strong> £{Number(selectedSubmission.grandTotal || 0).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rejection Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  rows="3"
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Please provide a reason for rejection..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Admin Notes (Optional)
+                </label>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  rows="2"
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  placeholder="Add any additional notes..."
+                />
+              </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Rejection Reason <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                rows="3"
-                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                placeholder="Please provide a reason for rejection..."
-                required
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Admin Notes (Optional)
-              </label>
-              <textarea
-                value={adminNotes}
-                onChange={(e) => setAdminNotes(e.target.value)}
-                rows="2"
-                className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                placeholder="Add any additional notes..."
-              />
-            </div>
-            <div className="flex gap-3 justify-end">
+            <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
               <button
                 onClick={() => {
                   setShowRejectModal(false)
@@ -708,14 +712,14 @@ const SalesSubmissions = () => {
                   setRejectionReason('')
                   setAdminNotes('')
                 }}
-                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReject}
                 disabled={loading || !rejectionReason.trim()}
-                className="px-6 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
                   <>

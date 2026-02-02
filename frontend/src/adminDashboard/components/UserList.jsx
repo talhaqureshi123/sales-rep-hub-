@@ -2,16 +2,32 @@ import { useState } from 'react'
 import { generatePasswordLink } from '../../services/adminservices/userService'
 import { FaEdit, FaTrash, FaLink } from 'react-icons/fa'
 
-const UserList = ({ users, onEdit, onDelete, loading }) => {
+const UserList = ({ users, onEdit, onDelete, onAddClick, loading }) => {
   const [passwordLink, setPasswordLink] = useState(null)
   const [generatingLink, setGeneratingLink] = useState(null)
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 h-full">
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">Salesman Management</h2>
-      <p className="text-gray-600 mb-6">Salesman List</p>
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 h-full min-h-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">Salesman Management</h2>
+          <p className="text-gray-600 text-sm sm:text-base">Salesman List</p>
+        </div>
+        {onAddClick && (
+          <button
+            type="button"
+            onClick={onAddClick}
+            className="w-full sm:w-auto order-first sm:order-none text-white font-semibold py-2.5 px-4 rounded-lg shadow hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+            style={{ backgroundColor: '#e9931c' }}
+            disabled={loading}
+          >
+            <span className="text-lg leading-none">+</span>
+            <span>Add Salesman</span>
+          </button>
+        )}
+      </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="overflow-x-auto -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <table className="w-full min-w-[280px]">
           <thead>
             <tr className="border-b-2 border-gray-200">
               <th className="text-left py-3 px-4 text-gray-700 font-semibold">Name / Email</th>

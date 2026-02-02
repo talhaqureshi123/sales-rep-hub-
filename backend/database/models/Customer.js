@@ -1,9 +1,9 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const customerSchema = new mongoose.Schema({
   firstName: {
     type: String,
-    required: [true, 'Please provide first name'],
+    required: [true, "Please provide first name"],
     trim: true,
   },
   name: {
@@ -18,7 +18,7 @@ const customerSchema = new mongoose.Schema({
     type: String,
     trim: true,
     lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
+    match: [/^\S+@\S+\.\S+$/, "Please provide a valid email"],
   },
   phone: {
     type: String,
@@ -44,6 +44,14 @@ const customerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  latitude: {
+    type: Number,
+    default: null,
+  },
+  longitude: {
+    type: Number,
+    default: null,
+  },
   company: {
     type: String,
     trim: true,
@@ -60,13 +68,21 @@ const customerSchema = new mongoose.Schema({
   // Simple allotment only (Customer Allotment page) – not a task; just links customer to salesman
   allottedSalesman: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     default: null,
   },
   status: {
     type: String,
-    enum: ['Active', 'Inactive', 'Not Visited', 'Visited', 'Follow-up Needed', 'Qualified Lead', 'Not Interested'],
-    default: 'Not Visited',
+    enum: [
+      "Active",
+      "Inactive",
+      "Not Visited",
+      "Visited",
+      "Follow-up Needed",
+      "Qualified Lead",
+      "Not Interested",
+    ],
+    default: "Not Visited",
   },
   notes: {
     type: String,
@@ -94,18 +110,18 @@ const customerSchema = new mongoose.Schema({
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: "User",
     required: true,
   },
   source: {
     type: String,
-    enum: ['app', 'hubspot'],
-    default: 'app',
+    enum: ["app", "hubspot"],
+    default: "app",
   },
   view: {
     type: String,
-    enum: ['admin', 'salesman', 'admin_salesman'],
-    default: 'admin_salesman', // Default: visible to both admin and salesman
+    enum: ["admin", "salesman", "admin_salesman"],
+    default: "admin_salesman", // Default: visible to both admin and salesman
   },
   createdAt: {
     type: Date,
@@ -118,7 +134,7 @@ const customerSchema = new mongoose.Schema({
 });
 
 // Update updatedAt before saving
-customerSchema.pre('save', async function () {
+customerSchema.pre("save", async function () {
   this.updatedAt = new Date();
 });
 
@@ -127,6 +143,4 @@ customerSchema.index({ createdBy: 1 });
 customerSchema.index({ status: 1 });
 customerSchema.index({ allottedSalesman: 1 });
 
-module.exports = mongoose.model('Customer', customerSchema);
-
-
+module.exports = mongoose.model("Customer", customerSchema);

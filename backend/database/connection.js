@@ -4,17 +4,19 @@ const config = require("../config");
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(config.MONGODB_URI, {
-      serverSelectionTimeoutMS: 30000, // 30 seconds
-      socketTimeoutMS: 45000, // 45 seconds
-      connectTimeoutMS: 30000, // 30 seconds
+      serverSelectionTimeoutMS: 60000, // 60 seconds – slow networks / Atlas
+      socketTimeoutMS: 60000, // 60 seconds
+      connectTimeoutMS: 60000, // 60 seconds
       retryWrites: true,
       retryReads: true,
+      // Use primary only – avoids timeouts to replica secondaries (e.g. 159.41.181.27)
+      readPreference: "primary",
       // MongoDB Atlas specific options
       tls: true,
       tlsAllowInvalidCertificates: false,
-      // Connection pool options
+      // Smaller pool – fewer connections to replica members
       maxPoolSize: 10,
-      minPoolSize: 5,
+      minPoolSize: 1,
       // Heartbeat to keep connection alive
       heartbeatFrequencyMS: 10000,
     });

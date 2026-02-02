@@ -1512,9 +1512,9 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
 
       {/* Product selection modal – sahi se product select karne ke liye */}
       {productModalForIndex !== null && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4" onClick={() => setProductModalForIndex(null)}>
+        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" onClick={() => setProductModalForIndex(null)}>
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
+            className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-lg sm:min-h-0 sm:max-h-[85vh] sm:rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b border-gray-200">

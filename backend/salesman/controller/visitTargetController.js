@@ -267,6 +267,7 @@ const getVisitTarget = async (req, res) => {
 };
 
 // ================= UPDATE STATUS =================
+// Uses findOneAndUpdate (not find + save) to avoid Mongoose VersionError when __v has changed (e.g. concurrent updates).
 const updateVisitTargetStatus = async (req, res) => {
   try {
     const {
@@ -284,49 +285,27 @@ const updateVisitTargetStatus = async (req, res) => {
       quotationId,
     } = req.body;
 
-    const visitTarget = await VisitTarget.findOne({
-      _id: req.params.id,
-      salesman: req.user._id,
-    });
+    const filter = { _id: req.params.id, salesman: req.user._id };
+    const existing = await VisitTarget.findOne(filter);
 
-    if (!visitTarget) {
+    if (!existing) {
       return res
         .status(404)
         .json({ success: false, message: "Visit target not found" });
     }
 
     // Enforce: salesman can only act on approved targets
-    if (visitTarget.approvalStatus && visitTarget.approvalStatus !== "Approved") {
+    if (existing.approvalStatus && existing.approvalStatus !== "Approved") {
       return res.status(403).json({
         success: false,
         message: "This visit is not approved yet. Please wait for admin approval.",
       });
     }
 
-    const previousStatus = visitTarget.status;
-    const nextStatus = status || visitTarget.status;
+    const previousStatus = existing.status;
+    const nextStatus = status || existing.status;
 
-    // STATUS
-    if (status) {
-      visitTarget.status = status;
-
-      if (status === "Completed" && previousStatus !== "Completed") {
-        visitTarget.completedAt = new Date();
-      }
-
-      if (status !== "Completed") {
-        visitTarget.completedAt = undefined;
-      }
-    }
-
-    // BASIC FIELDS
-    if (notes !== undefined) visitTarget.notes = notes;
-    if (comments !== undefined) visitTarget.comments = comments;
-    if (visitDate !== undefined) visitTarget.visitDate = visitDate;
-
-    // KM VALIDATION
-    // Only validate if both starting and ending kilometers are provided AND not null
-    // For individual visit completion, endingKilometers should not be sent (will be set at shift end)
+    // KM VALIDATION (before building update)
     if (
       startingKilometers !== undefined &&
       endingKilometers !== undefined &&
@@ -340,76 +319,90 @@ const updateVisitTargetStatus = async (req, res) => {
       });
     }
 
-    if (startingKilometers !== undefined) {
-      visitTarget.startingKilometers = startingKilometers;
-    }
-
-    if (endingKilometers !== undefined) {
-      visitTarget.endingKilometers = endingKilometers;
-    }
-
-    // AUTO CALCULATE ACTUAL KM
-    if (startingKilometers !== undefined && endingKilometers !== undefined) {
-      visitTarget.actualKilometers = endingKilometers - startingKilometers;
-    }
-
-    if (estimatedKilometers !== undefined) {
-      visitTarget.estimatedKilometers = estimatedKilometers;
-    }
-
-    if (meterImage !== undefined) visitTarget.meterImage = meterImage;
-    
-    // Handle multiple visited area images (dedupe so no duplicate images)
-    if (visitedAreaImages !== undefined && Array.isArray(visitedAreaImages)) {
-      const filtered = visitedAreaImages.filter(img => img && img.trim() !== '');
-      visitTarget.visitedAreaImages = [...new Set(filtered)];
-      visitTarget.visitedAreaImage = visitTarget.visitedAreaImages[0] || null;
-    } else if (visitedAreaImage !== undefined) {
-      // If single image is provided, add it to array and set as primary
-      visitTarget.visitedAreaImage = visitedAreaImage;
-      if (visitedAreaImage && !visitTarget.visitedAreaImages.includes(visitedAreaImage)) {
-        visitTarget.visitedAreaImages = [visitedAreaImage, ...visitTarget.visitedAreaImages.filter(img => img !== visitedAreaImage)];
-      }
-    }
-    
-    if (trackingId !== undefined) visitTarget.trackingId = trackingId;
-
-    // Enforce mandatory fields for completion (shift photos + KM)
+    // Enforce mandatory fields for completion (shift photos)
     if (nextStatus === "Completed" && previousStatus !== "Completed") {
-      // Check if we have at least one visited area image (either single or in array)
-      const hasVisitedAreaImage = (visitedAreaImage || visitTarget.visitedAreaImage) || 
-                                  (Array.isArray(visitedAreaImages) && visitedAreaImages.length > 0) ||
-                                  (Array.isArray(visitTarget.visitedAreaImages) && visitTarget.visitedAreaImages.length > 0);
+      const hasVisitedAreaImage =
+        (visitedAreaImage || existing.visitedAreaImage) ||
+        (Array.isArray(visitedAreaImages) && visitedAreaImages.length > 0) ||
+        (Array.isArray(existing.visitedAreaImages) && existing.visitedAreaImages.length > 0);
       if (!hasVisitedAreaImage) {
         return res.status(400).json({
           success: false,
           message: "Visited area image is required to complete the visit",
         });
       }
+    }
 
-      const finalEstimated =
-        estimatedKilometers !== undefined
-          ? Number(estimatedKilometers)
-          : Number(visitTarget.estimatedKilometers || 0);
-      if (!finalEstimated || Number.isNaN(finalEstimated) || finalEstimated <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Estimated kilometers is required to complete the visit",
-        });
+    // Build update object (atomic update avoids __v version conflict)
+    const update = {};
+
+    if (status) {
+      update.status = status;
+      if (status === "Completed" && previousStatus !== "Completed") {
+        update.completedAt = new Date();
+      }
+      if (status !== "Completed") {
+        update.completedAt = null;
+      }
+    }
+    if (notes !== undefined) update.notes = notes;
+    if (comments !== undefined) update.comments = comments;
+    if (visitDate !== undefined) update.visitDate = visitDate;
+
+    if (startingKilometers !== undefined) update.startingKilometers = startingKilometers;
+    if (endingKilometers !== undefined) update.endingKilometers = endingKilometers;
+    if (startingKilometers !== undefined && endingKilometers !== undefined) {
+      update.actualKilometers = endingKilometers - startingKilometers;
+    }
+    if (estimatedKilometers !== undefined) {
+      const num = Number(estimatedKilometers);
+      update.estimatedKilometers = (typeof num === "number" && !Number.isNaN(num) && num >= 0) ? num : 0;
+    }
+    if (meterImage !== undefined) update.meterImage = meterImage;
+
+    if (visitedAreaImages !== undefined && Array.isArray(visitedAreaImages)) {
+      const filtered = visitedAreaImages.filter((img) => img && img.trim() !== "");
+      update.visitedAreaImages = [...new Set(filtered)];
+      update.visitedAreaImage = update.visitedAreaImages[0] || null;
+    } else if (visitedAreaImage !== undefined) {
+      update.visitedAreaImage = visitedAreaImage;
+      const prevArr = existing.visitedAreaImages || [];
+      if (visitedAreaImage && !prevArr.includes(visitedAreaImage)) {
+        update.visitedAreaImages = [visitedAreaImage, ...prevArr.filter((img) => img !== visitedAreaImage)];
       }
     }
 
-    if (quotationId !== undefined) {
-      visitTarget.quotationId = quotationId;
-      visitTarget.quotationCreated = !!quotationId;
+    if (trackingId !== undefined) update.trackingId = trackingId;
+
+    if (nextStatus === "Completed" && previousStatus !== "Completed") {
+      const finalEstimated =
+        estimatedKilometers !== undefined
+          ? Number(estimatedKilometers)
+          : Number(existing.estimatedKilometers ?? 0);
+      update.estimatedKilometers =
+        finalEstimated !== undefined && !Number.isNaN(finalEstimated) && finalEstimated >= 0
+          ? finalEstimated
+          : 0;
     }
 
-    await visitTarget.save();
+    if (quotationId !== undefined) {
+      update.quotationId = quotationId;
+      update.quotationCreated = !!quotationId;
+    }
 
-    // Return plain object to avoid serialization issues
+    const visitTarget = await VisitTarget.findOneAndUpdate(
+      filter,
+      { $set: update },
+      { new: true, runValidators: true }
+    );
+
+    if (!visitTarget) {
+      return res.status(404).json({ success: false, message: "Visit target not found" });
+    }
+
     const data = visitTarget.toObject ? visitTarget.toObject() : visitTarget;
 
-    // HUBSPOT COMPLETION NOTE
+    // HUBSPOT COMPLETION NOTE (fire-and-forget)
     if (status === "Completed" && previousStatus !== "Completed") {
       (async () => {
         try {
@@ -420,19 +413,12 @@ const updateVisitTargetStatus = async (req, res) => {
               { address: { $regex: visitTarget.address || "", $options: "i" } },
             ],
           });
-
           if (!customer?.email) return;
-
-          const contactId = await hubspotService.findContactByEmail(
-            customer.email
-          );
+          const contactId = await hubspotService.findContactByEmail(customer.email);
           if (!contactId) return;
-
           await hubspotService.createNote(
             contactId,
-            `Visit Completed: ${visitTarget.name}\nKM: ${
-              visitTarget.actualKilometers || 0
-            }`,
+            `Visit Completed: ${visitTarget.name}\nKM: ${visitTarget.actualKilometers || 0}`,
             "VISIT_COMPLETED"
           );
         } catch (err) {

@@ -558,15 +558,15 @@ const SalesOrders = () => {
 
       {/* View Sales Order Modal */}
       {viewOrderId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-3xl w-full max-h-[90vh] overflow-auto my-auto">
-            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" aria-modal="true">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 border-b bg-white">
               <h3 className="text-xl font-semibold text-gray-800">View Sales Order</h3>
               <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               {loadingView ? (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#e9931c] border-t-transparent mx-auto"></div>
@@ -683,23 +683,26 @@ const SalesOrders = () => {
 
       {/* Create Order Modal (Legacy - can be removed) */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" aria-modal="true">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800">Create New Order</h3>
               <button
+                type="button"
                 onClick={() => {
                   setShowCreateModal(false)
                   resetForm()
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleCreateOrder} className="space-y-4">
+            <form onSubmit={handleCreateOrder} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Order Number (Auto-generated if empty)</label>
@@ -797,20 +800,21 @@ const SalesOrders = () => {
                   />
                 </div>
               </div>
-              <div className="flex gap-3 justify-end">
+              </div>
+              <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false)
                     resetForm()
                   }}
-                  className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                  className="px-3 py-1.5 text-sm min-h-[36px] sm:px-6 sm:py-2.5 sm:min-h-[44px] sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
+                  className="px-3 py-1.5 text-sm min-h-[36px] sm:px-6 sm:py-2.5 sm:min-h-[44px] sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
                 >
                   Create Order
                 </button>

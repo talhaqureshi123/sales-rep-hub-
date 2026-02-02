@@ -23,7 +23,7 @@ import {
   FaCrosshairs,
   FaInfoCircle
 } from 'react-icons/fa'
-import GoogleMapView from '../../universalcomponents/GoogleMapView'
+import LeafletMapView from '../../universalcomponents/LeafletMapView'
 import { getLatestSalesmenLocations } from '../../services/adminservices/locationService'
 import { getFollowUps } from '../../services/adminservices/followUpService'
 import { getVisitTargets } from '../../services/adminservices/visitTargetService'
@@ -447,7 +447,7 @@ const LiveTracking = () => {
           {/* Map Container - Always show map so it loads; markers appear when salesman locations exist */}
           <div className="flex-1 bg-gray-100 relative" style={{ minHeight: '500px', height: '100%', width: '100%' }}>
             <div style={{ height: '100%', width: '100%', position: 'relative' }}>
-              <GoogleMapView
+              <LeafletMapView
                 key="live-tracking-map"
                 milestones={[]}
                 visitTargets={mapMarkers}
@@ -728,8 +728,8 @@ const LiveTracking = () => {
 
       {/* Salesman Detail Modal */}
       {showDetailModal && selectedSalesman && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-6xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-6xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
               <div className="flex items-center justify-between">

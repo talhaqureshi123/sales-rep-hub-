@@ -1161,8 +1161,8 @@ const VisitTargetManagement = () => {
 
         {/* Map Picker Modal */}
         {showMapPicker && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-3 sm:p-4 md:p-5 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
+          <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[100] p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+            <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto">
               <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-800">Select Location on Map</h3>
                 <button

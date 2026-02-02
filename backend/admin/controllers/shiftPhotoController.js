@@ -96,12 +96,26 @@ const syncPhotosFromTracking = async () => {
       }
     }
 
-    // Also sync from VisitTargets that have meter images
+    // Also sync from VisitTargets: meter images and visited area images
     const visitTargets = await VisitTarget.find({
-      meterImage: { $exists: true, $ne: null, $ne: '' },
+      $or: [
+        { meterImage: { $exists: true, $ne: null, $ne: '' } },
+        { visitedAreaImage: { $exists: true, $ne: null, $ne: '' } },
+        { visitedAreaImages: { $exists: true, $ne: [], $not: { $size: 0 } } },
+      ],
     })
       .populate('salesman', 'name email')
       .sort({ createdAt: -1 });
+
+    const visitLocation = (vt) => ({
+      latitude: vt.latitude,
+      longitude: vt.longitude,
+      address: vt.address,
+      city: vt.city,
+      state: vt.state,
+    });
+    const visitShiftDate = (vt) =>
+      vt.completedAt || vt.visitDate || vt.updatedAt || vt.createdAt;
 
     for (const visitTarget of visitTargets) {
       const salesmanId = visitTarget.salesman?._id || visitTarget.salesman;
@@ -133,20 +147,46 @@ const syncPhotosFromTracking = async () => {
               photoType: 'Meter',
               imageUrl: visitTarget.meterImage,
               meterReading: meterReading,
-              location: {
-                latitude: visitTarget.latitude,
-                longitude: visitTarget.longitude,
-                address: visitTarget.address,
-                city: visitTarget.city,
-                state: visitTarget.state,
-              },
+              location: visitLocation(visitTarget),
               relatedVisitTarget: visitTarget._id,
-              shiftDate: visitTarget.completedAt || visitTarget.visitDate || visitTarget.updatedAt || visitTarget.createdAt,
+              shiftDate: visitShiftDate(visitTarget),
             },
             { upsert: true, new: true }
           );
           syncedCount++;
         }
+      }
+
+      // Sync visited area images (single + array, deduped)
+      const visitedUrls = new Set();
+      if (visitTarget.visitedAreaImage) visitedUrls.add(visitTarget.visitedAreaImage);
+      if (visitTarget.visitedAreaImages && visitTarget.visitedAreaImages.length) {
+        visitTarget.visitedAreaImages.forEach((url) => visitedUrls.add(url));
+      }
+      for (const imageUrl of visitedUrls) {
+        if (!imageUrl) continue;
+        const existingVisitPhoto = existingPhotos.find(
+          p => p.photoType === 'Visit' && p.imageUrl === imageUrl
+        );
+        if (existingVisitPhoto) continue;
+
+        await ShiftPhoto.findOneAndUpdate(
+          {
+            relatedVisitTarget: visitTarget._id,
+            photoType: 'Visit',
+            imageUrl,
+          },
+          {
+            salesman: salesmanId,
+            photoType: 'Visit',
+            imageUrl,
+            location: visitLocation(visitTarget),
+            relatedVisitTarget: visitTarget._id,
+            shiftDate: visitShiftDate(visitTarget),
+          },
+          { upsert: true, new: true }
+        );
+        syncedCount++;
       }
     }
 

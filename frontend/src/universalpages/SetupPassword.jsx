@@ -215,7 +215,7 @@ const SetupPassword = () => {
 
   if (verifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
+      <div className="min-h-[100dvh] overflow-y-auto bg-gradient-to-br from-orange-50 to-orange-100 flex flex-col items-center justify-start sm:justify-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] px-4 py-6">
         <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#e9931c] mx-auto"></div>
@@ -228,7 +228,7 @@ const SetupPassword = () => {
 
   if (errors.token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
+      <div className="min-h-[100dvh] overflow-y-auto bg-gradient-to-br from-orange-50 to-orange-100 flex flex-col items-center justify-start sm:justify-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] px-4 py-6">
         <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
           <div className="text-center">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -253,8 +253,8 @@ const SetupPassword = () => {
   // OTP Verification Step
   if (step === 'otp' && userInfo) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100 py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-6 sm:space-y-8">
+      <div className="min-h-[100dvh] overflow-y-auto bg-gradient-to-br from-orange-50 to-orange-100 flex flex-col items-center justify-start sm:justify-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] py-4 sm:py-8 px-4 sm:px-6 lg:px-8" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="max-w-md w-full space-y-6 sm:space-y-8 flex-shrink-0">
           <div className="bg-white rounded-lg sm:rounded-xl shadow-xl p-4 sm:p-6 md:p-8">
             {/* Header */}
             <div className="text-center mb-6 sm:mb-8">
@@ -349,8 +349,8 @@ const SetupPassword = () => {
 
   // Password Setup Step
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100 py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-6 sm:space-y-8">
+    <div className="min-h-[100dvh] overflow-y-auto bg-gradient-to-br from-orange-50 to-orange-100 flex flex-col items-center justify-start sm:justify-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] py-4 sm:py-8 px-4 sm:px-6 lg:px-8" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="max-w-md w-full space-y-6 sm:space-y-8 flex-shrink-0">
         <div className="bg-white rounded-lg sm:rounded-xl shadow-xl p-4 sm:p-6 md:p-8">
           {/* Header */}
           <div className="text-center mb-6 sm:mb-8">

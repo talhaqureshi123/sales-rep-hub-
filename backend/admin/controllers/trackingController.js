@@ -1,5 +1,5 @@
-const Tracking = require('../../database/models/Tracking');
-const VisitTarget = require('../../database/models/VisitTarget');
+const Tracking = require("../../database/models/Tracking");
+const VisitTarget = require("../../database/models/VisitTarget");
 
 // @desc    Get all tracking sessions (shifts) for admin
 // @route   GET /api/admin/tracking
@@ -9,23 +9,25 @@ const getAllTracking = async (req, res) => {
     const { salesman, status, date, search } = req.query;
     const filter = {};
 
-    if (salesman && salesman !== 'All') {
+    if (salesman && salesman !== "All") {
       filter.salesman = salesman;
     }
-    if (status && status !== 'All') {
+    if (status && status !== "All") {
       filter.status = status;
     }
     if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
+      const d = new Date(date);
+      const y = d.getUTCFullYear();
+      const m = d.getUTCMonth();
+      const day = d.getUTCDate();
+      const startDate = new Date(Date.UTC(y, m, day, 0, 0, 0, 0));
+      const endDate = new Date(Date.UTC(y, m, day, 23, 59, 59, 999));
       filter.createdAt = { $gte: startDate, $lte: endDate };
     }
 
     const trackings = await Tracking.find(filter)
-      .populate('salesman', 'name email')
-      .populate('visitTarget', 'name address visitedAreaImage')
+      .populate("salesman", "name email")
+      .populate("visitTarget", "name address visitedAreaImage")
       .sort({ createdAt: -1 });
 
     // Get visit counts and visited area images for each tracking session
@@ -33,24 +35,36 @@ const getAllTracking = async (req, res) => {
       trackings.map(async (tracking) => {
         const trackingIdTargets = await VisitTarget.find({
           trackingId: tracking._id,
-        }).select('visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate');
+        }).select(
+          "visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate"
+        );
 
         const salesmanId = tracking.salesman?._id || tracking.salesman;
         const shiftDate = tracking.startedAt || tracking.createdAt;
-        const shiftStart = new Date(shiftDate);
-        shiftStart.setHours(0, 0, 0, 0);
-        const shiftEnd = new Date(shiftDate);
-        shiftEnd.setHours(23, 59, 59, 999);
+        // Use UTC day boundaries so deployed (UTC) and local behave the same; visits show correctly on Shift Photos
+        const d = new Date(shiftDate);
+        const y = d.getUTCFullYear();
+        const m = d.getUTCMonth();
+        const day = d.getUTCDate();
+        const shiftStart = new Date(Date.UTC(y, m, day, 0, 0, 0, 0));
+        const shiftEnd = new Date(Date.UTC(y, m, day, 23, 59, 59, 999));
 
         const dateTargets = salesmanId
           ? await VisitTarget.find({
               salesman: salesmanId,
-              visitDate: { $gte: shiftStart, $lte: shiftEnd },
-            }).select('visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate')
+              $or: [
+                { visitDate: { $gte: shiftStart, $lte: shiftEnd } },
+                { completedAt: { $gte: shiftStart, $lte: shiftEnd } },
+              ],
+            }).select(
+              "visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate"
+            )
           : [];
 
         const visitTargetsMap = new Map();
-        trackingIdTargets.forEach((vt) => visitTargetsMap.set(String(vt._id), vt));
+        trackingIdTargets.forEach((vt) =>
+          visitTargetsMap.set(String(vt._id), vt)
+        );
         dateTargets.forEach((vt) => {
           const id = String(vt._id);
           if (!visitTargetsMap.has(id)) {
@@ -68,9 +82,13 @@ const getAllTracking = async (req, res) => {
         const visitedAreaImagesFromVisits = [];
         visitTargets
           .filter((vt) => {
-            // Include if has single image or array of images
-            return (vt.visitedAreaImage && vt.visitedAreaImage.trim() !== '') || 
-                   (Array.isArray(vt.visitedAreaImages) && vt.visitedAreaImages.length > 0);
+            const hasImages =
+              (vt.visitedAreaImage && vt.visitedAreaImage.trim() !== "") ||
+              (Array.isArray(vt.visitedAreaImages) &&
+                vt.visitedAreaImages.length > 0);
+            const isCompleted =
+              vt.status && String(vt.status).toLowerCase() === "completed";
+            return hasImages && isCompleted;
           })
           .sort((a, b) => {
             const ta = new Date(a.completedAt || a.updatedAt || 0).getTime();
@@ -79,27 +97,41 @@ const getAllTracking = async (req, res) => {
           })
           .forEach((vt) => {
             // Add images from visitedAreaImages array if exists
-            if (Array.isArray(vt.visitedAreaImages) && vt.visitedAreaImages.length > 0) {
-              vt.visitedAreaImages.forEach(img => {
-                if (img && img.trim() !== '' && !visitedAreaImagesFromVisits.includes(img)) {
+            if (
+              Array.isArray(vt.visitedAreaImages) &&
+              vt.visitedAreaImages.length > 0
+            ) {
+              vt.visitedAreaImages.forEach((img) => {
+                if (
+                  img &&
+                  img.trim() !== "" &&
+                  !visitedAreaImagesFromVisits.includes(img)
+                ) {
                   visitedAreaImagesFromVisits.push(img);
                 }
               });
             }
             // Also add single visitedAreaImage if not already in array
-            if (vt.visitedAreaImage && vt.visitedAreaImage.trim() !== '' && !visitedAreaImagesFromVisits.includes(vt.visitedAreaImage)) {
+            if (
+              vt.visitedAreaImage &&
+              vt.visitedAreaImage.trim() !== "" &&
+              !visitedAreaImagesFromVisits.includes(vt.visitedAreaImage)
+            ) {
               visitedAreaImagesFromVisits.push(vt.visitedAreaImage);
             }
           });
 
         // Include Tracking's own visitedAreaImage (from sample track start/stop) so it shows even without visit targets
         const trackingVisitedImage = tracking.visitedAreaImage || null;
-        const visitedAreaImages = trackingVisitedImage && !visitedAreaImagesFromVisits.includes(trackingVisitedImage)
-          ? [trackingVisitedImage, ...visitedAreaImagesFromVisits]
-          : visitedAreaImagesFromVisits;
+        const visitedAreaImages =
+          trackingVisitedImage &&
+          !visitedAreaImagesFromVisits.includes(trackingVisitedImage)
+            ? [trackingVisitedImage, ...visitedAreaImagesFromVisits]
+            : visitedAreaImagesFromVisits;
 
         // Keep a single primary image for backward compatibility (use latest)
-        const visitedAreaImage = visitedAreaImages[0] || trackingVisitedImage || null;
+        const visitedAreaImage =
+          visitedAreaImages[0] || trackingVisitedImage || null;
 
         // Sum estimated kilometers for the shift
         const estimatedKilometers = visitTargets.reduce((sum, vt) => {
@@ -116,7 +148,8 @@ const getAllTracking = async (req, res) => {
         return {
           ...tracking.toObject(),
           visitCount,
-          visitedAreaImage: visitedAreaImage || tracking.visitedAreaImage || null,
+          visitedAreaImage:
+            visitedAreaImage || tracking.visitedAreaImage || null,
           visitedAreaImages,
           estimatedKilometers,
           actualKilometers,
@@ -133,7 +166,7 @@ const getAllTracking = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching tracking sessions',
+      message: error.message || "Error fetching tracking sessions",
     });
   }
 };
@@ -144,13 +177,13 @@ const getAllTracking = async (req, res) => {
 const getTracking = async (req, res) => {
   try {
     const tracking = await Tracking.findById(req.params.id)
-      .populate('salesman', 'name email phone')
-      .populate('visitTarget', 'name address city');
+      .populate("salesman", "name email phone")
+      .populate("visitTarget", "name address city");
 
     if (!tracking) {
       return res.status(404).json({
         success: false,
-        message: 'Tracking session not found',
+        message: "Tracking session not found",
       });
     }
 
@@ -169,7 +202,7 @@ const getTracking = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching tracking session',
+      message: error.message || "Error fetching tracking session",
     });
   }
 };
@@ -180,9 +213,9 @@ const getTracking = async (req, res) => {
 const getActiveTrackingSessions = async (req, res) => {
   try {
     const activeTrackings = await Tracking.find({
-      status: 'active',
+      status: "active",
     })
-      .populate('salesman', 'name email phone')
+      .populate("salesman", "name email phone")
       .sort({ startedAt: -1 });
 
     // Calculate total distance for all active sessions
@@ -199,7 +232,7 @@ const getActiveTrackingSessions = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message || 'Error fetching active tracking sessions',
+      message: error.message || "Error fetching active tracking sessions",
     });
   }
 };

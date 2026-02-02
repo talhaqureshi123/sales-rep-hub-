@@ -508,8 +508,8 @@ const FollowUpManager = () => {
 
       {/* Create/Edit Follow-Up Modal */}
       {(showCreateModal || showEditModal) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg p-4 sm:p-6 overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">
                 {showEditModal ? 'Edit Follow-Up' : 'Create New Follow-Up'}
@@ -635,7 +635,7 @@ const FollowUpManager = () => {
                   />
                 </div>
               </div>
-              <div className="flex gap-3 justify-end">
+              <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={() => {
@@ -643,14 +643,14 @@ const FollowUpManager = () => {
                     setShowEditModal(false)
                     resetForm()
                   }}
-                  className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Processing...' : showEditModal ? 'Update Follow-Up' : 'Create Follow-Up'}
                 </button>

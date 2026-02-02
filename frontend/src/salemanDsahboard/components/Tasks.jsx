@@ -968,16 +968,16 @@ const Tasks = () => {
     search.trim() !== ''
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header with Record Count */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-2">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold" style={{ color: appTheme.text.primary }}>Tasks</h2>
+    <div className="min-w-0 space-y-4 sm:space-y-6 pt-2 lg:pt-0">
+      {/* Header – mobile responsive */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-2">
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold truncate" style={{ color: appTheme.text.primary }}>Tasks</h2>
           <p className="text-xs sm:text-sm" style={{ color: appTheme.text.secondary }}>
             {loading ? 'Loading...' : `${sortedTasks.length} records`}
           </p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-shrink-0">
           <button
             type="button"
             onClick={() => loadTasks()}
@@ -998,8 +998,8 @@ const Tasks = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-3 sm:mb-4 overflow-x-auto scrollbar-hide pb-2">
+      {/* Tabs – horizontal scroll on mobile */}
+      <div className="flex overflow-x-auto gap-2 mb-3 sm:mb-4 pb-2 -mx-1 px-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -1007,7 +1007,7 @@ const Tasks = () => {
               setActiveTab(tab.id)
               setCurrentPage(1)
             }}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors relative ${activeTab === tab.id
+            className={`flex-shrink-0 px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-medium transition-colors relative ${activeTab === tab.id
                 ? 'text-white'
                 : 'text-gray-700 hover:bg-gray-100'
               }`}
@@ -1236,7 +1236,7 @@ const Tasks = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto scrollbar-hide" style={{ maxWidth: '100%' }}>
+          <div className="overflow-x-auto scrollbar-hide -mx-2 sm:mx-0 rounded-lg border border-gray-200" style={{ maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full border-collapse" style={{ minWidth: '1400px' }}>
               <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
                 <tr>
@@ -1520,21 +1520,23 @@ const Tasks = () => {
 
       {/* Create Task Form Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 flex items-center justify-between p-6 border-b" style={{ backgroundColor: appTheme.primary.main, borderColor: appTheme.border.light }}>
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0 bg-white sm:bg-black/50">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b" style={{ backgroundColor: appTheme.primary.main, borderColor: appTheme.border.light }}>
               <h3 className="text-xl font-bold text-white">Create Task</h3>
               <button
                 onClick={() => {
                   setShowCreateForm(false)
                   resetForm()
                 }}
-                className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+                className="text-white hover:bg-white/20 rounded-full p-2 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Close"
               >
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleCreateTask} className="p-6 space-y-6">
+            <form onSubmit={handleCreateTask} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6">
               {/* Section A: Task Information */}
               <div className="border-b pb-6">
                 <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section A: Task Information</h2>
@@ -2009,15 +2011,16 @@ const Tasks = () => {
                 </div>
               )}
 
-              {/* Form Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t" style={{ borderColor: appTheme.border.light }}>
+              </div>
+              {/* Form Actions – sticky footer so full form + buttons visible on mobile */}
+              <div className="flex-shrink-0 flex items-center justify-end gap-2 sm:gap-3 p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6" style={{ borderColor: appTheme.border.light }}>
                 <button
                   type="button"
                   onClick={() => {
                     setShowCreateForm(false)
                     resetForm()
                   }}
-                  className="px-5 py-2 rounded-lg font-medium transition-colors"
+                  className="px-3 py-1.5 text-sm sm:px-5 sm:py-2.5 sm:text-base rounded-lg font-medium transition-colors min-h-[36px] sm:min-h-[44px]"
                   style={{
                     color: appTheme.text.secondary,
                     backgroundColor: appTheme.background.lightGray
@@ -2028,7 +2031,7 @@ const Tasks = () => {
                 <button
                   type="submit"
                   disabled={submitting || (formData.type === 'Sample Track' && selectedItems.length === 0)}
-                  className="px-5 py-2 rounded-lg font-medium text-white transition-all disabled:opacity-50"
+                  className="px-3 py-1.5 text-sm sm:px-5 sm:py-2.5 sm:text-base rounded-lg font-medium text-white transition-all disabled:opacity-50 min-h-[36px] sm:min-h-[44px]"
                   style={{ backgroundColor: appTheme.primary.main }}
                   title={formData.type === 'Sample Track' && selectedItems.length === 0 ? 'Add at least one product using the + button above' : ''}
                 >

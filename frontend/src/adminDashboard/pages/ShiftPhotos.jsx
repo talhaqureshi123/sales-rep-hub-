@@ -430,8 +430,8 @@ const ShiftPhotos = () => {
 
       {/* Image Modal */}
       {showImageModal && selectedShift && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-auto my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/75 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl sm:p-0 overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
                 Shift Photo - {selectedShift.salesman?.name || selectedShift.salesman?.email}

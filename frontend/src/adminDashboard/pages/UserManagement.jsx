@@ -8,6 +8,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [showFormOverlay, setShowFormOverlay] = useState(false)
 
   // Load users from backend on mount
   useEffect(() => {
@@ -99,6 +100,7 @@ const UserManagement = () => {
 
   const handleEdit = (user) => {
     setEditingUser(user)
+    setShowFormOverlay(true)
   }
 
   const handleDelete = async (userId) => {
@@ -151,23 +153,72 @@ const UserManagement = () => {
 
   const handleCancelEdit = () => {
     setEditingUser(null)
+    setShowFormOverlay(false)
   }
 
   return (
     <div className="flex gap-2 p-3 h-full">
       {/* Left Panel - User List */}
-      <div className="flex-1">
-        <UserList users={users} onEdit={handleEdit} onDelete={handleDelete} />
+      <div className="flex-1 min-w-0">
+        <UserList
+          users={users}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onAddClick={() => {
+            setEditingUser(null)
+            setShowFormOverlay(true)
+          }}
+          loading={loading}
+        />
       </div>
 
-      {/* Right Panel - Add User Form */}
-      <div className="flex">
+      {/* Right Panel - Add User Form (desktop: sidebar) */}
+      <div className="max-md:hidden flex w-full md:w-auto md:min-w-[320px] lg:min-w-[380px]">
         <AddUserForm
           onSave={handleSave}
           editingUser={editingUser}
           onCancel={handleCancelEdit}
+          loading={loading}
         />
       </div>
+
+      {/* Mobile: full-screen form overlay */}
+      {showFormOverlay && (
+        <div
+          className="fixed inset-0 z-50 md:hidden bg-white flex flex-col overflow-hidden"
+          style={{
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            minHeight: '100dvh',
+          }}
+        >
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+            <h2 className="text-lg font-bold text-gray-800">
+              {editingUser ? 'Edit Salesman' : 'Add Salesman'}
+            </h2>
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="p-4 pb-8">
+              <AddUserForm
+                onSave={handleSave}
+                editingUser={editingUser}
+                onCancel={handleCancelEdit}
+                loading={loading}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

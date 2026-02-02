@@ -603,23 +603,25 @@ const SampleTracker = () => {
 
       {/* Edit Sample Modal */}
       {showEditModal && selectedSample && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-t-xl sm:rounded-xl sm:shadow-xl sm:max-w-2xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[90vh] overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800">Edit Sample</h3>
               <button
                 onClick={() => {
                   setShowEditModal(false)
                   resetForm()
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleUpdateSample} className="space-y-4">
+            <form onSubmit={handleUpdateSample} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Sample Number</label>
                 <input
@@ -683,21 +685,22 @@ const SampleTracker = () => {
                   placeholder="Enter any notes about the sample"
                 />
               </div>
-              <div className="flex gap-3 justify-end">
+              </div>
+              <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={() => {
                     setShowEditModal(false)
                     resetForm()
                   }}
-                  className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Updating...' : 'Update Sample'}
                 </button>
@@ -709,23 +712,25 @@ const SampleTracker = () => {
 
       {/* Create Sample Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-3xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800">Create New Sample</h3>
               <button
                 onClick={() => {
                   setShowCreateModal(false)
                   resetCreateForm()
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-500 hover:text-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleCreateSample} className="space-y-4">
+            <form onSubmit={handleCreateSample} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
@@ -863,21 +868,22 @@ const SampleTracker = () => {
                   placeholder="Enter any notes about the sample"
                 />
               </div>
-              <div className="flex gap-3 justify-end">
+              </div>
+              <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false)
                     resetCreateForm()
                   }}
-                  className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Creating...' : 'Create Sample'}
                 </button>

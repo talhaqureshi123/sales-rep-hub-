@@ -1395,9 +1395,9 @@ const SalesSubmissions = () => {
 
       {/* Customer View Modal */}
       {showCustomerView && selectedCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
                 <FaUser className="w-5 h-5 text-[#e9931c]" />
                 Customer Details
@@ -1415,7 +1415,7 @@ const SalesSubmissions = () => {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -1500,8 +1500,8 @@ const SalesSubmissions = () => {
 
       {/* Video Player Modal */}
       {playingVideo && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/75 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg p-4 sm:p-6 overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-gray-800">{playingVideo.title}</h3>
               <button

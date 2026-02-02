@@ -28,39 +28,37 @@ export const useNotificationCount = () => {
 
   useEffect(() => {
     loadNotificationCount();
-    // Refresh every 30 seconds
-    const interval = setInterval(loadNotificationCount, 30000);
+    // Refresh every 60 seconds to reduce server load
+    const interval = setInterval(loadNotificationCount, 60000);
     return () => clearInterval(interval);
   }, []);
 
   const loadNotificationCount = async () => {
     try {
       setLoading(true);
+      // Load all 3 in parallel so one round trip instead of 3 sequential
+      const [tasksResult, visitsResult, samplesResult] = await Promise.all([
+        getMyFollowUps({}),
+        getVisitTargets({}),
+        getMySamples({}),
+      ]);
+
       let tasks = [];
       let visits = [];
       let samples = [];
-
-      // Load tasks (non-completed)
-      const tasksResult = await getMyFollowUps({});
       if (tasksResult.success && tasksResult.data) {
         tasks = tasksResult.data.filter(
-          (t) => (t.status || "").toLowerCase() !== "completed",
+          (t) => (t.status || "").toLowerCase() !== "completed"
         );
       }
-
-      // Load visits (non-completed)
-      const visitsResult = await getVisitTargets({});
       if (visitsResult.success && visitsResult.data) {
         visits = visitsResult.data.filter(
-          (v) => (v.status || "").toLowerCase() !== "completed",
+          (v) => (v.status || "").toLowerCase() !== "completed"
         );
       }
-
-      // Load samples (non-converted)
-      const samplesResult = await getMySamples({});
       if (samplesResult.success && samplesResult.data) {
         samples = samplesResult.data.filter(
-          (s) => (s.status || "").toLowerCase() !== "converted",
+          (s) => (s.status || "").toLowerCase() !== "converted"
         );
       }
 

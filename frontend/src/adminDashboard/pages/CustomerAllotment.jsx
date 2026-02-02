@@ -443,9 +443,10 @@ const CustomerAllotment = () => {
 
         {/* Bulk Allotment Modal */}
         {showBulkAllot && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Bulk Allot Customers</h3>
+          <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+            <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-md sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+              <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Bulk Allot Customers</h3>
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Salesman *
@@ -479,10 +480,11 @@ const CustomerAllotment = () => {
                   You are about to allot <strong>{selectedCustomers.length}</strong> customer(s) to the selected salesman.
                 </p>
               </div>
-              <div className="flex gap-3">
+              </div>
+              <div className="flex-shrink-0 flex gap-2 sm:gap-3 p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   onClick={handleBulkAllot}
-                  className="flex-1 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-1.5 text-sm sm:px-4 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
                   title="Confirm Allotment"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -495,7 +497,7 @@ const CustomerAllotment = () => {
                     setShowBulkAllot(false)
                     setBulkSalesman('')
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-1.5 text-sm sm:px-4 sm:py-2 sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors flex items-center justify-center gap-2"
                   title="Cancel"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

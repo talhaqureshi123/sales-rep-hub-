@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
-import GoogleMapView from '../../universalcomponents/GoogleMapView'
+import LeafletMapView from '../../universalcomponents/LeafletMapView'
 import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
@@ -40,6 +40,8 @@ const CustomerManagement = () => {
     phone: '',
     address: '',
     postcode: '',
+    latitude: '',
+    longitude: '',
     orderPotential: '',
     monthlySpend: 0,
     status: 'Not Visited',
@@ -132,6 +134,8 @@ const CustomerManagement = () => {
         phone: formData.phone,
         address: formData.address,
         postcode: formData.postcode,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
         orderPotential: formData.orderPotential,
         monthlySpend: formData.monthlySpend || 0,
         status: formData.status,
@@ -188,6 +192,8 @@ const CustomerManagement = () => {
       phone: customer.phone || '',
       address: customer.address || '',
       postcode: customer.postcode || customer.pincode || '',
+      latitude: customer.latitude != null ? String(customer.latitude) : '',
+      longitude: customer.longitude != null ? String(customer.longitude) : '',
       orderPotential: customer.orderPotential || '',
       monthlySpend: customer.monthlySpend || 0,
       status: customer.status || 'Not Visited',
@@ -215,6 +221,8 @@ const CustomerManagement = () => {
         phone: formData.phone,
         address: formData.address,
         postcode: formData.postcode,
+        latitude: formData.latitude !== '' && formData.latitude != null ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude !== '' && formData.longitude != null ? parseFloat(formData.longitude) : null,
         orderPotential: formData.orderPotential,
         monthlySpend: formData.monthlySpend || 0,
         status: formData.status,
@@ -458,6 +466,8 @@ const CustomerManagement = () => {
       phone: '',
       address: '',
       postcode: '',
+      latitude: '',
+      longitude: '',
       orderPotential: '',
       monthlySpend: 0,
       status: 'Not Visited',
@@ -611,22 +621,24 @@ const CustomerManagement = () => {
 
       {/* Add/Edit Customer Form Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-[calc(100%-0.75rem)] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800">
                 {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
               </h3>
               <button
                 onClick={resetForm}
-                className="text-gray-500 hover:text-gray-700"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="space-y-4">
+            <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                 <input
@@ -718,6 +730,35 @@ const CustomerManagement = () => {
                   placeholder="e.g., 75400, 75500 (used for map location)"
                 />
                 <p className="mt-1 text-xs text-gray-500">Postcode for accurate map location and directions</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
+                  <input
+                    type="text"
+                    name="latitude"
+                    value={formData.latitude}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g. 24.8607 (for visit location)"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Used for Visit Target location when creating tasks</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
+                  <input
+                    type="text"
+                    name="longitude"
+                    value={formData.longitude}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="e.g. 67.0011 (for visit location)"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Leave empty to use address geocoding for visits</p>
+                </div>
               </div>
 
               <div>
@@ -849,23 +890,24 @@ const CustomerManagement = () => {
 
               {/* View Access: removed from form – only admin allots; new customers default to salesman view */}
 
-              <div className="flex gap-3 justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  disabled={loading}
-                  className="px-6 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Processing...' : editingCustomer ? 'Update Customer' : 'Add Customer'}
-                </button>
-              </div>
+            </div>
+            <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
+              <button
+                type="button"
+                onClick={resetForm}
+                disabled={loading}
+                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Processing...' : editingCustomer ? 'Update Customer' : 'Add Customer'}
+              </button>
+            </div>
             </form>
           </div>
         </div>
@@ -1193,7 +1235,7 @@ const CustomerManagement = () => {
                     lat >= -90 && lat <= 90 &&
                     lng >= -180 && lng <= 180
                 }
-                // Include markers with address (will be geocoded by GoogleMapView)
+                // Include markers with address (will be geocoded by map)
                 return marker.address && marker.address !== 'No address'
               })
 
@@ -1209,7 +1251,7 @@ const CustomerManagement = () => {
             }
 
             return customerMarkers.length > 0 ? (
-              <GoogleMapView
+              <LeafletMapView
                 key={`customer-map-${customers.length}-${calculatedCenter.lat}-${calculatedCenter.lng}`}
                 milestones={[]}
                 visitTargets={customerMarkers}
@@ -1246,8 +1288,8 @@ const CustomerManagement = () => {
 
       {/* Customer Detail Modal */}
       {showCustomerDetailModal && selectedCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-7xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-7xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
               <div className="flex items-center justify-between">

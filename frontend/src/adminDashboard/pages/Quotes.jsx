@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { FaFileInvoice, FaSearch, FaCheckSquare, FaPlus, FaEdit, FaTrash, FaEye, FaQrcode, FaPaperPlane, FaDownload, FaWhatsapp } from 'react-icons/fa'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Swal from 'sweetalert2'
 import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation, sendQuotationEmail } from '../../services/adminservices/quotationService'
 import { getCustomers } from '../../services/adminservices/customerService'
@@ -1148,11 +1149,11 @@ const Quotes = () => {
 
       {/* Create Quote Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-4xl max-h-[90vh] overflow-y-auto my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <div>
+            <div className="flex-shrink-0 bg-white border-b-2 border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between rounded-t-2xl sm:rounded-t-2xl">
+              <div className="flex-1 min-w-0">
                 <h3 className="text-xl font-bold text-gray-800">
                   {editingQuotation ? 'Edit Quotation' : 'Create New Quote'}
                 </h3>
@@ -1161,11 +1162,13 @@ const Quotes = () => {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setShowCreateModal(false)
                   resetForm()
                 }}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
+                aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1173,8 +1176,9 @@ const Quotes = () => {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <form onSubmit={editingQuotation ? handleUpdateQuote : handleCreateQuote} className="p-6 space-y-6">
+            {/* Modal Body – scrollable so buttons stay visible at bottom */}
+            <form onSubmit={editingQuotation ? handleUpdateQuote : handleCreateQuote} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
               {/* Customer & Salesman Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1397,12 +1401,13 @@ const Quotes = () => {
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex gap-3 pt-4 border-t border-gray-200">
+              </div>
+              {/* Modal Footer – always visible at bottom */}
+              <div className="flex-shrink-0 flex flex-wrap gap-2 sm:gap-3 p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl sm:rounded-b-2xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={handleSaveDraft}
-                  className="px-4 py-3 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors flex items-center gap-2"
+                  className="px-3 py-2 text-sm min-h-[36px] sm:px-4 sm:py-3 sm:min-h-[44px] sm:text-base bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none"
                   title="Save as Draft"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1417,7 +1422,7 @@ const Quotes = () => {
                     setEditingQuotation(null)
                     resetForm()
                   }}
-                  className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors flex items-center gap-2"
+                  className="px-3 py-2 text-sm min-h-[36px] sm:px-4 sm:py-3 sm:min-h-[44px] sm:text-base bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none"
                   title="Cancel"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1427,13 +1432,13 @@ const Quotes = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-6 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 min-w-0 px-3 py-2 text-sm min-h-[36px] sm:px-6 sm:py-3 sm:min-h-[44px] sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2"
                   title={editingQuotation ? "Update Quote" : "Create Quote"}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  <span>{editingQuotation ? 'Update Quote' : 'Create Quote'}</span>
+                  <span className="truncate">{editingQuotation ? 'Update Quote' : 'Create Quote'}</span>
                 </button>
               </div>
             </form>

@@ -29,7 +29,7 @@ module.exports = {
   EMAIL_PORT: process.env.EMAIL_PORT || 587,
   EMAIL_USER: process.env.EMAIL_USER || "",
   EMAIL_PASS: process.env.EMAIL_PASS || "",
-  FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:5173",
+  FRONTEND_URL: process.env.FRONTEND_URL || "https://salesrephub.iotfiysolutions.com",
   // HubSpot Configuration
   // Prefer HUBSPOT_TOKEN (custom name), then HUBSPOT_ACCESS_TOKEN, then HUBSPOT_API_KEY (legacy)
   HUBSPOT_TOKEN: normalizeSecret(process.env.HUBSPOT_TOKEN),

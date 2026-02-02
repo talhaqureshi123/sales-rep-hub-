@@ -51,6 +51,31 @@ const getLocalDateString = (d = new Date()) => {
   return `${y}-${m}-${day}`
 }
 
+// Geocode customer address (Nominatim) – so visit target gets correct lat/lng per customer, not same default
+const geocodeCustomerAddress = async (customer) => {
+  if (!customer) return null
+  const trim = (s) => (s != null && typeof s === 'string' ? s.trim() : '')
+  const addressPart = trim(customer.address)
+  const cityPart = trim(customer.city) || trim(customer.state)
+  const pincodePart = trim(customer.pincode) || trim(customer.postcode)
+  const parts = [addressPart, cityPart, pincodePart].filter(Boolean)
+  if (parts.length === 0) return null
+  const query = parts.join(', ') + ', Pakistan'
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      { headers: { Accept: 'application/json', 'User-Agent': 'SalesRepHub/1.0' } }
+    )
+    const data = await res.json()
+    if (Array.isArray(data) && data[0]?.lat != null && data[0]?.lon != null) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+    }
+  } catch (e) {
+    console.warn('Geocode failed for customer:', e)
+  }
+  return null
+}
+
 const TABS = [
   { id: 'All', label: 'All Tasks' },
   { id: 'HubSpotImported', label: 'HubSpot Imported' },
@@ -711,8 +736,38 @@ const Tasks = () => {
       if (isVisitTargetType) {
         try {
           const selectedCustomer = customers.find(c => c._id === formData.customer)
-          const latitude = selectedCustomer?.latitude || formData.latitude || 24.8607
-          const longitude = selectedCustomer?.longitude || formData.longitude || 67.0011
+          // Location: pehle DB se (customer.latitude/longitude), warna address se geocode. Default nahi – location na mile to alert.
+          let latitude, longitude
+          const hasCustomerLatLng = selectedCustomer?.latitude != null && selectedCustomer?.longitude != null &&
+            !isNaN(parseFloat(selectedCustomer.latitude)) && !isNaN(parseFloat(selectedCustomer.longitude))
+          if (hasCustomerLatLng) {
+            latitude = parseFloat(selectedCustomer.latitude)
+            longitude = parseFloat(selectedCustomer.longitude)
+          } else if (selectedCustomer && (selectedCustomer.address || selectedCustomer.city || selectedCustomer.pincode || selectedCustomer.postcode)) {
+            const coords = await geocodeCustomerAddress(selectedCustomer)
+            if (coords) {
+              latitude = coords.lat
+              longitude = coords.lng
+            } else {
+              setSubmitting(false)
+              await Swal.fire({
+                icon: 'warning',
+                title: 'Location not found',
+                text: 'Could not get location for this customer. Add latitude/longitude in Customer Management or ensure address/city/pincode is correct.',
+                confirmButtonColor: '#e9931c'
+              })
+              return
+            }
+          } else {
+            setSubmitting(false)
+            await Swal.fire({
+              icon: 'warning',
+              title: 'Location not found',
+              text: selectedCustomer ? 'This customer has no location in database and no address to geocode. Add location in Customer Management or fill address/city/pincode.' : 'Select a customer and ensure they have location (lat/lng) or address to geocode.',
+              confirmButtonColor: '#e9931c'
+            })
+            return
+          }
           const descInput = (formData.description || '').trim()
           const selectedSalesman = formData.salesman ? salesmen.find(s => (s._id || s.id) === formData.salesman) : null
           const defaultDesc = selectedSalesman ? `Visit Assigned: ${selectedSalesman.name || selectedSalesman.email || 'Salesman'}` : `Visit for ${formData.customerName || 'customer'}`
@@ -2117,31 +2172,32 @@ const Tasks = () => {
     search.trim() !== ''
 
   return (
-    <div className="space-y-6" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-        <div>
-          <h2 className="text-2xl font-semibold" style={{ color: '#1f2937', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Tasks</h2>
-          <p className="text-sm" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
-            {loading ? 'Loading...' : `${sortedTasks.length} of ${tasks.length} tasks`} | Follow-up sample tracker - Manage all tasks and assign to salesmen
+    <div className="min-w-0 space-y-4 sm:space-y-6 px-0 sm:px-0 pt-2 lg:pt-0" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+      {/* Header – responsive for mobile */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-semibold truncate" style={{ color: '#1f2937', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>Tasks</h2>
+          <p className="text-xs sm:text-sm truncate" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+            {loading ? 'Loading...' : `${sortedTasks.length} of ${tasks.length} tasks`} | Manage tasks & assign to salesmen
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={handleImportFromHubSpot}
             disabled={importing}
-            className="flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-3 rounded-lg text-sm sm:text-base font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
             style={{ 
               backgroundColor: appTheme.status.info.main,
               color: appTheme.text.white
             }}
           >
-            {importing ? <FaSpinner className="animate-spin" /> : <FaSync />}
-            <span>Import from HubSpot</span>
+            {importing ? <FaSpinner className="animate-spin w-4 h-4" /> : <FaSync className="w-4 h-4 sm:w-5 sm:h-5" />}
+            <span className="hidden sm:inline">Import from HubSpot</span>
+            <span className="sm:hidden">Import</span>
           </button>
           <button
             onClick={() => setShowCreateForm(true)}
-            className="flex items-center gap-2 px-5 py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg active:scale-95"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-lg text-sm sm:text-base font-semibold transition-all shadow-md hover:shadow-lg active:scale-95"
             style={{ 
               backgroundColor: appTheme.primary.main,
               color: appTheme.text.white
@@ -2149,14 +2205,14 @@ const Tasks = () => {
             onMouseEnter={(e) => e.target.style.backgroundColor = appTheme.primary.dark}
             onMouseLeave={(e) => e.target.style.backgroundColor = appTheme.primary.main}
           >
-            <FaPlus className="w-5 h-5" />
+            <FaPlus className="w-4 h-4 sm:w-5 sm:h-5" />
             <span>Create Task</span>
           </button>
         </div>
       </div>
 
-      {/* Tab Bar – All / Pending Approval / Overdue / Today / etc. */}
-      <div className="flex flex-wrap items-center gap-2 mb-4 border-b border-gray-200 pb-2">
+      {/* Tab Bar – horizontal scroll on mobile */}
+      <div className="flex overflow-x-auto gap-2 mb-3 sm:mb-4 border-b border-gray-200 pb-2 -mx-1 px-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {TABS.map((tab) => {
           const count = tabCounts[tab.id] ?? 0
           const isActive = activeTab === tab.id
@@ -2168,7 +2224,7 @@ const Tasks = () => {
                 setActiveTab(tab.id)
                 setCurrentPage(1)
               }}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+              className={`flex-shrink-0 px-3 py-2 sm:px-4 rounded-t-lg text-xs sm:text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-[#e9931c] text-white border-b-2 border-[#e9931c] -mb-0.5'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-b-2 border-transparent'
@@ -2186,7 +2242,7 @@ const Tasks = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-4">
+      <div className="bg-white rounded-lg p-3 sm:p-4 border border-gray-200 shadow-sm mb-3 sm:mb-4">
         <div className="flex flex-wrap items-center gap-3 mb-3">
           {/* Active Filter Tags */}
           {activeFilters.taskType.map(type => (
@@ -2596,7 +2652,7 @@ const Tasks = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto" style={{ maxWidth: '100%' }}>
+          <div className="overflow-x-auto -mx-2 sm:mx-0 rounded-lg border border-gray-200" style={{ maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full border-collapse" style={{ minWidth: '1600px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
               <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
                 <tr>
@@ -3143,8 +3199,8 @@ const Tasks = () => {
 
       {/* Pagination */}
       {sortedTasks.length > 0 && (
-        <div className="flex items-center justify-between bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white rounded-lg p-3 sm:p-4 border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
@@ -3210,21 +3266,23 @@ const Tasks = () => {
 
       {/* Create Task Form Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-          <div className="bg-white rounded-lg shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-2xl w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="sticky top-0 flex items-center justify-between p-6 border-b" style={{ backgroundColor: appTheme.primary.main, borderColor: appTheme.border.light }}>
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0 bg-white sm:bg-black/50">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            <div className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b" style={{ backgroundColor: appTheme.primary.main, borderColor: appTheme.border.light }}>
               <h3 className="text-xl font-bold text-white">Create Task</h3>
               <button
                 onClick={() => {
                   setShowCreateForm(false)
                   resetForm()
                 }}
-                className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+                className="text-white hover:bg-white/20 rounded-full p-2 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Close"
               >
                 <FaTimes />
               </button>
             </div>
-            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
+            <form onSubmit={handleCreateTask} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
               {/* Salesman Selection */}
               <div>
                 <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
@@ -3764,15 +3822,16 @@ const Tasks = () => {
                 />
               </div>
 
-              {/* Form Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t" style={{ borderColor: appTheme.border.light }}>
+              </div>
+              {/* Form Actions – sticky footer so full form + buttons visible on mobile */}
+              <div className="flex-shrink-0 flex items-center justify-end gap-2 sm:gap-3 p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6" style={{ borderColor: appTheme.border.light }}>
                 <button
                   type="button"
                   onClick={() => {
                     setShowCreateForm(false)
                     resetForm()
                   }}
-                  className="px-5 py-2 rounded-lg font-medium transition-colors"
+                  className="px-3 py-1.5 text-sm sm:px-5 sm:py-2.5 sm:text-base rounded-lg font-medium transition-colors min-h-[36px] sm:min-h-[44px]"
                   style={{ 
                     color: appTheme.text.secondary,
                     backgroundColor: appTheme.background.lightGray
@@ -3783,7 +3842,7 @@ const Tasks = () => {
                 <button
                   type="submit"
                   disabled={submitting || (formData.type === 'Sample Track' && selectedItems.length === 0)}
-                  className="px-5 py-2 rounded-lg font-medium text-white transition-all disabled:opacity-50"
+                  className="px-3 py-1.5 text-sm sm:px-5 sm:py-2.5 sm:text-base rounded-lg font-medium text-white transition-all disabled:opacity-50 min-h-[36px] sm:min-h-[44px]"
                   style={{ backgroundColor: appTheme.primary.main }}
                   title={formData.type === 'Sample Track' && selectedItems.length === 0 ? 'Add at least one product using the + button above' : ''}
                 >
@@ -5783,9 +5842,9 @@ const Tasks = () => {
 
       {/* Note Creation Modal */}
       {showNoteModal && (
-        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[calc(100%-0.75rem)] sm:max-w-md max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-5 overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white rounded-t-lg sm:rounded-lg w-full max-w-[calc(100%-0.5rem)] sm:max-w-md max-h-[72dvh] sm:max-h-[90vh] overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto min-h-0">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Create Note</h3>
               <button
                 onClick={() => setShowNoteModal(false)}
@@ -5794,6 +5853,7 @@ const Tasks = () => {
                 <FaTimes className="w-5 h-5" />
               </button>
             </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
             <form
               onSubmit={async (e) => {
                 e.preventDefault()
@@ -5956,6 +6016,7 @@ const Tasks = () => {
                 </div>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
@@ -5963,24 +6024,23 @@ const Tasks = () => {
       {/* Meeting Creation Modal */}
       {/* Start Task Modal with Meter Picture */}
       {showStartTaskModal && taskToStart && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl max-w-[calc(100%-0.75rem)] sm:max-w-md w-full max-h-[90vh] overflow-y-auto my-auto">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">Start Task</h2>
-                <button
-                  onClick={() => {
-                    setShowStartTaskModal(false)
-                    setTaskToStart(null)
-                    setMeterPicture(null)
-                    setMeterReading('')
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <FaTimes className="w-5 h-5" />
-                </button>
-              </div>
-              
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white rounded-t-lg sm:rounded-lg shadow-xl max-w-[calc(100%-0.5rem)] sm:max-w-md w-full max-h-[72dvh] sm:max-h-[90vh] overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto min-h-0">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Start Task</h2>
+              <button
+                onClick={() => {
+                  setShowStartTaskModal(false)
+                  setTaskToStart(null)
+                  setMeterPicture(null)
+                  setMeterReading('')
+                }}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
               <div className="mb-4">
                 <p className="text-sm text-gray-600 mb-2">
                   <strong>Task:</strong> {taskToStart.description || taskToStart.customerName}
@@ -6086,9 +6146,9 @@ const Tasks = () => {
       )}
 
       {showMeetingModal && (
-        <div className="fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-[calc(100%-0.75rem)] sm:max-w-md max-h-[90vh] overflow-y-auto my-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-5 overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white rounded-t-lg sm:rounded-lg w-full max-w-[calc(100%-0.5rem)] sm:max-w-md max-h-[72dvh] sm:max-h-[90vh] overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto min-h-0">
+            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Create Google Meeting</h3>
               <button
                 onClick={() => setShowMeetingModal(false)}
@@ -6097,6 +6157,7 @@ const Tasks = () => {
                 <FaTimes className="w-5 h-5" />
               </button>
             </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
             <form
               onSubmit={async (e) => {
                 e.preventDefault()
@@ -6305,6 +6366,7 @@ const Tasks = () => {
                 </div>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}

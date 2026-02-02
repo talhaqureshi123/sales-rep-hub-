@@ -224,22 +224,24 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
 
       {/* Add Customer Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-3 sm:p-4 md:p-5 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[calc(100%-0.75rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto my-auto">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
-                <button
-                  onClick={handleCloseForm}
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 rounded-lg"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(2.75rem,calc(1rem+env(safe-area-inset-top)))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+            {/* Extra top padding on mobile so title not cut off */}
+            <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 pt-5 pb-3 sm:py-4 border-b-2 border-gray-200">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
+              <button
+                onClick={handleCloseForm}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-              <form onSubmit={handleAddCustomer} className="space-y-4">
+            <form onSubmit={handleAddCustomer} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                   <input
@@ -460,25 +462,25 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                   />
                 </div>
 
-                <div className="flex gap-3 justify-end pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCloseForm}
-                    disabled={loading}
-                    className="px-6 py-2 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-6 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? 'Processing...' : 'Add Customer'}
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+              <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
+                <button
+                  type="button"
+                  onClick={handleCloseForm}
+                  disabled={loading}
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Processing...' : 'Add Customer'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

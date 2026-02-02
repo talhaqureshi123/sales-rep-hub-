@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
 
@@ -10,28 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Sales Rep Hub</title>
-  <!-- Google Maps API -->
-  <!-- Make sure to enable: Maps JavaScript API, Directions API, and Places API in Google Cloud Console -->
-  <!-- Also ensure billing is enabled for your Google Cloud project -->
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC7r_sEeI6qY6t996Dr8MeSUitNukaexVg&libraries=places,marker&loading=async&callback=initGoogleMapsCallback"
-    async defer></script>
-  <script>
-    // Global callback for Google Maps
-    window.initGoogleMapsCallback = function () {
-      console.log('Google Maps API loaded successfully');
-      window.googleMapsLoaded = true;
-      // Trigger custom event for components to listen
-      window.dispatchEvent(new Event('googleMapsLoaded'));
-    };
-
-    // Error handler
-    window.gm_authFailure = function () {
-      console.error('Google Maps API authentication failed. Check your API key.');
-      window.googleMapsError = true;
-      window.dispatchEvent(new Event('googleMapsError'));
-    };
-  </script>
+  <!-- Map: Leaflet + OpenStreetMap + OSRM (no API key or billing required) -->
 </head>
 
 <body>

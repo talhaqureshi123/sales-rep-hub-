@@ -245,6 +245,31 @@ export const pushTasksToHubSpot = async (force = false, limit = 0) => {
   }
 }
 
+// Push existing Quotations (Quotes) to HubSpot
+export const pushQuotationsToHubSpot = async (force = false, limit = 0) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/push-quotations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ force, limit }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error pushing quotations to HubSpot:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Create task in HubSpot
 export const createHubSpotTask = async (subject, contactId = null) => {
   try {
@@ -309,4 +334,5 @@ export default {
   pushSalesOrdersToHubSpot,
   pushCustomersToHubSpot,
   pushTasksToHubSpot,
+  pushQuotationsToHubSpot,
 }
