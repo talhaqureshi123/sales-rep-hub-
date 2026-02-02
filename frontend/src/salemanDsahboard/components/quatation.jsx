@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Swal from 'sweetalert2'
 import ProductSelector from '../../universalcomponents/ProductSelector'
 import QRCameraScanner from '../../components/QRCameraScanner'
-import { getScannedProducts } from '../../services/salemanservices/productService'
+import { getScannedProducts, getProducts } from '../../services/salemanservices/productService'
 import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation, sendQuotationEmail } from '../../services/salemanservices/quotationService'
 import { getMyCustomers } from '../../services/salemanservices/customerService'
-import { FaQrcode, FaEye, FaEdit, FaTrash, FaDownload, FaWhatsapp, FaEnvelope } from 'react-icons/fa'
+import { FaQrcode, FaEye, FaEdit, FaTrash, FaDownload, FaWhatsapp, FaEnvelope, FaCloudUploadAlt, FaFileImport } from 'react-icons/fa'
 
 const Quotation = () => {
   const [quotations, setQuotations] = useState([])
@@ -17,6 +17,8 @@ const Quotation = () => {
   const [showProductSelector, setShowProductSelector] = useState(false)
   const [showQRCamera, setShowQRCamera] = useState(false)
   const [qrScanning, setQrScanning] = useState(false)
+  const [importingQuotations, setImportingQuotations] = useState(false)
+  const importFileInputRef = useRef(null)
   // Valid Until = 15 days from today by default
   const getDefaultValidUntil = () => {
     const d = new Date()
@@ -797,6 +799,79 @@ const Quotation = () => {
     }
   }
 
+  // Parse CSV (customerName, customerEmail, notes)
+  const parseCSV = (text) => {
+    const lines = text.trim().split(/\r?\n/)
+    if (lines.length < 2) return []
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
+    const rows = []
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const row = {}
+      header.forEach((h, j) => { row[h] = values[j] ?? '' })
+      rows.push(row)
+    }
+    return rows
+  }
+
+  const handleImportFile = async (e) => {
+    const file = e.target?.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      Swal.fire({ icon: 'warning', title: 'Invalid file', text: 'Please select a CSV file.', confirmButtonColor: '#e9931c' })
+      return
+    }
+    setImportingQuotations(true)
+    try {
+      const productsRes = await getProducts()
+      const products = (productsRes.success && productsRes.data) ? (productsRes.data.filter(p => p.isActive !== false)) : []
+      if (products.length === 0) {
+        setImportingQuotations(false)
+        Swal.fire({ icon: 'warning', title: 'No products', text: 'No active products in catalog. Add products before importing.', confirmButtonColor: '#e9931c' })
+        return
+      }
+      const text = await file.text()
+      const rows = parseCSV(text)
+      const nameKey = Object.keys(rows[0] || {}).find(k => /customer.*name|name/i.test(k)) || (rows[0] && 'customername' in rows[0] ? 'customername' : Object.keys(rows[0] || {})[0])
+      const emailKey = Object.keys(rows[0] || {}).find(k => /email/i.test(k)) || 'customeremail'
+      const notesKey = Object.keys(rows[0] || {}).find(k => /notes/i.test(k)) || 'notes'
+      let created = 0
+      const firstProduct = products[0]
+      const unitPrice = Number(firstProduct?.price) || 0
+      const validUntil = getDefaultValidUntil()
+      for (const row of rows) {
+        const customerName = (row[nameKey] || row.customername || row.customerName || '').trim()
+        const customerEmail = (row[emailKey] || row.customeremail || row.customerEmail || '').trim()
+        if (!customerName && !customerEmail) continue
+        const quotationData = {
+          customerName: customerName || 'Imported',
+          customerEmail: customerEmail || '',
+          validUntil,
+          items: [{ productId: firstProduct._id || firstProduct.id, productName: firstProduct.name || '', quantity: 1, unitPrice, discount: 0, lineTotal: unitPrice }],
+          subtotal: unitPrice,
+          tax: unitPrice * 0.2,
+          total: unitPrice * 1.2,
+          notes: (row[notesKey] || row.notes || '').trim()
+        }
+        const result = await createQuotation(quotationData)
+        if (result.success) created++
+      }
+      setImportingQuotations(false)
+      Swal.fire({
+        icon: created > 0 ? 'success' : 'info',
+        title: 'Import done',
+        text: created > 0 ? `${created} quotation(s) created as draft.` : 'No rows imported. CSV should have customer name and email columns.',
+        confirmButtonColor: '#e9931c'
+      })
+      loadQuotations()
+    } catch (err) {
+      console.error('Import error:', err)
+      setImportingQuotations(false)
+      Swal.fire({ icon: 'error', title: 'Import failed', text: err.message || 'Failed to import CSV.', confirmButtonColor: '#e9931c' })
+    }
+  }
+
   // Download quotation as text file
   const handleDownloadQuote = (quote) => {
     const qNum = quote.quotationNumber || quote.quoteNumber || 'N/A'
@@ -1135,16 +1210,46 @@ const Quotation = () => {
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">Quotations</h2>
             <p className="text-sm md:text-base text-gray-600 mt-1">Manage your quotations</p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="w-full sm:w-auto px-4 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors flex items-center justify-center gap-2 text-sm md:text-base"
-            title="Create New Quote"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>New Quote</span>
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+            <button
+              onClick={() => Swal.fire({ icon: 'info', title: 'Push to HubSpot', text: 'Push quotations to HubSpot is available in Admin Quotes page.', confirmButtonColor: '#e9931c' })}
+              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-sm flex-1 sm:flex-none justify-center"
+              title="Push to HubSpot (Admin)"
+            >
+              <FaCloudUploadAlt className="w-5 h-5" />
+              <span>Push</span>
+            </button>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+            <button
+              onClick={() => importFileInputRef.current?.click()}
+              disabled={importingQuotations}
+              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 disabled:opacity-60 transition-colors text-sm flex-1 sm:flex-none justify-center"
+              title="Import from CSV"
+            >
+              {importingQuotations ? (
+                <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+              ) : (
+                <FaFileImport className="w-5 h-5" />
+              )}
+              <span>Import</span>
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors text-sm md:text-base w-full sm:w-auto justify-center"
+              title="Create New Quote"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>New Quote</span>
+            </button>
+          </div>
         </div>
 
         {/* Quotations List */}

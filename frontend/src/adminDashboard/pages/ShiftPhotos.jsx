@@ -7,6 +7,7 @@ const ShiftPhotos = () => {
   const [shifts, setShifts] = useState([])
   const [salesmen, setSalesmen] = useState([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(null) // API error or failed to load
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSalesman, setSelectedSalesman] = useState('All')
   const [selectedStatus, setSelectedStatus] = useState('All')
@@ -39,6 +40,7 @@ const ShiftPhotos = () => {
 
   const loadShifts = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const result = await getAllTracking({
         salesman: selectedSalesman !== 'All' ? selectedSalesman : undefined,
@@ -46,15 +48,15 @@ const ShiftPhotos = () => {
         date: selectedDate || undefined,
         search: searchTerm || undefined,
       })
-      if (result.success && result.data) {
-        setShifts(result.data)
-      } else {
-        console.error('Error loading shifts:', result.message)
-        setShifts([])
+      const list = Array.isArray(result?.data) ? result.data : []
+      setShifts(list)
+      if (!result?.success && result?.message) {
+        setLoadError(result.message)
       }
     } catch (error) {
       console.error('Error loading shifts:', error)
       setShifts([])
+      setLoadError(error?.message || 'Failed to load shift photos. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -176,6 +178,20 @@ const ShiftPhotos = () => {
         <p className="text-gray-600">Showing {shifts.length} shifts</p>
       </div>
 
+      {/* Error message when load failed */}
+      {loadError && !loading && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {loadError}
+          <button
+            type="button"
+            onClick={() => loadShifts()}
+            className="ml-3 font-semibold underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Shifts Grid or Empty State */}
       {loading ? (
         <div className="text-center py-12">
@@ -185,8 +201,10 @@ const ShiftPhotos = () => {
       ) : shifts.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
           <FaCamera className="w-24 h-24 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">No shifts found</h3>
-          <p className="text-gray-600">Shift data will appear here when sales team starts tracking.</p>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">No shift photos yet</h3>
+          <p className="text-gray-600 max-w-md mx-auto">
+            Data appears when sales reps <strong>Start Tracking</strong> (with meter image) and later <strong>End shift</strong> (with ending meter). Try &quot;All Reps&quot; and clear date filter.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

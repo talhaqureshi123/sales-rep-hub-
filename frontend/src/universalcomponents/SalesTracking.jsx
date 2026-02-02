@@ -69,6 +69,7 @@ const SalesTracking = () => {
   const [capturedImage, setCapturedImage] = useState(null)
   const [isTracking, setIsTracking] = useState(false)
   const [showStartModal, setShowStartModal] = useState(false)
+  const [showStartMeterImageModal, setShowStartMeterImageModal] = useState(false) // View start meter image full size
   const [uploadedImage, setUploadedImage] = useState(null)
   const [visitedAreaImage, setVisitedAreaImage] = useState(null) // Single image for backward compatibility
   const [visitedAreaImages, setVisitedAreaImages] = useState([]) // Array for multiple images
@@ -2725,7 +2726,15 @@ const SalesTracking = () => {
       setUploadedImage(null)
       setStartingKilometers('')
       
-      // Try to get location if not available
+      // Try to get location if not available and send to backend immediately (for Live Tracking)
+      const locToSend = userLocation?.latitude && userLocation?.longitude
+        ? userLocation
+        : null
+      if (locToSend) {
+        saveLocation(locToSend.latitude, locToSend.longitude, locToSend.accuracy || null)
+          .then((r) => { if (r?.success) lastLocationSentRef.current = Date.now() })
+          .catch(() => {})
+      }
       if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
         console.log('Location not available, attempting to fetch...')
         try {
@@ -2733,6 +2742,9 @@ const SalesTracking = () => {
           if (location && location.latitude && location.longitude) {
             setUserLocation(location)
             console.log('Location fetched successfully:', location)
+            saveLocation(location.latitude, location.longitude, location.accuracy || null)
+              .then((r) => { if (r?.success) lastLocationSentRef.current = Date.now() })
+              .catch(() => {})
           }
         } catch (error) {
           console.error('Failed to fetch location:', error)
@@ -2754,6 +2766,9 @@ const SalesTracking = () => {
             currentLocation = await getCurrentLocation()
             if (currentLocation && currentLocation.latitude && currentLocation.longitude) {
               setUserLocation(currentLocation)
+              saveLocation(currentLocation.latitude, currentLocation.longitude, currentLocation.accuracy || null)
+                .then((r) => { if (r?.success) lastLocationSentRef.current = Date.now() })
+                .catch(() => {})
               break
             }
           } catch (error) {
@@ -3868,6 +3883,7 @@ const SalesTracking = () => {
               <button
                 onClick={() => {
                   setShowStartModal(false)
+                  setShowStartMeterImageModal(false)
                   setUploadedImage(null)
                   setStartingKilometers('')
                 }}
@@ -3924,13 +3940,19 @@ const SalesTracking = () => {
                     className="flex flex-col items-center justify-center w-full h-40 sm:h-48 md:h-56 border-2 border-dashed border-gray-300 rounded-xl"
                   >
                     {uploadedImage ? (
-                      <div className="w-full h-full flex items-center justify-center p-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowStartMeterImageModal(true)}
+                        className="w-full h-full flex items-center justify-center p-2 rounded-lg hover:ring-2 hover:ring-[#e9931c] focus:outline-none focus:ring-2 focus:ring-[#e9931c] transition-all"
+                        aria-label="View start meter image"
+                      >
                         <img
                           src={uploadedImage}
                           alt="Speedometer"
                           className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
                         />
-                      </div>
+                        <span className="sr-only">Tap to view full size</span>
+                      </button>
                     ) : (
                       <>
                         <svg className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3970,6 +3992,7 @@ const SalesTracking = () => {
               <button
                 onClick={() => {
                   setShowStartModal(false)
+                  setShowStartMeterImageModal(false)
                   setUploadedImage(null)
                   setVisitedAreaImage(null)
                   setVisitedAreaImages([])
@@ -4005,10 +4028,38 @@ const SalesTracking = () => {
         </div>
       )}
 
+      {/* Start Meter Image – view full size modal (only when Start modal is open and image uploaded) */}
+      {showStartModal && showStartMeterImageModal && uploadedImage && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-4" onClick={() => setShowStartMeterImageModal(false)}>
+          <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-xl overflow-hidden shadow-2xl flex-1 flex flex-col min-h-0 max-h-[90vh]">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 flex-shrink-0">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">Start Meter Image</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowStartMeterImageModal(false)}
+                  className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+                  aria-label="Close"
+                >
+                  <FaTimes className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 overflow-auto flex-1 flex items-center justify-center bg-gray-100">
+                <img
+                  src={uploadedImage}
+                  alt="Start meter / Speedometer"
+                  className="max-w-full max-h-[70vh] w-auto h-auto object-contain rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tracking Completion Modal – no animation class to avoid blink on re-render */}
       {showCompletionModal && selectedVisitTarget && (
         <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" style={{ contain: 'layout style paint' }}>
-          <div key={`completion-${selectedVisitTarget._id || selectedVisitTarget.id || 'modal'}`} className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-3xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[85vh] flex flex-col mx-auto overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
+          <div key={`completion-${selectedVisitTarget._id || selectedVisitTarget.id || 'modal'}`} className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-4xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[85vh] flex flex-col mx-auto overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
             <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-800 truncate pr-2">
                 Complete: {selectedVisitTarget.name}
@@ -5949,7 +6000,7 @@ const SalesTracking = () => {
       {/* Shift End Modal – mobile/tablet + Close */}
       {showShiftEndModal && (
         <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[10001] p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" style={{ contain: 'layout style paint' }}>
-          <div key="shift-end-modal" className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-3xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[85vh] mx-auto flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
+          <div key="shift-end-modal" className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-4xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[85vh] mx-auto flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
             <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-800 truncate pr-2">
                 End Shift – Ending Kilometer & Picture

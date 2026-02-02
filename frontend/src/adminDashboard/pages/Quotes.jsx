@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
-import { FaFileInvoice, FaSearch, FaCheckSquare, FaPlus, FaEdit, FaTrash, FaEye, FaQrcode, FaPaperPlane, FaDownload, FaWhatsapp } from 'react-icons/fa'
+import { useState, useEffect, useRef } from 'react'
+import { FaFileInvoice, FaSearch, FaCheckSquare, FaPlus, FaEdit, FaTrash, FaEye, FaQrcode, FaPaperPlane, FaDownload, FaWhatsapp, FaCloudUploadAlt, FaFileImport } from 'react-icons/fa'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Swal from 'sweetalert2'
 import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation, sendQuotationEmail } from '../../services/adminservices/quotationService'
 import { getCustomers } from '../../services/adminservices/customerService'
 import { getProducts } from '../../services/adminservices/productService'
 import { getUsers } from '../../services/adminservices/userService'
+import { pushQuotationsToHubSpot } from '../../services/adminservices/hubspotService'
 import QRCameraScanner from '../../components/QRCameraScanner'
 
 const Quotes = () => {
@@ -32,6 +33,9 @@ const Quotes = () => {
   const [showQRCamera, setShowQRCamera] = useState(false)
   const [qrScanning, setQrScanning] = useState(false)
   const [editingQuotation, setEditingQuotation] = useState(null)
+  const [pushingQuotations, setPushingQuotations] = useState(false)
+  const [importingQuotations, setImportingQuotations] = useState(false)
+  const importFileInputRef = useRef(null)
 
   // Valid Until = 15 days from today by default
   const getDefaultValidUntil = () => {
@@ -802,6 +806,111 @@ const Quotes = () => {
     URL.revokeObjectURL(url)
   }
 
+  // Push quotations to HubSpot
+  const handlePushToHubSpot = async () => {
+    setPushingQuotations(true)
+    try {
+      const result = await pushQuotationsToHubSpot(false, 0)
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Pushed!',
+          text: result.message || 'Quotations pushed to HubSpot successfully.',
+          confirmButtonColor: '#e9931c'
+        })
+        loadQuotes()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Push failed',
+          text: result.message || 'Failed to push quotations to HubSpot.',
+          confirmButtonColor: '#e9931c'
+        })
+      }
+    } catch (error) {
+      console.error('Error pushing quotations:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error pushing quotations. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
+    } finally {
+      setPushingQuotations(false)
+    }
+  }
+
+  // Parse CSV (customerName, customerEmail, notes) – simple comma split
+  const parseCSV = (text) => {
+    const lines = text.trim().split(/\r?\n/)
+    if (lines.length < 2) return []
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
+    const rows = []
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const row = {}
+      header.forEach((h, j) => { row[h] = values[j] ?? '' })
+      rows.push(row)
+    }
+    return rows
+  }
+
+  const handleImportFile = async (e) => {
+    const file = e.target?.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      Swal.fire({ icon: 'warning', title: 'Invalid file', text: 'Please select a CSV file.', confirmButtonColor: '#e9931c' })
+      return
+    }
+    if (products.length === 0) {
+      Swal.fire({ icon: 'warning', title: 'No products', text: 'Add at least one product in the catalog before importing quotations.', confirmButtonColor: '#e9931c' })
+      return
+    }
+    setImportingQuotations(true)
+    try {
+      const text = await file.text()
+      const rows = parseCSV(text)
+      const nameKey = Object.keys(rows[0] || {}).find(k => /customer.*name|name/i.test(k)) || 'customername' in (rows[0] || {}) ? 'customername' : Object.keys(rows[0] || {})[0]
+      const emailKey = Object.keys(rows[0] || {}).find(k => /email/i.test(k)) || 'customeremail'
+      const notesKey = Object.keys(rows[0] || {}).find(k => /notes/i.test(k)) || 'notes'
+      let created = 0
+      const firstProduct = products[0]
+      const unitPrice = Number(firstProduct?.price) || 0
+      const validUntil = getDefaultValidUntil()
+      for (const row of rows) {
+        const customerName = (row[nameKey] || row.customername || row.customerName || '').trim()
+        const customerEmail = (row[emailKey] || row.customeremail || row.customerEmail || '').trim()
+        if (!customerName && !customerEmail) continue
+        const quotationData = {
+          customerName: customerName || 'Imported',
+          customerEmail: customerEmail || '',
+          validUntil,
+          items: [{ productId: firstProduct._id || firstProduct.id, productName: firstProduct.name || '', quantity: 1, unitPrice, discount: 0, lineTotal: unitPrice }],
+          subtotal: unitPrice,
+          tax: unitPrice * 0.2,
+          total: unitPrice * 1.2,
+          notes: (row[notesKey] || row.notes || '').trim(),
+          status: 'Draft'
+        }
+        const result = await createQuotation(quotationData)
+        if (result.success) created++
+      }
+      setImportingQuotations(false)
+      Swal.fire({
+        icon: created > 0 ? 'success' : 'info',
+        title: 'Import done',
+        text: created > 0 ? `${created} quotation(s) created as draft.` : 'No rows imported. CSV should have customer name and email columns.',
+        confirmButtonColor: '#e9931c'
+      })
+      loadQuotes()
+    } catch (err) {
+      console.error('Import error:', err)
+      setImportingQuotations(false)
+      Swal.fire({ icon: 'error', title: 'Import failed', text: err.message || 'Failed to import CSV.', confirmButtonColor: '#e9931c' })
+    }
+  }
+
   // Open WhatsApp with customer number and pre-filled message
   const handleSendQuoteWhatsApp = (quote) => {
     const phone = (quote.customerPhone || quote.phone || '').replace(/\D/g, '')
@@ -953,7 +1062,7 @@ const Quotes = () => {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <FaFileInvoice className="w-8 h-8 text-[#e9931c]" />
           <div>
@@ -961,16 +1070,51 @@ const Quotes = () => {
             <p className="text-gray-600">Create and manage sales quotes.</p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            resetForm()
-            setShowCreateModal(true)
-          }}
-          className="flex items-center gap-2 px-5 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
-        >
-          <FaPlus className="w-5 h-5" />
-          <span>Create New Quote</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handlePushToHubSpot}
+            disabled={pushingQuotations}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors text-sm"
+            title="Push quotations to HubSpot"
+          >
+            {pushingQuotations ? (
+              <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <FaCloudUploadAlt className="w-5 h-5" />
+            )}
+            <span>Push</span>
+          </button>
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <button
+            onClick={() => importFileInputRef.current?.click()}
+            disabled={importingQuotations}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 disabled:opacity-60 transition-colors text-sm"
+            title="Import quotations from CSV"
+          >
+            {importingQuotations ? (
+              <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <FaFileImport className="w-5 h-5" />
+            )}
+            <span>Import</span>
+          </button>
+          <button
+            onClick={() => {
+              resetForm()
+              setShowCreateModal(true)
+            }}
+            className="flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors text-sm sm:text-base"
+          >
+            <FaPlus className="w-5 h-5" />
+            <span>Create New Quote</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters and Actions */}

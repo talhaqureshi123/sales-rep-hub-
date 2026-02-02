@@ -347,14 +347,7 @@ const deleteQuotation = async (req, res) => {
       });
     }
 
-    // Only allow deletion of Draft quotations
-    if (quotation.status !== 'Draft') {
-      return res.status(400).json({
-        success: false,
-        message: 'Only draft quotations can be deleted',
-      });
-    }
-
+    // Salesman can delete their own quotations (any status), same as admin for their quotes
     await quotation.deleteOne();
 
     res.status(200).json({

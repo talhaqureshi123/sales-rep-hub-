@@ -293,7 +293,11 @@ export const deleteQuotation = async (quotationId) => {
       return { success: false, message: 'Session expired. Please login again.' }
     }
 
-    const data = await response.json()
+    const text = await response.text()
+    let data = { success: false, message: 'Failed to delete quotation' }
+    try {
+      if (text) data = JSON.parse(text)
+    } catch (_) {}
     return data
   } catch (error) {
     console.error('Error deleting quotation:', error)
