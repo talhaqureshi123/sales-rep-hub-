@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import LeafletMapView from './LeafletMapView'
 // import MilestoneModal from './MilestoneModal' // COMMENTED OUT - Using Visit Targets only
 import NotificationToast from './NotificationToast'
@@ -3874,8 +3875,8 @@ const SalesTracking = () => {
           </div>
       </div>
 
-      {/* Start Tracking Modal - mobile/tablet responsive + Close button */}
-      {showStartModal && (
+      {/* Start Tracking Modal - portal to body so not clipped by parent overflow */}
+      {showStartModal && createPortal(
         <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" style={{ contain: 'layout style paint' }}>
           <div key="start-modal" className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-3xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[85vh] mx-auto flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
             <div className="px-4 sm:px-6 py-3 sm:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
@@ -4025,11 +4026,12 @@ const SalesTracking = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Start Meter Image – view full size modal (only when Start modal is open and image uploaded) */}
-      {showStartModal && showStartMeterImageModal && uploadedImage && (
+      {/* Start Meter Image – view full size modal (portal to body) */}
+      {showStartModal && showStartMeterImageModal && uploadedImage && createPortal(
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-4" onClick={() => setShowStartMeterImageModal(false)}>
           <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
             <div className="bg-white rounded-xl overflow-hidden shadow-2xl flex-1 flex flex-col min-h-0 max-h-[90vh]">
@@ -4053,7 +4055,8 @@ const SalesTracking = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Tracking Completion Modal – no animation class to avoid blink on re-render */}
@@ -4380,12 +4383,12 @@ const SalesTracking = () => {
         </div>
       )}
 
-      {/* Visit Target Modal – mobile/tablet responsive + Close */}
+      {/* Visit Target Modal – mobile/tablet responsive; desktop: wider, more padding, less compressed */}
       {showVisitTargetModal && selectedVisitTarget && (
         <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" style={{ contain: 'layout style paint' }}>
-          <div key={selectedVisitTarget._id || selectedVisitTarget.id || 'visit-modal'} className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-4xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[85vh] flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
-            <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h3 className="text-base sm:text-xl font-semibold text-gray-800 truncate pr-2">{selectedVisitTarget.name}</h3>
+          <div key={selectedVisitTarget._id || selectedVisitTarget.id || 'visit-modal'} className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-2xl sm:shadow-2xl sm:max-w-2xl md:max-w-3xl lg:max-w-4xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[90vh] flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto" style={{ contain: 'layout style paint' }}>
+            <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-5 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="text-base sm:text-xl lg:text-2xl font-semibold text-gray-800 truncate pr-2">{selectedVisitTarget.name}</h3>
               <button
                 onClick={() => {
                   setShowVisitTargetModal(false)
@@ -4400,145 +4403,151 @@ const SalesTracking = () => {
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
-              {/* Target Info – use snapshot so distance doesn't change on re-renders */}
-              <div className="mb-6">
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-gray-600 mb-1">
-                    <span className="font-semibold">Address:</span> {selectedVisitTarget.address || 'N/A'}
-                  </p>
-                  {selectedVisitTarget.city && selectedVisitTarget.state && (
-                    <p className="text-sm text-gray-600 mb-1">
-                      <span className="font-semibold">Location:</span> {selectedVisitTarget.city}, {selectedVisitTarget.state}
-                    </p>
-                  )}
-                  {visitTargetModalSnapshot?.distance != null && (
-                    <p className="text-sm text-gray-600">
-                      <span className="font-semibold">Distance:</span> {visitTargetModalSnapshot.distance}
-                    </p>
-                  )}
+            <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0">
+              <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
+                {/* Left column: Address, status, comments */}
+                <div className="space-y-5 lg:space-y-6">
+                  {/* Target Info – use snapshot so distance doesn't change on re-renders */}
+                  <div>
+                    <div className="bg-gray-50 rounded-xl p-4 lg:p-5 mb-4">
+                      <p className="text-sm sm:text-base text-gray-600 mb-1.5">
+                        <span className="font-semibold">Address:</span> {selectedVisitTarget.address || 'N/A'}
+                      </p>
+                      {selectedVisitTarget.city && selectedVisitTarget.state && (
+                        <p className="text-sm sm:text-base text-gray-600 mb-1.5">
+                          <span className="font-semibold">Location:</span> {selectedVisitTarget.city}, {selectedVisitTarget.state}
+                        </p>
+                      )}
+                      {visitTargetModalSnapshot?.distance != null && (
+                        <p className="text-sm sm:text-base text-gray-600">
+                          <span className="font-semibold">Distance:</span> {visitTargetModalSnapshot.distance}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold ${
+                        selectedVisitTarget.status === 'Completed'
+                          ? 'bg-green-100 text-green-800'
+                          : selectedVisitTarget.status === 'In Progress'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {selectedVisitTarget.status}
+                      </span>
+                      {selectedVisitTarget.priority && (
+                        <span className="px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold bg-gray-100 text-gray-800">
+                          Priority: {selectedVisitTarget.priority}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Comments Field */}
+                  <div>
+                    <label className="block text-sm sm:text-base font-semibold text-gray-800 mb-2">
+                      Comments
+                    </label>
+                    <textarea
+                      value={targetComments || selectedVisitTarget.comments || ''}
+                      onChange={(e) => setTargetComments(e.target.value)}
+                      placeholder="Add comments about this visit target..."
+                      className="w-full px-3 py-2.5 lg:py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all resize-none text-sm sm:text-base"
+                      rows="4"
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    selectedVisitTarget.status === 'Completed'
-                      ? 'bg-green-100 text-green-800'
-                      : selectedVisitTarget.status === 'In Progress'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {selectedVisitTarget.status}
-                  </span>
-                  {selectedVisitTarget.priority && (
-                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
-                      Priority: {selectedVisitTarget.priority}
-                    </span>
+
+                {/* Right column: Route distance + action buttons */}
+                <div className="space-y-5 lg:space-y-6 mt-6 lg:mt-0">
+                  {/* Estimated Route Distance */}
+                  {(visitTargetModalSnapshot?.routeDistanceKm != null || (selectedVisitTarget?.latitude != null && selectedVisitTarget?.longitude != null)) && (
+                    <div className="p-4 lg:p-5 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                      <p className="text-sm sm:text-base font-semibold text-blue-800 mb-1">Estimated Route Distance</p>
+                      <p className="text-2xl lg:text-3xl font-bold text-blue-700">
+                        {visitTargetModalSnapshot?.routeDistanceKm != null
+                          ? (typeof visitTargetModalSnapshot.routeDistanceKm === 'number'
+                              ? `${visitTargetModalSnapshot.routeDistanceKm.toFixed(2)} km`
+                              : !isNaN(parseFloat(visitTargetModalSnapshot.routeDistanceKm))
+                                ? `${parseFloat(visitTargetModalSnapshot.routeDistanceKm).toFixed(2)} km`
+                                : `${visitTargetModalSnapshot.routeDistanceKm} km`)
+                          : 'Calculating...'}
+                      </p>
+                      <p className="text-xs sm:text-sm text-blue-600 mt-1">{visitTargetModalSnapshot?.routeDistanceKm != null ? 'Based on best route calculation' : 'Loading route for this visit'}</p>
+                    </div>
                   )}
-                </div>
-              </div>
 
-              {/* Comments Field */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-800 mb-2">
-                  Comments
-                </label>
-                <textarea
-                  value={targetComments || selectedVisitTarget.comments || ''}
-                  onChange={(e) => setTargetComments(e.target.value)}
-                  placeholder="Add comments about this visit target..."
-                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-gray-400 transition-all resize-none text-sm"
-                  rows="3"
-                />
-              </div>
+                  {/* Action Buttons – row on desktop */}
+                  <div className="flex flex-col sm:flex-row lg:flex-col gap-3">
+                    <button
+                      onClick={() => {
+                        handleCreateQuotation()
+                        setShowVisitTargetModal(false)
+                        setVisitTargetModalSnapshot(null)
+                      }}
+                      className="flex-1 px-4 py-2.5 lg:py-3 bg-gray-600 text-white rounded-xl text-sm sm:text-base font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Create Quotation
+                    </button>
 
-              {/* Estimated Route Distance – per-visit; shows Calculating... until this visit's route loads */}
-              {(visitTargetModalSnapshot?.routeDistanceKm != null || (selectedVisitTarget?.latitude != null && selectedVisitTarget?.longitude != null)) && (
-                <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-800 mb-1">Estimated Route Distance</p>
-                  <p className="text-2xl font-bold text-blue-700">
-                    {visitTargetModalSnapshot?.routeDistanceKm != null
-                      ? (typeof visitTargetModalSnapshot.routeDistanceKm === 'number'
-                          ? `${visitTargetModalSnapshot.routeDistanceKm.toFixed(2)} km`
-                          : !isNaN(parseFloat(visitTargetModalSnapshot.routeDistanceKm))
-                            ? `${parseFloat(visitTargetModalSnapshot.routeDistanceKm).toFixed(2)} km`
-                            : `${visitTargetModalSnapshot.routeDistanceKm} km`)
-                      : 'Calculating...'}
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1">{visitTargetModalSnapshot?.routeDistanceKm != null ? 'Based on best route calculation' : 'Loading route for this visit'}</p>
-                </div>
-              )}
+                    <button
+                      onClick={() => {
+                        if (selectedVisitTarget) {
+                          const visitTargetData = {
+                            customerName: selectedVisitTarget.name || selectedVisitTarget.customerName || '',
+                            customerEmail: selectedVisitTarget.email || selectedVisitTarget.customerEmail || '',
+                            customerPhone: selectedVisitTarget.phone || selectedVisitTarget.customerPhone || '',
+                            deliveryAddress: selectedVisitTarget.address || selectedVisitTarget.deliveryAddress || '',
+                            visitTargetId: selectedVisitTarget._id || selectedVisitTarget.id
+                          }
+                          localStorage.setItem('salesOrderVisitTarget', JSON.stringify(visitTargetData))
+                          localStorage.setItem('openSalesOrderForm', 'true')
+                          localStorage.setItem('salesOrderFromAchievement', 'true')
+                        }
+                        setShowVisitTargetModal(false)
+                        setVisitTargetModalSnapshot(null)
+                        const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
+                        window.dispatchEvent(event)
+                      }}
+                      className="flex-1 px-4 py-2.5 lg:py-3 bg-[#e9931c] text-white rounded-xl text-sm sm:text-base font-medium hover:bg-[#d8830a] transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                      Create Sales Order
+                    </button>
 
-              {/* Action Buttons */}
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    handleCreateQuotation()
-                    setShowVisitTargetModal(false)
-                    setVisitTargetModalSnapshot(null)
-                  }}
-                  className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Create Quotation
-                </button>
+                    {selectedVisitTarget.status !== 'Completed' && (
+                      <button
+                        onClick={() => {
+                          setShowVisitTargetModal(false)
+                          setVisitTargetModalSnapshot(null)
+                          handleMarkAsCompleted()
+                        }}
+                        className="flex-1 px-4 py-2.5 lg:py-3 bg-gray-600 text-white rounded-xl text-sm sm:text-base font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Complete Target
+                      </button>
+                    )}
+                  </div>
 
-                <button
-                  onClick={() => {
-                    // Store visit target customer info for sales upload form auto-fill
-                    if (selectedVisitTarget) {
-                      const visitTargetData = {
-                        customerName: selectedVisitTarget.name || selectedVisitTarget.customerName || '',
-                        customerEmail: selectedVisitTarget.email || selectedVisitTarget.customerEmail || '',
-                        customerPhone: selectedVisitTarget.phone || selectedVisitTarget.customerPhone || '',
-                        deliveryAddress: selectedVisitTarget.address || selectedVisitTarget.deliveryAddress || '',
-                        visitTargetId: selectedVisitTarget._id || selectedVisitTarget.id
-                      }
-                      localStorage.setItem('salesOrderVisitTarget', JSON.stringify(visitTargetData))
-                      localStorage.setItem('openSalesOrderForm', 'true')
-                      localStorage.setItem('salesOrderFromAchievement', 'true')
-                    }
-                    setShowVisitTargetModal(false)
-                    setVisitTargetModalSnapshot(null)
-                    // Navigate to Sales Orders tab
-                    const event = new CustomEvent('navigateToTab', { detail: 'sales-orders' })
-                    window.dispatchEvent(event)
-                  }}
-                  className="w-full px-3 py-2 bg-[#e9931c] text-white rounded-lg text-sm font-medium hover:bg-[#d8830a] transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                  </svg>
-                  Create Sales Order
-                </button>
-
-                {selectedVisitTarget.status !== 'Completed' && (
                   <button
                     onClick={() => {
                       setShowVisitTargetModal(false)
+                      setSelectedVisitTarget(null)
                       setVisitTargetModalSnapshot(null)
-                      handleMarkAsCompleted()
                     }}
-                    className="w-full px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full px-4 py-2.5 lg:py-3 bg-gray-200 text-gray-700 rounded-xl text-sm sm:text-base font-medium hover:bg-gray-300 transition-colors"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Complete Target
+                    Close
                   </button>
-                )}
+                </div>
               </div>
-
-              <button
-                onClick={() => {
-                  setShowVisitTargetModal(false)
-                  setSelectedVisitTarget(null)
-                  setVisitTargetModalSnapshot(null)
-                }}
-                className="w-full mt-4 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>
