@@ -40,9 +40,10 @@ const MapView = ({
       attributionControl: false, // Disable default attribution
     })
 
-    // Add tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '',
+    // Carto Voyager – English/Latin labels globally
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+      subdomains: 'abcd',
       maxZoom: 19,
     }).addTo(map)
 

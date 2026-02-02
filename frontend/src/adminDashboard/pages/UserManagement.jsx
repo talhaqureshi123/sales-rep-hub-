@@ -157,9 +157,9 @@ const UserManagement = () => {
   }
 
   return (
-    <div className="flex gap-2 p-3 h-full">
-      {/* Left Panel - User List */}
-      <div className="flex-1 min-w-0">
+    <div className="flex gap-3 sm:gap-4 p-3 sm:p-4 h-full min-h-0">
+      {/* Left Panel - Salesman List (exactly 50% on desktop) */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col lg:flex-[0_0_calc(50%-0.5rem)] lg:max-w-[calc(50%-0.5rem)]">
         <UserList
           users={users}
           onEdit={handleEdit}
@@ -172,8 +172,8 @@ const UserManagement = () => {
         />
       </div>
 
-      {/* Right Panel - Add User Form (desktop: sidebar) */}
-      <div className="max-md:hidden flex w-full md:w-auto md:min-w-[320px] lg:min-w-[380px]">
+      {/* Right Panel - Add Salesman Form (exactly 50% on desktop) */}
+      <div className="max-md:hidden flex flex-1 min-w-0 min-h-0 lg:flex-[0_0_calc(50%-0.5rem)] lg:max-w-[calc(50%-0.5rem)]">
         <AddUserForm
           onSave={handleSave}
           editingUser={editingUser}

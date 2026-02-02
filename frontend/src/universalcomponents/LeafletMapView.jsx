@@ -76,8 +76,10 @@ const LeafletMapView = ({
       scrollWheelZoom: true,
       zoomControl: false,
     })
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap',
+    // Carto Voyager – English/Latin labels globally (OSM default can show Urdu/local script)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+      subdomains: 'abcd',
       maxZoom: 19,
     }).addTo(map)
     map.addControl(L.control.zoom({ position: 'topright' }))

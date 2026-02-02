@@ -69,15 +69,18 @@ const AddUserForm = ({ onSave, editingUser, onCancel, loading }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 h-full min-h-0">
-      <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">
-        {editingUser ? 'Edit Salesman' : 'Add Salesman'}
-      </h2>
-      <p className="text-gray-600 mb-6">
-        {editingUser ? 'Update salesman information' : 'Welcome back! Add a new salesman to the system'}
-      </p>
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 h-full min-h-0 flex flex-col">
+      <div className="flex-shrink-0">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">
+          {editingUser ? 'Edit Salesman' : 'Add Salesman'}
+        </h2>
+        <p className="text-gray-600 mb-4">
+          {editingUser ? 'Update salesman information' : 'Welcome back! Add a new salesman to the system'}
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col min-w-0">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-5 pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
         {/* Name Field */}
         <div className="relative">
           <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
@@ -170,9 +173,10 @@ const AddUserForm = ({ onSave, editingUser, onCancel, loading }) => {
             </p>
           </div>
         )}
+        </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
+        {/* Action Buttons - fixed at bottom of panel */}
+        <div className="flex-shrink-0 flex gap-3 pt-4 mt-2 border-t border-gray-100">
           {editingUser && onCancel && (
             <button
               type="button"
