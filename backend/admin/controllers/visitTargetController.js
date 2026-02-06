@@ -9,7 +9,7 @@ const FollowUp = require("../../database/models/FollowUp");
 // @access  Private/Admin
 const getVisitTargets = async (req, res) => {
   try {
-    const { salesman, status, priority, search, approvalStatus } = req.query;
+    const { salesman, status, priority, search, approvalStatus, date } = req.query;
     const filter = {};
 
     if (salesman) {
@@ -31,16 +31,48 @@ const getVisitTargets = async (req, res) => {
         { description: { $regex: search, $options: "i" } },
       ];
     }
+    // date=YYYY-MM-DD: visits on that day (completedAt or visitDate)
+    if (date) {
+      const d = new Date(date);
+      if (!isNaN(d.getTime())) {
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+        const dateCondition = {
+          $or: [
+            { completedAt: { $gte: dayStart, $lt: dayEnd } },
+            { visitDate: { $gte: dayStart, $lt: dayEnd } },
+          ],
+        };
+        if (filter.$or) {
+          filter.$and = [{ $or: filter.$or }, dateCondition];
+          delete filter.$or;
+        } else {
+          Object.assign(filter, dateCondition);
+        }
+      }
+    }
 
-    const visitTargets = await VisitTarget.find(filter)
-      .populate("salesman", "name email")
-      .populate("createdBy", "name email role")
-      .sort({ createdAt: -1 });
+    const listView = req.query.listView === "1" || req.query.listView === "true";
+    const listLimit = Math.min(parseInt(req.query.limit, 10) || 150, 400);
 
-    // Sync pending+approved visit targets as tasks to HubSpot (async, non-blocking)
-    (async () => {
-      try {
-        const pendingTargets = visitTargets.filter((vt) => {
+    const visitTargets = listView
+      ? await VisitTarget.find(filter)
+          .select("name customerName address city state pincode visitDate status approvalStatus priority salesman createdBy createdAt completedAt description actualKilometers estimatedKilometers startingKilometers endingKilometers meterImage quotationCreated comments notes")
+          .populate("salesman", "name email")
+          .populate("createdBy", "name email role")
+          .sort({ createdAt: -1 })
+          .limit(listLimit)
+          .lean()
+      : await VisitTarget.find(filter)
+          .populate("salesman", "name email")
+          .populate("createdBy", "name email role")
+          .sort({ createdAt: -1 });
+
+    // Sync pending+approved visit targets as tasks to HubSpot (async, non-blocking) – skip in listView to avoid extra work
+    if (!listView) {
+      (async () => {
+        try {
+          const pendingTargets = visitTargets.filter((vt) => {
           const isApproved =
             !vt.approvalStatus || vt.approvalStatus === "Approved";
           return vt.status === "Pending" && isApproved;
@@ -85,6 +117,7 @@ const getVisitTargets = async (req, res) => {
         console.error("HubSpot task sync error (non-blocking):", error.message);
       }
     })();
+    }
 
     res.status(200).json({
       success: true,

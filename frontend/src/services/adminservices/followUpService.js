@@ -21,6 +21,7 @@ export const getFollowUps = async (filters = {}) => {
     if (filters.startDate) queryParams.append('startDate', filters.startDate)
     if (filters.endDate) queryParams.append('endDate', filters.endDate)
     if (filters.source) queryParams.append('source', filters.source)
+    if (filters.listView) queryParams.append('listView', '1')
 
     const url = queryParams.toString() ? `${API_BASE_URL}?${queryParams.toString()}` : API_BASE_URL
 

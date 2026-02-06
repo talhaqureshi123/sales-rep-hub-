@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getVisitTargets, getSalesmanTargetStats } from '../../services/adminservices/visitTargetService'
 import { getUsers } from '../../services/adminservices/userService'
 import {
@@ -15,53 +15,53 @@ const VisitedTargets = () => {
   const [visitTargets, setVisitTargets] = useState([])
   const [salesmen, setSalesmen] = useState([])
   const [loading, setLoading] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [filterStatus, setFilterStatus] = useState('Completed')
+  const [selectedDate, setSelectedDate] = useState('') // Empty by default; list still shows today's visits
+  const [filterStatus, setFilterStatus] = useState('') // All selected by default
   const [filterSalesman, setFilterSalesman] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCity, setFilterCity] = useState('')
   const [salesmanStats, setSalesmanStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  const filterEffectRan = useRef(false)
+  const salesmenLoaded = useRef(false)
 
+  // Only visit targets on mount – one API, fast load. Salesmen load when user opens dropdown.
   useEffect(() => {
-    loadSalesmen()
-    loadVisitTargets()
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        await loadVisitTargets()
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
-    loadVisitTargets()
-    // Load salesman stats when a salesman is selected
-    if (filterSalesman) {
-      loadSalesmanStats(filterSalesman)
-    } else {
-      setSalesmanStats(null)
+    if (!filterEffectRan.current) {
+      filterEffectRan.current = true
+      return
     }
+    loadVisitTargets()
+    if (filterSalesman) loadSalesmanStats(filterSalesman)
+    else setSalesmanStats(null)
   }, [selectedDate, filterStatus, filterSalesman, searchTerm, filterCity])
 
   const loadVisitTargets = async () => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { listView: true, limit: 500 }
       if (filterStatus && filterStatus !== 'All') params.status = filterStatus
       if (filterSalesman) params.salesman = filterSalesman
-  
+      if (selectedDate) params.date = selectedDate
+
       const result = await getVisitTargets(params)
       if (result.success && result.data) {
         let targets = result.data
-  
-        // Filter by date
-        if (selectedDate) {
-          const selected = new Date(selectedDate)
-          targets = targets.filter(target => {
-            const dateToCheck = target.completedAt || target.visitDate
-            if (!dateToCheck) return false
-            const d = new Date(dateToCheck)
-            return d.getFullYear() === selected.getFullYear() &&
-                   d.getMonth() === selected.getMonth() &&
-                   d.getDate() === selected.getDate()
-          })
-        }
-        
+
         // Filter by city
         if (filterCity) {
           targets = targets.filter(target =>
@@ -90,13 +90,14 @@ const VisitedTargets = () => {
   }
   
   const loadSalesmen = async () => {
+    if (salesmenLoaded.current) return
+    salesmenLoaded.current = true
     try {
       const result = await getUsers({ role: 'salesman' })
-      if (result.success && result.data) {
-        setSalesmen(result.data)
-      }
+      if (result.success && result.data) setSalesmen(result.data)
     } catch (error) {
       console.error('Error loading salesmen:', error)
+      salesmenLoaded.current = false
     }
   }
 
@@ -184,6 +185,7 @@ const VisitedTargets = () => {
               className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1">Leave date empty to see <strong>all visits</strong> in database. Select a date to see only that day. &quot;All&quot; = all statuses.</p>
         </div>
 
         {/* Status Filter Pills */}
@@ -228,6 +230,7 @@ const VisitedTargets = () => {
           <select
             value={filterSalesman}
             onChange={(e) => setFilterSalesman(e.target.value)}
+            onFocus={loadSalesmen}
             className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
           >
             <option value="">Filter by salesman</option>
@@ -297,11 +300,24 @@ const VisitedTargets = () => {
       ) : visitTargets.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
           <FaCalendarAlt className="w-24 h-24 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">No visits scheduled</h3>
-          <p className="text-gray-600">No completed visit targets found for the selected date and filters.</p>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            {selectedDate ? 'No visits for this date' : 'No visit targets in database'}
+          </h3>
+          <p className="text-gray-600">
+            {selectedDate
+              ? `No visit targets found for ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} with current filters.`
+              : 'No visit targets found with current filters.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            {selectedDate ? (
+              <>Showing {visitTargets.length} visit target{visitTargets.length !== 1 ? 's' : ''} for <strong>{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong></>
+            ) : (
+              <>Showing <strong>all</strong> {visitTargets.length} visit target{visitTargets.length !== 1 ? 's' : ''} in database</>
+            )}
+          </p>
           {visitTargets.map((target) => (
             <div
               key={target._id}

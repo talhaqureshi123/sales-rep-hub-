@@ -4,6 +4,8 @@ import { getUsers } from '../../services/adminservices/userService'
 import { FaEdit, FaTrash, FaCheckCircle } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
+const VISIT_TARGETS_LIST_LIMIT = 150
+
 const VisitTargetManagement = () => {
   const [visitTargets, setVisitTargets] = useState([])
   const [salesmen, setSalesmen] = useState([])
@@ -21,6 +23,7 @@ const VisitTargetManagement = () => {
   const mapPickerRef = useRef(null)
   const mapPickerInstanceRef = useRef(null)
   const markerRef = useRef(null)
+  const filterEffectRan = useRef(false)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -38,14 +41,30 @@ const VisitTargetManagement = () => {
     // proximityRadius: 0.1, // REMOVED - Not needed
   })
 
-  // Load data on mount
+  // Load visit targets first so list shows fast; salesmen load in background for dropdown
   useEffect(() => {
-    loadVisitTargets()
-    loadSalesmen()
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        await loadVisitTargets()
+        if (cancelled) return
+        loadSalesmen().catch(() => {})
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
-  // Reload when filters change
+  // Reload when filters change (skip first run to avoid double fetch on mount)
   useEffect(() => {
+    if (!filterEffectRan.current) {
+      filterEffectRan.current = true
+      return
+    }
     loadVisitTargets()
   }, [filterSalesman, filterStatus, filterPriority, filterApprovalStatus, searchTerm])
 
@@ -53,7 +72,7 @@ const VisitTargetManagement = () => {
     setLoading(true)
     setError(null)
     try {
-      const params = {}
+      const params = { listView: true, limit: VISIT_TARGETS_LIST_LIMIT }
       if (filterSalesman) params.salesman = filterSalesman
       if (filterStatus) params.status = filterStatus
       if (filterPriority) params.priority = filterPriority
@@ -61,12 +80,9 @@ const VisitTargetManagement = () => {
       if (searchTerm) params.search = searchTerm
 
       const result = await getVisitTargets(params)
-      console.log('VisitTargetManagement - Load result:', result)
       if (result.success && result.data) {
-        console.log('VisitTargetManagement - Setting visit targets:', result.data.length, result.data)
         setVisitTargets(result.data)
       } else {
-        console.error('Failed to load visit targets:', result.message)
         setError(result.message || 'Failed to load visit targets')
         setVisitTargets([])
       }

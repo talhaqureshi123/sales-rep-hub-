@@ -466,8 +466,8 @@ const LiveTracking = () => {
                 <div className="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-lg shadow-md text-center max-w-xs">
                   <FaMapMarkerAlt className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-600 text-sm font-medium">No rep locations yet</p>
-                  <p className="text-gray-500 text-xs mt-1 max-w-[240px]">
-                    Reps appear when they open Sales Tracking and tap Start
+                  <p className="text-gray-500 text-xs mt-1 max-w-[260px]">
+                    Reps appear when they open <strong>Sales Tracking</strong> and tap <strong>Start</strong>.
                   </p>
                 </div>
               </div>
@@ -695,7 +695,7 @@ const LiveTracking = () => {
                             )}
                             {!loc?.latitude || !loc?.longitude ? (
                               <div className="mt-2 pt-2 border-t border-gray-200">
-                                <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                                <p className="text-xs text-gray-500 flex items-center gap-1.5 break-words">
                                   <FaInfoCircle className="w-3 h-3 flex-shrink-0" />
                                   No location yet. Location is shared when rep opens <strong>Sales Tracking</strong> and taps <strong>Start</strong>.
                                 </p>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getCustomers, updateCustomer, getCustomer } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { FaUser, FaFilter, FaUnlink } from 'react-icons/fa'
@@ -20,13 +20,31 @@ const CustomerAllotment = () => {
   const [showBulkAllot, setShowBulkAllot] = useState(false)
   const [selectedSalesmanMap, setSelectedSalesmanMap] = useState({}) // Map customerId -> salesmanId
   const [customerSalesmanMap, setCustomerSalesmanMap] = useState({}) // Map customerId -> {salesmanId, salesmanName} from tasks
+  const filterEffectRan = useRef(false)
 
-  // Load data on mount
+  // One parallel load on mount: salesmen + admins + customers in single fetch (no double getCustomers)
   useEffect(() => {
-    loadSalesmen()
-    loadAdmins()
-    // Load mapping first, then customers (mapping will trigger customers reload)
-    loadCustomerSalesmanMapping()
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const [salesmenRes, adminsRes, customersRes] = await Promise.all([
+          getUsers({ role: 'salesman', status: 'Active' }),
+          getUsers({ role: 'admin' }),
+          getCustomers({ listView: true, limit: 1000 })
+        ])
+        if (cancelled) return
+        if (salesmenRes.success && salesmenRes.data) setSalesmen(salesmenRes.data)
+        if (adminsRes.success && adminsRes.data) setAdmins(adminsRes.data)
+        if (customersRes.success && customersRes.data) applyCustomersResult(customersRes.data)
+      } catch (e) {
+        if (!cancelled) console.error(e)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   // Debounce search so API is called after user stops typing
@@ -35,59 +53,65 @@ const CustomerAllotment = () => {
     return () => clearTimeout(t)
   }, [searchTerm])
 
-  // Reload when filters change (debounced search used so search works correctly)
+  // Reload when filters change (skip first run so we don't double-fetch on mount)
   useEffect(() => {
+    if (!filterEffectRan.current) {
+      filterEffectRan.current = true
+      return
+    }
     loadCustomers()
   }, [filterSalesman, filterStatus, filterCreatedBy, debouncedSearchTerm])
+
+  // Apply raw customer list to state (mapping, filters, selected map) – used after fetch
+  const applyCustomersResult = (raw) => {
+    const list = Array.isArray(raw) ? raw : []
+    setAllCustomers(list)
+    const hasAllotted = (c) => !!(c.allottedSalesman?._id || c.allottedSalesman)
+    const mapping = {}
+    list.forEach(customer => {
+      const allotted = customer.allottedSalesman?._id || customer.allottedSalesman
+      if (allotted) {
+        mapping[customer._id] = {
+          salesmanId: allotted,
+          salesmanName: customer.allottedSalesman?.name || customer.allottedSalesman?.email || '',
+          allotmentTaskIds: []
+        }
+      }
+    })
+    setCustomerSalesmanMap(mapping)
+    let filtered = list
+    if (filterStatus === 'unassigned') filtered = list.filter(c => !hasAllotted(c))
+    if (filterStatus === 'assigned') filtered = list.filter(c => hasAllotted(c))
+    if (filterCreatedBy) {
+      filtered = filtered.filter(c => {
+        const createdById = c.createdBy?._id || c.createdBy
+        return createdById && createdById.toString() === filterCreatedBy
+      })
+    }
+    setCustomers(filtered)
+    setSelectedSalesmanMap(prev => {
+      const next = { ...prev }
+      list.forEach(c => {
+        const allottedId = c.allottedSalesman?._id || c.allottedSalesman
+        if (allottedId) next[c._id] = allottedId
+      })
+      return next
+    })
+  }
 
   const loadCustomers = async () => {
     setLoading(true)
     try {
-      const params = {}
-      // When "Unassigned" is selected, fetch all customers and filter on frontend; don't pass salesman
+      const params = { listView: true, limit: 1000 }
       if (filterSalesman && filterStatus !== 'unassigned') params.salesman = filterSalesman
-      if (filterStatus && filterStatus !== 'all') {
-        if (filterStatus === 'unassigned' || filterStatus === 'assigned') {
-          // Filter unassigned/assigned on frontend using allottedSalesman from API response
-        } else {
-          params.status = filterStatus
-        }
-      }
+      if (filterStatus && filterStatus !== 'all' && filterStatus !== 'unassigned' && filterStatus !== 'assigned') params.status = filterStatus
       const searchTrimmed = (debouncedSearchTerm || '').trim()
       if (searchTrimmed) params.search = searchTrimmed
       if (filterCreatedBy) params.createdBy = filterCreatedBy
 
       const result = await getCustomers(params)
-      if (result.success && result.data) {
-        const raw = Array.isArray(result.data) ? result.data : []
-        setAllCustomers(raw)
-
-        // Use allottedSalesman from API response for status filter (not stale customerSalesmanMap)
-        const hasAllotted = (c) => !!(c.allottedSalesman?._id || c.allottedSalesman)
-        let filteredCustomers = raw
-        if (filterStatus === 'unassigned') filteredCustomers = raw.filter(c => !hasAllotted(c))
-        if (filterStatus === 'assigned') filteredCustomers = raw.filter(c => hasAllotted(c))
-        
-        // Filter by admin who created the customer (if not already filtered by API)
-        if (filterCreatedBy) {
-          filteredCustomers = filteredCustomers.filter(c => {
-            const createdById = c.createdBy?._id || c.createdBy
-            return createdById && createdById.toString() === filterCreatedBy
-          })
-        }
-        
-        setCustomers(filteredCustomers)
-        
-        // Update selectedSalesmanMap from allottedSalesman
-        setSelectedSalesmanMap(prev => {
-          const newMap = { ...prev }
-          raw.forEach(customer => {
-            const allottedId = customer.allottedSalesman?._id || customer.allottedSalesman
-            if (allottedId) newMap[customer._id] = allottedId
-          })
-          return newMap
-        })
-      } else {
+      if (result.success && result.data) applyCustomersResult(result.data)
+      else {
         console.error('Failed to load customers:', result.message)
         setAllCustomers([])
         setCustomers([])
@@ -123,26 +147,11 @@ const CustomerAllotment = () => {
     }
   }
 
-  // Load customer-salesman mapping from Customer.allottedSalesman (simple allotment – no task)
+  // Refresh mapping + list after allot/unallot (single fetch)
   const loadCustomerSalesmanMapping = async () => {
     try {
-      const result = await getCustomers({})
-      if (result.success && result.data) {
-        const mapping = {}
-        const list = Array.isArray(result.data) ? result.data : []
-        list.forEach(customer => {
-          const allotted = customer.allottedSalesman?._id || customer.allottedSalesman
-          if (allotted) {
-            mapping[customer._id] = {
-              salesmanId: allotted,
-              salesmanName: customer.allottedSalesman?.name || customer.allottedSalesman?.email || '',
-              allotmentTaskIds: [] // Not used – simple allotment, no tasks
-            }
-          }
-        })
-        setCustomerSalesmanMap(mapping)
-        setTimeout(() => loadCustomers(), 100)
-      }
+      const result = await getCustomers({ listView: true, limit: 1000 })
+      if (result.success && result.data) applyCustomersResult(result.data)
     } catch (error) {
       console.error('Error loading customer-salesman mapping:', error)
     }
@@ -630,15 +639,22 @@ const CustomerAllotment = () => {
           </div>
 
           {loading && customers.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border-2 border-gray-200">
-              <p className="text-gray-600">Loading customers...</p>
+            <div className="text-center py-16 bg-white rounded-lg border-2 border-gray-200">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#e9931c] border-t-transparent mx-auto mb-4"></div>
+              <p className="text-gray-600 font-medium">Loading customers...</p>
             </div>
           ) : customers.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-lg border-2 border-gray-200">
               <p className="text-gray-600">No customers found.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="relative">
+              {loading && (
+                <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center rounded-lg min-h-[200px]">
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#e9931c] border-t-transparent"></div>
+                </div>
+              )}
+              <div className="overflow-x-auto">
               <table className="w-full min-w-full table-fixed">
                 <thead>
                   <tr className="border-b-2 border-gray-200 bg-gray-50">
@@ -814,6 +830,7 @@ const CustomerAllotment = () => {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>

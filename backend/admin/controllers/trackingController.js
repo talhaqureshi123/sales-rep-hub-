@@ -25,23 +25,36 @@ const getAllTracking = async (req, res) => {
       filter.createdAt = { $gte: startDate, $lte: endDate };
     }
 
+    const limit = Math.min(parseInt(req.query.limit, 10) || 80, 200);
     const trackings = await Tracking.find(filter)
       .populate("salesman", "name email")
       .populate("visitTarget", "name address visitedAreaImage")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const trackingIds = trackings.map((t) => t._id);
+    const visitSelect =
+      "visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate";
+    const allByTrackingId = await VisitTarget.find({
+      trackingId: { $in: trackingIds },
+    })
+      .select(visitSelect)
+      .lean();
+    const byTrackingId = new Map();
+    allByTrackingId.forEach((vt) => {
+      const tid = String(vt.trackingId);
+      if (!byTrackingId.has(tid)) byTrackingId.set(tid, []);
+      byTrackingId.get(tid).push(vt);
+    });
 
     // Get visit counts and visited area images for each tracking session
     const trackingsWithVisits = await Promise.all(
       trackings.map(async (tracking) => {
-        const trackingIdTargets = await VisitTarget.find({
-          trackingId: tracking._id,
-        }).select(
-          "visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate"
-        );
+        const trackingIdTargets = byTrackingId.get(String(tracking._id)) || [];
 
         const salesmanId = tracking.salesman?._id || tracking.salesman;
         const shiftDate = tracking.startedAt || tracking.createdAt;
-        // Use UTC day boundaries so deployed (UTC) and local behave the same; visits show correctly on Shift Photos
         const d = new Date(shiftDate);
         const y = d.getUTCFullYear();
         const m = d.getUTCMonth();
@@ -56,9 +69,9 @@ const getAllTracking = async (req, res) => {
                 { visitDate: { $gte: shiftStart, $lte: shiftEnd } },
                 { completedAt: { $gte: shiftStart, $lte: shiftEnd } },
               ],
-            }).select(
-              "visitedAreaImage visitedAreaImages estimatedKilometers actualKilometers status updatedAt completedAt salesman visitDate"
-            )
+            })
+              .select(visitSelect)
+              .lean()
           : [];
 
         const visitTargetsMap = new Map();
@@ -146,7 +159,7 @@ const getAllTracking = async (req, res) => {
         }, 0);
 
         return {
-          ...tracking.toObject(),
+          ...tracking,
           visitCount,
           visitedAreaImage:
             visitedAreaImage || tracking.visitedAreaImage || null,

@@ -22,6 +22,9 @@ export const getVisitTargets = async (params = {}) => {
     if (params.priority) queryParams.append('priority', params.priority)
     if (params.approvalStatus) queryParams.append('approvalStatus', params.approvalStatus)
     if (params.search) queryParams.append('search', params.search)
+    if (params.date) queryParams.append('date', params.date)
+    if (params.listView) queryParams.append('listView', '1')
+    if (params.listView && params.limit != null) queryParams.append('limit', params.limit)
 
     const url = queryParams.toString()
       ? `${API_BASE_URL}?${queryParams.toString()}`

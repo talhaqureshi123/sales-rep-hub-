@@ -21,6 +21,8 @@ export const getCustomers = async (params = {}) => {
     if (params.status) queryParams.append('status', params.status)
     if (params.search) queryParams.append('search', params.search)
     if (params.createdBy) queryParams.append('createdBy', params.createdBy)
+    if (params.listView) queryParams.append('listView', '1')
+    if (params.limit != null) queryParams.append('limit', String(params.limit))
 
     const url = queryParams.toString() 
       ? `${API_BASE_URL}?${queryParams.toString()}`

@@ -116,10 +116,25 @@ const getCustomers = async (req, res) => {
       filter.allottedSalesman = salesman;
     }
 
-    const customers = await Customer.find(filter)
-      .populate("createdBy", "name email role")
-      .populate("allottedSalesman", "name email")
-      .sort({ createdAt: -1 });
+    const listView = req.query.listView === "1" || req.query.listView === "true";
+    const limit = Math.min(parseInt(req.query.limit, 10) || 2000, 5000);
+
+    const listSelect = "firstName name contactPerson email phone address city state pincode postcode company status orderPotential monthlySpend latitude longitude allottedSalesman createdBy createdAt source";
+
+    const customers = listView
+      ? await Customer.find(filter)
+          .select(listSelect)
+          .populate("createdBy", "name email role")
+          .populate("allottedSalesman", "name email")
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean()
+      : await Customer.find(filter)
+          .populate("createdBy", "name email role")
+          .populate("allottedSalesman", "name email")
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean();
 
     res.status(200).json({
       success: true,

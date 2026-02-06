@@ -142,5 +142,6 @@ customerSchema.pre("save", async function () {
 customerSchema.index({ createdBy: 1 });
 customerSchema.index({ status: 1 });
 customerSchema.index({ allottedSalesman: 1 });
+customerSchema.index({ createdAt: -1 }); // for list sort
 
 module.exports = mongoose.model("Customer", customerSchema);

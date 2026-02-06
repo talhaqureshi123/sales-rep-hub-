@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
+import { getVisitTargets } from '../../services/adminservices/visitTargetService'
 import { FaCheckCircle, FaFileInvoice, FaMapMarkerAlt, FaRoute, FaComments, FaImage } from 'react-icons/fa'
 
 const ConversionsTracking = () => {
   const [loading, setLoading] = useState(true)
   const [visitTargets, setVisitTargets] = useState([])
-  const [filter, setFilter] = useState('all') // all, completed, with-quotations
+  const [filter, setFilter] = useState('all')
   const [selectedTarget, setSelectedTarget] = useState(null)
 
   useEffect(() => {
@@ -14,43 +15,26 @@ const ConversionsTracking = () => {
   const loadData = async () => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('token')
-      if (!token) {
-        console.error('No token found')
-        return
-      }
+      const params = { listView: true, limit: 400 }
+      if (filter === 'completed') params.status = 'Completed'
 
-      // Load all visit targets with conversions
-      const response = await fetch('/api/admin/visit-targets', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      const result = await response.json()
+      const result = await getVisitTargets(params)
       if (result.success && result.data) {
-        let filtered = result.data
-
-        // Apply filters
-        if (filter === 'completed') {
-          filtered = filtered.filter(vt => vt.status === 'Completed')
-        } else if (filter === 'with-quotations') {
-          filtered = filtered.filter(vt => vt.quotationCreated === true)
+        let list = result.data
+        if (filter === 'with-quotations') {
+          list = list.filter(vt => vt.quotationCreated === true)
         }
-
-        // Sort by completed date (most recent first)
-        filtered.sort((a, b) => {
-          if (a.completedAt && b.completedAt) {
-            return new Date(b.completedAt) - new Date(a.completedAt)
-          }
+        list.sort((a, b) => {
+          if (a.completedAt && b.completedAt) return new Date(b.completedAt) - new Date(a.completedAt)
           return 0
         })
-
-        setVisitTargets(filtered)
+        setVisitTargets(list)
+      } else {
+        setVisitTargets([])
       }
     } catch (error) {
       console.error('Error loading conversions:', error)
+      setVisitTargets([])
     } finally {
       setLoading(false)
     }
@@ -58,10 +42,10 @@ const ConversionsTracking = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#e9931c] border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading conversions...</p>
+      <div className="flex items-center justify-center min-h-[200px] sm:min-h-[280px] w-full">
+        <div className="text-center px-4">
+          <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-4 border-[#e9931c] border-t-transparent mx-auto mb-3 sm:mb-4"></div>
+          <p className="text-sm sm:text-base text-gray-600">Loading conversions...</p>
         </div>
       </div>
     )
@@ -74,61 +58,61 @@ const ConversionsTracking = () => {
     .reduce((sum, vt) => sum + parseFloat(vt.actualKilometers || 0), 0)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full max-w-full overflow-hidden px-1 sm:px-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Conversions & Tracking</h1>
-          <p className="text-gray-600 mt-1">View all visit target completions, meter readings, and conversions</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 truncate">Conversions & Tracking</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">Visit completions, meter readings & conversions</p>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Completed Targets</p>
-              <p className="text-3xl font-bold text-gray-800">{completedCount}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-l-4 border-green-500 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Completed</p>
+              <p className="text-xl sm:text-3xl font-bold text-gray-800">{completedCount}</p>
             </div>
-            <FaCheckCircle className="text-4xl text-green-500" />
+            <FaCheckCircle className="text-2xl sm:text-4xl text-green-500 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">With Quotations</p>
-              <p className="text-3xl font-bold text-gray-800">{withQuotationsCount}</p>
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-l-4 border-blue-500 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">With Quotations</p>
+              <p className="text-xl sm:text-3xl font-bold text-gray-800">{withQuotationsCount}</p>
             </div>
-            <FaFileInvoice className="text-4xl text-blue-500" />
+            <FaFileInvoice className="text-2xl sm:text-4xl text-blue-500 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Distance</p>
-              <p className="text-3xl font-bold text-gray-800">{totalDistance.toFixed(2)} km</p>
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-l-4 border-orange-500 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Distance (km)</p>
+              <p className="text-xl sm:text-3xl font-bold text-gray-800">{totalDistance.toFixed(1)}</p>
             </div>
-            <FaRoute className="text-4xl text-orange-500" />
+            <FaRoute className="text-2xl sm:text-4xl text-orange-500 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Targets</p>
-              <p className="text-3xl font-bold text-gray-800">{visitTargets.length}</p>
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-l-4 border-purple-500 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Total</p>
+              <p className="text-xl sm:text-3xl font-bold text-gray-800">{visitTargets.length}</p>
             </div>
-            <FaMapMarkerAlt className="text-4xl text-purple-500" />
+            <FaMapMarkerAlt className="text-2xl sm:text-4xl text-purple-500 flex-shrink-0" />
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <div className="flex gap-2">
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setFilter('all')}
             className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
@@ -163,33 +147,33 @@ const ConversionsTracking = () => {
       </div>
 
       {/* Visit Targets List */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden w-full max-w-full">
+        <div className="overflow-x-auto -mx-1 sm:mx-0">
+          <table className="min-w-[640px] w-full divide-y divide-gray-200 table-fixed sm:table-auto">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32 sm:w-auto">
                   Target Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                   Salesman
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Distance (km)
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
+                  Distance
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Meter Reading
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">
+                  Meter
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quotation
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+                  Quote
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Completed At
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                  Completed
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                   Actions
                 </th>
               </tr>
@@ -204,19 +188,15 @@ const ConversionsTracking = () => {
               ) : (
                 visitTargets.map((target) => (
                   <tr key={target._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{target.name}</div>
-                      <div className="text-sm text-gray-500">{target.address || 'N/A'}</div>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate" title={target.name}>{target.name}</div>
+                      <div className="text-xs sm:text-sm text-gray-500 truncate" title={target.address || 'N/A'}>{target.address || 'N/A'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {target.salesman?.name || 'N/A'}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {target.salesman?.email || ''}
-                      </div>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
+                      <div className="text-sm text-gray-900">{target.salesman?.name || 'N/A'}</div>
+                      <div className="text-xs text-gray-500 truncate max-w-[120px]">{target.salesman?.email || ''}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                           target.status === 'Completed'
@@ -229,53 +209,34 @@ const ConversionsTracking = () => {
                         {target.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900 hidden lg:table-cell">
                       {target.actualKilometers ? (
-                        <div>
-                          <div className="font-semibold">{target.actualKilometers} km</div>
-                          {target.estimatedKilometers && (
-                            <div className="text-xs text-gray-500">
-                              Est: {target.estimatedKilometers} km
-                            </div>
-                          )}
-                        </div>
+                        <span className="font-semibold">{target.actualKilometers} km</span>
                       ) : target.estimatedKilometers ? (
-                        <div className="text-gray-600">Est: {target.estimatedKilometers} km</div>
+                        <span className="text-gray-600">Est: {target.estimatedKilometers}</span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {target.startingKilometers && target.endingKilometers ? (
-                        <div>
-                          <div className="font-semibold">
-                            {target.startingKilometers} → {target.endingKilometers} km
-                          </div>
-                          {target.meterImage && (
-                            <div className="text-xs text-blue-600 flex items-center gap-1 mt-1">
-                              <FaImage className="w-3 h-3" />
-                              Image uploaded
-                            </div>
-                          )}
-                        </div>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900 hidden xl:table-cell">
+                      {target.startingKilometers != null && target.endingKilometers != null ? (
+                        <span className="font-semibold">{target.startingKilometers}→{target.endingKilometers}</span>
+                      ) : target.meterImage ? (
+                        <span className="text-blue-600 flex items-center gap-1"><FaImage className="w-3 h-3" />Img</span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
                       {target.quotationCreated ? (
-                        <div className="flex items-center gap-2">
-                          <FaFileInvoice className="text-green-500" />
-                          <span className="text-sm text-green-700 font-semibold">Created</span>
-                        </div>
+                        <span className="text-green-700 font-semibold flex items-center gap-1"><FaFileInvoice className="w-4 h-4" />Yes</span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">
                       {target.completedAt
                         ? new Date(target.completedAt).toLocaleDateString('en-US', {
-                            year: 'numeric',
                             month: 'short',
                             day: 'numeric',
                             hour: '2-digit',
@@ -283,7 +244,7 @@ const ConversionsTracking = () => {
                           })
                         : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => setSelectedTarget(target)}
                         className="text-[#e9931c] hover:text-[#d8820a] font-semibold"

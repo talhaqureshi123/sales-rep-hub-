@@ -3404,7 +3404,7 @@ const SalesTracking = () => {
                     <p className="text-sm text-gray-500 mt-1">Admin will assign targets to you</p>
                   </div>
                 ) : (
-                  <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+                  <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto overflow-x-hidden min-w-0">
                     {(() => {
                       const filteredVisits = getFilteredVisits()
                       if (filteredVisits.length === 0) {
@@ -3477,15 +3477,15 @@ const SalesTracking = () => {
                               // handleVisitTargetClick already handles map update and route
                               handleVisitTargetClick(target)
                             }}
-                            className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                            className={`p-4 rounded-lg border-2 cursor-pointer transition-all overflow-hidden ${
                               isSelected
                                 ? 'border-[#e9931c] bg-orange-50 shadow-md'
                                 : 'border-gray-200 hover:border-[#e9931c] hover:bg-orange-50'
                             }`}
                           >
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-start justify-between gap-2 mb-2 min-w-0">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                   <p className="font-semibold text-gray-800">{target.name || 'Unnamed Target'}</p>
                                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                                     target.status === 'Completed'
@@ -3499,25 +3499,25 @@ const SalesTracking = () => {
                                 </div>
                                 
                                 {/* Full Address */}
-                                <div className="text-sm text-gray-600 mb-2">
+                                <div className="text-sm text-gray-600 mb-2 break-words">
                                   {target.address && (
-                                    <p className="flex items-center gap-1">
-                                      <FaMapPin className="w-3 h-3 text-[#e9931c] flex-shrink-0" />
-                                      {target.address}
+                                    <p className="flex items-start gap-1 break-words">
+                                      <FaMapPin className="w-3 h-3 text-[#e9931c] flex-shrink-0 mt-0.5" />
+                                      <span className="break-words">{target.address}
                                       {target.city && `, ${target.city}`}
                                       {target.state && `, ${target.state}`}
-                                      {target.pincode && ` - ${target.pincode}`}
+                                      {target.pincode && ` - ${target.pincode}`}</span>
                                     </p>
                                   )}
                                   {!target.address && (target.city || target.state) && (
-                                    <p>{[target.city, target.state, target.pincode].filter(Boolean).join(', ')}</p>
+                                    <p className="break-words">{[target.city, target.state, target.pincode].filter(Boolean).join(', ')}</p>
                                   )}
                                 </div>
                                 
                                 {/* Visit Date */}
                                 {target.visitDate && (
                                   <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
-                                    <FaClock className="w-3 h-3" />
+                                    <FaClock className="w-3 h-3 flex-shrink-0" />
                                     Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
                                       day: '2-digit',
                                       month: 'short',
@@ -3546,19 +3546,19 @@ const SalesTracking = () => {
                                 
                                 {/* Description */}
                                 {target.description && (
-                                  <p className="text-xs text-gray-500 mt-2 line-clamp-2">{target.description}</p>
+                                  <p className="text-xs text-gray-500 mt-2 line-clamp-2 break-words">{target.description}</p>
                                 )}
                                 
                                 {/* Created By */}
                                 {target.createdBy && (
-                                  <p className="text-xs text-gray-400 mt-2">
+                                  <p className="text-xs text-gray-400 mt-2 break-words">
                                     Assigned by: {target.createdBy.name || target.createdBy.email || 'Admin'}
                                   </p>
                                 )}
                                 
-                                {/* Notes */}
+                                {/* Notes - wrap long strings so they don't overflow */}
                                 {target.notes && (
-                                  <p className="text-xs text-gray-500 mt-1 italic">Note: {target.notes}</p>
+                                  <p className="text-xs text-gray-500 mt-1 italic break-words line-clamp-3 overflow-hidden">Note: {target.notes}</p>
                                 )}
                               </div>
                               <button
@@ -3575,7 +3575,7 @@ const SalesTracking = () => {
                                     })
                                   }
                                 }}
-                                className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
+                                className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold flex-shrink-0 ${
                                   isTracking 
                                     ? 'bg-gray-600 text-white hover:bg-gray-700' 
                                     : 'bg-gray-300 text-gray-600 cursor-not-allowed'
@@ -3606,14 +3606,14 @@ const SalesTracking = () => {
                                   handleVisitTargetClick(target)
                                   if (!isTracking) setRouteToVisitTarget(null)
                                 }}
-                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all shadow-sm ${
+                                className={`p-4 rounded-xl border-2 cursor-pointer transition-all shadow-sm overflow-hidden ${
                                   isSelected
                                     ? 'border-[#e9931c] bg-orange-50/80 shadow-md ring-2 ring-[#e9931c]/20'
                                     : 'border-gray-200 bg-white hover:border-[#e9931c]/60 hover:bg-orange-50/50 hover:shadow'
                                 }`}
                               >
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex-1">
+                                <div className="flex items-start justify-between gap-2 mb-2 min-w-0">
+                                  <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                                       {dateFilter === 'Today' && getVisitNumberForToday(target) != null && (
                                         <span className="px-2 py-0.5 rounded text-xs font-bold bg-[#e9931c] text-white">
@@ -3633,25 +3633,25 @@ const SalesTracking = () => {
                                     </div>
                                     
                                     {/* Full Address */}
-                                    <div className="text-sm text-gray-600 mb-2">
+                                    <div className="text-sm text-gray-600 mb-2 break-words">
                                       {target.address && (
-                                        <p className="flex items-center gap-1">
-                                          <FaMapPin className="w-3 h-3 text-[#e9931c] flex-shrink-0" />
-                                          {target.address}
+                                        <p className="flex items-start gap-1 break-words">
+                                          <FaMapPin className="w-3 h-3 text-[#e9931c] flex-shrink-0 mt-0.5" />
+                                          <span className="break-words">{target.address}
                                           {target.city && `, ${target.city}`}
                                           {target.state && `, ${target.state}`}
-                                          {target.pincode && ` - ${target.pincode}`}
+                                          {target.pincode && ` - ${target.pincode}`}</span>
                                         </p>
                                       )}
                                       {!target.address && (target.city || target.state) && (
-                                        <p>{[target.city, target.state, target.pincode].filter(Boolean).join(', ')}</p>
+                                        <p className="break-words">{[target.city, target.state, target.pincode].filter(Boolean).join(', ')}</p>
                                       )}
                                     </div>
                                     
                                     {/* Visit Date */}
                                     {target.visitDate && (
                                       <p className="text-xs text-gray-600 mb-1 flex items-center gap-1">
-                                        <FaClock className="w-3 h-3" />
+                                        <FaClock className="w-3 h-3 flex-shrink-0" />
                                         Date: {new Date(target.visitDate).toLocaleDateString('en-GB', {
                                           day: '2-digit',
                                           month: 'short',
@@ -3680,19 +3680,19 @@ const SalesTracking = () => {
                                     
                                     {/* Description */}
                                     {target.description && (
-                                      <p className="text-xs text-gray-500 mt-2 line-clamp-2">{target.description}</p>
+                                      <p className="text-xs text-gray-500 mt-2 line-clamp-2 break-words">{target.description}</p>
                                     )}
                                     
                                     {/* Created By */}
                                     {target.createdBy && (
-                                      <p className="text-xs text-gray-400 mt-2">
+                                      <p className="text-xs text-gray-400 mt-2 break-words">
                                         Assigned by: {target.createdBy.name || target.createdBy.email || 'Admin'}
                                       </p>
                                     )}
                                     
-                                    {/* Notes */}
+                                    {/* Notes - wrap long strings so they don't overflow */}
                                     {target.notes && (
-                                      <p className="text-xs text-gray-500 mt-1 italic">Note: {target.notes}</p>
+                                      <p className="text-xs text-gray-500 mt-1 italic break-words line-clamp-3 overflow-hidden">Note: {target.notes}</p>
                                     )}
                                   </div>
                                   <button
@@ -3709,7 +3709,7 @@ const SalesTracking = () => {
                                         })
                                       }
                                     }}
-                                    className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold ${
+                                    className={`ml-2 px-3 py-1.5 rounded-lg transition-colors text-sm font-semibold flex-shrink-0 ${
                                       isTracking 
                                         ? 'bg-gray-600 text-white hover:bg-gray-700' 
                                         : 'bg-gray-300 text-gray-600 cursor-not-allowed'

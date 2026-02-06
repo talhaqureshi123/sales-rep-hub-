@@ -32,6 +32,7 @@ import {
   FaMapMarkerAlt
 } from 'react-icons/fa'
 import { getFollowUps, getFollowUp, createFollowUp, updateFollowUp, deleteFollowUp, approveFollowUp, rejectFollowUp, pushToHubSpot } from '../../services/adminservices/followUpService'
+import { getTasksList } from '../../services/adminservices/tasksListService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getCustomers, getCustomer } from '../../services/adminservices/customerService'
 import { getQuotations, getQuotation } from '../../services/adminservices/quotationService'
@@ -514,17 +515,29 @@ const Tasks = () => {
     setCurrentPage(1)
   }, [activeTab, activeFilters, search])
 
+  // Load tasks first so list appears fast; salesmen + customers load in background for dropdowns
   useEffect(() => {
-    loadTasks()
-    loadSalesmen()
-    loadCustomers()
-    
-    // Auto-refresh tasks every 30 seconds to get updates from salesman
-    const intervalId = setInterval(() => {
-      loadTasks()
-    }, 30000) // Refresh every 30 seconds
-    
-    return () => clearInterval(intervalId)
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        await loadTasks()
+        if (cancelled) return
+        setLoading(false)
+        // Load dropdowns in background – don't block the list
+        loadSalesmen().catch(() => {})
+        loadCustomers().catch(() => {})
+      } catch (e) {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+
+    const intervalId = setInterval(() => loadTasks(), 30000)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
   }, [])
 
   // Load products when Create Task form opens (for Sample Track Add Item)
@@ -565,15 +578,12 @@ const Tasks = () => {
 
 
   const loadTasks = async () => {
-    setLoading(true)
     try {
-      // Fetch Follow-ups (tasks) and Visit Target requests – dono admin Tasks mein dikhne chahiye
-      const [followUpRes, visitTargetRes] = await Promise.all([
-        getFollowUps({}),
-        getVisitTargets({})
-      ])
-      let followUpTasks = followUpRes.success ? (followUpRes.data || []) : []
-      const visitTargetsRaw = visitTargetRes.success ? (visitTargetRes.data || []) : []
+      // Single fast API: follow-ups + visit targets in one request, limited (200 each) for fast load
+      const res = await getTasksList()
+      const followUpsData = res.success && res.data ? res.data : {}
+      let followUpTasks = Array.isArray(followUpsData.followUps) ? followUpsData.followUps : []
+      const visitTargetsRaw = Array.isArray(followUpsData.visitTargets) ? followUpsData.visitTargets : []
 
       // Visit Target aur Follow-up alag: jo Follow-up type "Visit" hai aur visitTarget se linked hai,
       // wo already Visit Target list mein dikhega – isliye duplicate na aaye, aise follow-ups ko hatao
@@ -646,8 +656,6 @@ const Tasks = () => {
     } catch (e) {
       console.error(e)
       setTasks([])
-    } finally {
-      setLoading(false)
     }
   }
 

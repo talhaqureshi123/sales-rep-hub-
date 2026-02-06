@@ -299,6 +299,13 @@ const followUpSchema = new mongoose.Schema({
   },
 });
 
+// Indexes for fast list/filter queries (Tasks page, admin lists)
+followUpSchema.index({ dueDate: 1 });
+followUpSchema.index({ status: 1 });
+followUpSchema.index({ salesman: 1 });
+followUpSchema.index({ createdBy: 1 });
+followUpSchema.index({ dueDate: 1, priority: -1 });
+
 // Update updatedAt before saving
 followUpSchema.pre('save', async function () {
   this.updatedAt = new Date();

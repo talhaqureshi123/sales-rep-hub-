@@ -80,18 +80,30 @@ const getFollowUps = async (req, res) => {
       }
     }
 
-    const followUps = await FollowUp.find(filter)
-      .populate("salesman", "name email")
-      .populate(
-        "customer",
-        "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
-      )
-      .populate("relatedQuotation", "quotationNumber total")
-      .populate("relatedSample", "sampleNumber productName")
-      .populate("visitTarget", "name address")
-      .populate("approvedBy", "name email")
-      .populate("createdBy", "name email role")
-      .sort({ dueDate: 1, priority: -1 });
+    const listView = req.query.listView === "1" || req.query.listView === "true";
+    const listLimit = Math.min(parseInt(req.query.limit, 10) || 250, 500);
+
+    const followUps = listView
+      ? await FollowUp.find(filter)
+          .populate("salesman", "name email")
+          .populate("customer", "name email phone company associatedContactName associatedContactEmail associatedCompanyName")
+          .populate("visitTarget", "name address")
+          .populate("createdBy", "name email role")
+          .sort({ dueDate: 1, priority: -1 })
+          .limit(listLimit)
+          .lean()
+      : await FollowUp.find(filter)
+          .populate("salesman", "name email")
+          .populate(
+            "customer",
+            "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+          )
+          .populate("relatedQuotation", "quotationNumber total")
+          .populate("relatedSample", "sampleNumber productName")
+          .populate("visitTarget", "name address")
+          .populate("approvedBy", "name email")
+          .populate("createdBy", "name email role")
+          .sort({ dueDate: 1, priority: -1 });
 
     res.status(200).json({
       success: true,

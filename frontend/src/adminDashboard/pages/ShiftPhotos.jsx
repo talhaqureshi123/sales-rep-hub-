@@ -1,31 +1,38 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FaCamera, FaSearch, FaUser, FaCalendarAlt, FaMapMarkerAlt, FaClock, FaEye } from 'react-icons/fa'
 import { getAllTracking } from '../../services/adminservices/trackingService'
 import { getUsers } from '../../services/adminservices/userService'
+
+const SHIFT_LIST_LIMIT = 80
 
 const ShiftPhotos = () => {
   const [shifts, setShifts] = useState([])
   const [salesmen, setSalesmen] = useState([])
   const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState(null) // API error or failed to load
+  const [loadError, setLoadError] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSalesman, setSelectedSalesman] = useState('All')
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedShift, setSelectedShift] = useState(null)
   const [showImageModal, setShowImageModal] = useState(false)
+  const salesmenLoaded = useRef(false)
 
   useEffect(() => {
-    loadSalesmen()
     loadShifts()
   }, [selectedSalesman, selectedStatus, selectedDate])
 
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadShifts()
-    }, 500)
+    const timeoutId = setTimeout(() => loadShifts(), 500)
     return () => clearTimeout(timeoutId)
   }, [searchTerm])
+
+  useEffect(() => {
+    if (!salesmenLoaded.current) {
+      salesmenLoaded.current = true
+      loadSalesmen().catch(() => {})
+    }
+  }, [])
 
   const loadSalesmen = async () => {
     try {
@@ -47,6 +54,7 @@ const ShiftPhotos = () => {
         status: selectedStatus !== 'All' ? selectedStatus : undefined,
         date: selectedDate || undefined,
         search: searchTerm || undefined,
+        limit: SHIFT_LIST_LIMIT,
       })
       const list = Array.isArray(result?.data) ? result.data : []
       setShifts(list)

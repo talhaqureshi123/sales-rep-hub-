@@ -14,6 +14,7 @@ export const getAllTracking = async (filters = {}) => {
     if (filters.status) queryParams.append("status", filters.status);
     if (filters.date) queryParams.append("date", filters.date);
     if (filters.search) queryParams.append("search", filters.search);
+    if (filters.limit != null) queryParams.append("limit", String(filters.limit));
 
     const url = queryParams.toString()
       ? `${API_BASE_URL}?${queryParams.toString()}`

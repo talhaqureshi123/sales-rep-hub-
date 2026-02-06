@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getUsers } from '../../services/adminservices/userService'
-import { getCustomers } from '../../services/adminservices/customerService'
-import { getVisitTargets } from '../../services/adminservices/visitTargetService'
-import { getFollowUps } from '../../services/adminservices/followUpService'
-import { getSalesTargets } from '../../services/adminservices/salesTargetService'
+import { getAdminDashboard } from '../../services/adminservices/dashboardService'
 import { 
   FaCalendarAlt, 
   FaChartLine, 
@@ -86,147 +82,10 @@ const AdminDashboardPage = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      
-      // Get current admin user ID
-      const currentUserId = localStorage.getItem('userId')
-      
-      // Load salesmen
-      const salesmenResult = await getUsers({ role: 'salesman' })
-      const salesmen = salesmenResult.success && salesmenResult.data ? salesmenResult.data : []
-      
-      // Load customers
-      const customersResult = await getCustomers()
-      const customers = customersResult.success && customersResult.data ? customersResult.data : []
-      
-      // Load visit targets
-      const visitTargetsResult = await getVisitTargets()
-      const visitTargets = visitTargetsResult.success && visitTargetsResult.data ? visitTargetsResult.data : []
-      
-      // Load tasks (follow-ups)
-      const tasksResult = await getFollowUps({})
-      const tasks = tasksResult.success && tasksResult.data ? tasksResult.data : []
-      
-      // Load sales targets
-      const salesTargetsResult = await getSalesTargets({})
-      const salesTargets = salesTargetsResult.success && salesTargetsResult.data ? salesTargetsResult.data : []
-      
-      // Filter items created by current admin
-      const filterByCreatedBy = (item) => {
-        if (!currentUserId) return false
-        const createdById = item.createdBy?._id || item.createdBy || item.createdBy?.id
-        return String(createdById) === String(currentUserId)
+      const result = await getAdminDashboard()
+      if (result.success && result.data) {
+        setDashboardData(result.data)
       }
-      
-      const myTasks = tasks.filter(filterByCreatedBy).slice(0, 5)
-      const myCustomers = customers.filter(filterByCreatedBy).slice(0, 5)
-      const myVisits = visitTargets.filter(filterByCreatedBy).slice(0, 5)
-      const mySalesTargets = salesTargets.filter(filterByCreatedBy).slice(0, 5)
-      
-      // Calculate stats
-      const activeSalesmen = salesmen.filter(s => s.status === 'Active').length
-      const activeCustomers = customers.filter(c => c.status === 'Active').length
-      const completedVisits = visitTargets.filter(vt => vt.status === 'Completed').length
-      const pendingVisits = visitTargets.filter(vt => vt.status === 'Pending').length
-      
-      // Today's schedule (pending visit targets for today)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const todaySchedule = visitTargets
-        .filter(vt => {
-          if (vt.status !== 'Pending') return false
-          if (!vt.visitDate) return false
-          const visitDate = new Date(vt.visitDate)
-          visitDate.setHours(0, 0, 0, 0)
-          return visitDate.getTime() === today.getTime()
-        })
-        .slice(0, 5)
-        .map(vt => ({
-          name: vt.name,
-          address: vt.address || vt.city || 'Location',
-          priority: vt.priority || 'Medium',
-          visitDate: vt.visitDate,
-        }))
-
-      // Recent activity (completed visit targets)
-      const recentActivity = visitTargets
-        .filter(vt => vt.status === 'Completed' && vt.completedAt)
-        .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-        .slice(0, 5)
-        .map(vt => ({
-          type: 'visit',
-          title: `Visit Completed: ${vt.name}`,
-          description: vt.address || vt.city || 'Location',
-          date: vt.completedAt,
-        }))
-
-      // Generate chart data (last 7 days)
-      const dailyData = []
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date()
-        date.setDate(date.getDate() - i)
-        date.setHours(0, 0, 0, 0)
-        
-        const dayVisits = visitTargets.filter(vt => {
-          if (!vt.completedAt) return false
-          const completed = new Date(vt.completedAt)
-          completed.setHours(0, 0, 0, 0)
-          return completed.getTime() === date.getTime()
-        }).length
-
-        dailyData.push({
-          day: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          visits: dayVisits,
-          customers: 0, // Can be enhanced later
-        })
-      }
-
-      // Generate monthly data (last 6 months)
-      const monthlyData = []
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date()
-        date.setMonth(date.getMonth() - i)
-        const monthName = date.toLocaleDateString('en-US', { month: 'short' })
-        
-        const monthVisits = visitTargets.filter(vt => {
-          if (!vt.completedAt) return false
-          const completed = new Date(vt.completedAt)
-          return completed.getMonth() === date.getMonth() && 
-                 completed.getFullYear() === date.getFullYear()
-        }).length
-
-        monthlyData.push({
-          month: monthName,
-          visits: monthVisits,
-          customers: 0, // Can be enhanced later
-        })
-      }
-      
-      setDashboardData({
-        kpis: {
-          totalSalesmen: salesmen.length,
-          totalCustomers: customers.length,
-          completedVisits,
-          pendingVisits,
-        },
-        todaySchedule,
-        recentActivity,
-        charts: {
-          daily: dailyData,
-          monthly: monthlyData,
-        },
-        overall: {
-          totalSalesmen: salesmen.length,
-          activeSalesmen,
-          totalCustomers: customers.length,
-          activeCustomers,
-        },
-        myCreations: {
-          tasks: myTasks,
-          customers: myCustomers,
-          visits: myVisits,
-          salesTargets: mySalesTargets,
-        },
-      })
     } catch (error) {
       console.error('Error loading dashboard data:', error)
     } finally {

@@ -16,8 +16,12 @@ const shiftPhotoRoutes = require("./routes/shiftPhotoRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
 const locationRoutes = require("./routes/locationRoutes");
 const hubspotRoutes = require("./routes/hubspotRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const tasksListRoutes = require("./routes/tasksListRoutes");
 
 // Mount routes
+router.use("/dashboard", dashboardRoutes);
+router.use("/tasks-list", tasksListRoutes);
 router.use("/users", userRoutes);
 router.use("/products", productRoutes);
 router.use("/customers", customerRoutes);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
@@ -31,6 +31,7 @@ const CustomerManagement = () => {
   const [itemsPerPage, setItemsPerPage] = useState(20)
   // My Contacts Only (HubSpot) - Always true for import
   const [myContactsOnly] = useState(true)
+  const filterEffectRan = useRef(false)
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -63,25 +64,38 @@ const CustomerManagement = () => {
     { value: 'Not Interested', label: 'Not Interested' },
   ]
 
-  // Load data on mount
+  // Load customers first so list shows fast; salesmen in background for dropdowns
   useEffect(() => {
-    // Get current user role
     const role = localStorage.getItem('userRole')
     setUserRole(role)
-    loadCustomers()
-    loadSalesmen()
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        await loadCustomers()
+        if (!cancelled) loadSalesmen().catch(() => {})
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
-  // Reload when filters change
+  // Reload when filters change (skip first run to avoid double fetch on mount)
   useEffect(() => {
-    setCurrentPage(1) // Reset to first page when filters change
+    if (!filterEffectRan.current) {
+      filterEffectRan.current = true
+      return
+    }
+    setCurrentPage(1)
     loadCustomers()
   }, [filterStatus, searchTerm])
 
   const loadCustomers = async () => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { listView: true, limit: 1000 }
       if (filterStatus && filterStatus !== 'All') params.status = filterStatus
       if (searchTerm) params.search = searchTerm
 

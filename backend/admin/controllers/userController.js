@@ -18,9 +18,12 @@ const getUsers = async (req, res) => {
       filter.status = status;
     }
 
+    const limit = Math.min(parseInt(req.query.limit, 10) || 500, 1000);
     const users = await User.find(filter)
       .select("-password -passwordResetToken -passwordResetExpires")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
 
     res.status(200).json({
       success: true,
