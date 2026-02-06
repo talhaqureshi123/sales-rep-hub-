@@ -148,7 +148,7 @@ const SalesTargets = () => {
 
   const handleCreateTarget = async (e) => {
     e.preventDefault()
-    if (!formData.salesman || !formData.targetName || !formData.targetType || !formData.targetValue || !formData.period || !formData.startDate || !formData.endDate) {
+    if (!formData.salesman || !formData.targetName || !formData.targetType || !formData.period || !formData.startDate || !formData.endDate) {
       await Swal.fire({
         icon: 'warning',
         title: 'Required Fields',
@@ -160,7 +160,7 @@ const SalesTargets = () => {
 
     setLoading(true)
     try {
-      const payload = { ...formData }
+      const payload = { ...formData, targetValue: formData.targetValue != null ? Number(formData.targetValue) : 0 }
       if (formData.targetAmount === '' || formData.targetAmount == null) delete payload.targetAmount
       else payload.targetAmount = Number(formData.targetAmount)
       const result = await createSalesTarget(payload)
@@ -384,18 +384,25 @@ const SalesTargets = () => {
   }
 
   const formatProgress = (target) => {
-    return `${target.currentProgress || 0} / ${target.targetValue || 0} orders`
+    const val = target.targetValue || 0
+    if (val === 0) return null // No order target set in create – don't show "0 / 0 orders"
+    return `${target.currentProgress || 0} / ${val} orders`
   }
 
   const calculateProgressPercentage = (target) => {
-    if (target.targetValue === 0) return 0
-    const percentage = ((target.currentProgress || 0) / target.targetValue) * 100
-    // If percentage is less than 1%, show 1 decimal place (e.g., 0.2% instead of 0%)
-    // Otherwise show whole number
-    if (percentage > 0 && percentage < 1) {
-      return percentage.toFixed(1) // Show 1 decimal for small percentages
+    const targetVal = target.targetValue || 0
+    if (targetVal > 0) {
+      const percentage = ((target.currentProgress || 0) / targetVal) * 100
+      if (percentage > 0 && percentage < 1) return percentage.toFixed(1)
+      return Math.min(percentage, 100).toFixed(0)
     }
-    return Math.min(percentage, 100).toFixed(0) // Show whole number for 1% and above
+    // No order target: use amount-based % if targetAmount set
+    const amount = target.targetAmount || 0
+    if (amount <= 0) return 0
+    const current = target.currentAmount || 0
+    const pct = (current / amount) * 100
+    if (pct > 0 && pct < 1) return pct.toFixed(1)
+    return Math.min(pct, 100).toFixed(0)
   }
 
   const calculateDaysRemaining = (endDate) => {
@@ -573,22 +580,26 @@ const SalesTargets = () => {
                   </span>
                 </div>
 
-                {/* Target Type with Icon */}
+                {/* Target name with Icon */}
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
                     <FaDollarSign className="w-4 h-4 text-gray-600" />
                     <span className="text-sm font-semibold text-gray-900">{target.targetName}</span>
                   </div>
-                  <button className="px-3 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                    {target.targetType}
-                  </button>
+                  {((target.targetValue || 0) > 0) && (
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                      {target.targetType}
+                    </span>
+                  )}
                 </div>
 
-                {/* Progress */}
+                {/* Progress – hide "X / Y orders" when no order target */}
                 <div className="mb-4">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">
-                    {formatProgress(target)}
-                  </p>
+                  {formatProgress(target) != null && (
+                    <p className="text-sm font-semibold text-gray-900 mb-2">
+                      {formatProgress(target)}
+                    </p>
+                  )}
                   {target.targetAmount != null && target.targetAmount > 0 && (
                     <div className="text-sm space-y-0.5 mb-1">
                       <p className="font-medium text-gray-700">Target: £{Number(target.targetAmount).toFixed(2)}</p>
@@ -706,23 +717,6 @@ const SalesTargets = () => {
 
               {/* Target Type is always Orders - hidden field */}
               <input type="hidden" name="targetType" value="Orders" />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Value <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="targetValue"
-                  value={formData.targetValue}
-                  onChange={handleInputChange}
-                  required
-                  min="0"
-                  step="1"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                />
-                <p className="text-xs text-gray-500 mt-1">Number of orders to achieve</p>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -875,21 +869,6 @@ const SalesTargets = () => {
 
               {/* Target Type is always Orders - hidden field */}
               <input type="hidden" name="targetType" value="Orders" />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Target Value (Number of Orders) *</label>
-                <input
-                  type="number"
-                  name="targetValue"
-                  value={formData.targetValue}
-                  onChange={handleInputChange}
-                  required
-                  min="0"
-                  step="1"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                />
-                <p className="text-xs text-gray-500 mt-1">Number of orders to achieve</p>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Period *</label>

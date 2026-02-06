@@ -267,13 +267,16 @@ const SalesTargets = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {targets.map((target) => {
-            const progressPercentage = target.targetValue > 0
+            const hasOrderTarget = (target.targetValue || 0) > 0
+            const progressPercentage = hasOrderTarget
               ? (target.currentProgress / target.targetValue) * 100
-              : 0
-            const isExceeded = target.currentProgress > target.targetValue
+              : (target.targetAmount || 0) > 0
+                ? ((target.currentAmount || 0) / target.targetAmount) * 100
+                : 0
+            const isExceeded = hasOrderTarget ? target.currentProgress > target.targetValue : (target.targetAmount || 0) > 0 && (target.currentAmount || 0) >= (target.targetAmount || 0)
             const isCompleted = progressPercentage >= 100 || target.status === 'Completed'
-            const remaining = Math.max(0, target.targetValue - target.currentProgress)
-            const exceededBy = isExceeded ? target.currentProgress - target.targetValue : 0
+            const remaining = hasOrderTarget ? Math.max(0, target.targetValue - target.currentProgress) : Math.max(0, (target.targetAmount || 0) - (target.currentAmount || 0))
+            const exceededBy = hasOrderTarget && target.currentProgress > target.targetValue ? target.currentProgress - target.targetValue : 0
             const targetLabel = getTargetLabel(target.targetType || 'Orders')
 
             return (
@@ -296,7 +299,7 @@ const SalesTargets = () => {
                         </span>
                       )}
                     </h3>
-                    <p className="text-xs text-gray-600">{target.targetType}</p>
+                    {hasOrderTarget && <p className="text-xs text-gray-600">{target.targetType}</p>}
                   </div>
                   <div className="flex items-center gap-1">
                     {isExceeded && (
@@ -312,31 +315,51 @@ const SalesTargets = () => {
                   </div>
                 </div>
 
-                {/* Target Figures - Money Display */}
+                {/* Target Figures - when no order target (targetValue 0), show only amount */}
                 <div className="mb-2 bg-gradient-to-br from-blue-50 to-gray-50 rounded-lg p-1.5 border border-gray-300">
                   <div className="space-y-1.5">
-                    {/* Total Target */}
-                    <div className="bg-white rounded-lg p-1.5 border border-gray-200">
-                      <p className="text-xs text-gray-600 mb-0.5 font-medium">
-                        Total Target {target.targetType}
-                      </p>
-                      <p className="text-base font-bold text-gray-800">
-                        {formatTargetValue(target.targetValue || 0, target.targetType)}
-                      </p>
-                    </div>
-
-                    {/* Current Progress */}
-                    <div className="bg-white rounded-lg p-1.5 border border-gray-200">
-                      <p className="text-xs text-gray-600 mb-0.5 font-medium">
-                        Current {target.targetType}
-                      </p>
-                      <p className="text-base font-bold text-blue-600">
-                        {formatTargetValue(target.currentProgress || 0, target.targetType)}
-                      </p>
-                    </div>
-
-                    {/* Order Amount (total value of orders in this period) */}
-                    {target.currentAmount != null && (
+                    {hasOrderTarget ? (
+                      <>
+                        <div className="bg-white rounded-lg p-1.5 border border-gray-200">
+                          <p className="text-xs text-gray-600 mb-0.5 font-medium">Total Target {target.targetType}</p>
+                          <p className="text-base font-bold text-gray-800">
+                            {formatTargetValue(target.targetValue || 0, target.targetType)}
+                          </p>
+                        </div>
+                        <div className="bg-white rounded-lg p-1.5 border border-gray-200">
+                          <p className="text-xs text-gray-600 mb-0.5 font-medium">Current {target.targetType}</p>
+                          <p className="text-base font-bold text-blue-600">
+                            {formatTargetValue(target.currentProgress || 0, target.targetType)}
+                          </p>
+                        </div>
+                      </>
+                    ) : null}
+                    {/* Target Amount / Current Amount - always when targetAmount set, or as main display when no order target */}
+                    {(target.targetAmount != null && target.targetAmount > 0) && (
+                      <>
+                        <div className="bg-white rounded-lg p-1.5 border border-gray-200">
+                          <p className="text-xs text-gray-600 mb-0.5 font-medium">Target</p>
+                          <p className="text-base font-bold text-gray-800">
+                            £{Number(target.targetAmount).toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="bg-[#e9931c]/10 rounded-lg p-1.5 border border-[#e9931c]/30">
+                          <p className="text-xs text-gray-600 mb-0.5 font-medium">Amount</p>
+                          <p className="text-base font-bold text-[#e9931c]">
+                            £{Number(target.currentAmount || 0).toFixed(2)}
+                          </p>
+                        </div>
+                        {!hasOrderTarget && (
+                          <div className="bg-orange-100 rounded-lg p-1.5 border border-orange-400">
+                            <p className="text-xs text-gray-700 mb-0.5 font-medium">Remaining</p>
+                            <p className="text-base font-bold text-orange-700">
+                              £{Math.max(0, (target.targetAmount || 0) - (target.currentAmount || 0)).toFixed(2)}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {hasOrderTarget && target.currentAmount != null && (
                       <div className="bg-[#e9931c]/10 rounded-lg p-1.5 border border-[#e9931c]/30">
                         <p className="text-xs text-gray-600 mb-0.5 font-medium">Amount</p>
                         <p className="text-base font-bold text-[#e9931c]">
@@ -345,27 +368,32 @@ const SalesTargets = () => {
                       </div>
                     )}
 
-                    {/* Remaining Target or Exceeded */}
-                    {isExceeded ? (
-                      <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
-                        <p className="text-xs text-gray-700 mb-0.5 font-medium">
-                          Exceeded By
-                        </p>
-                        <p className="text-lg font-bold text-green-700 flex items-center justify-center gap-1">
-                          <FaPlus className="w-3 h-3" />
-                          {formatTargetValue(exceededBy, target.targetType)}
-                        </p>
-                      </div>
-                    ) : !isCompleted ? (
-                      <div className="bg-orange-100 rounded-lg p-1.5 border border-orange-400">
-                        <p className="text-xs text-gray-700 mb-0.5 font-medium">
-                          Remaining Target {target.targetType}
-                        </p>
-                        <p className="text-lg font-bold text-orange-700">
-                          {formatTargetValue(remaining, target.targetType)}
-                        </p>
-                      </div>
-                    ) : (
+                    {/* Remaining / Exceeded - for order target only */}
+                    {hasOrderTarget && (
+                      isExceeded ? (
+                        <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
+                          <p className="text-xs text-gray-700 mb-0.5 font-medium">Exceeded By</p>
+                          <p className="text-lg font-bold text-green-700 flex items-center justify-center gap-1">
+                            <FaPlus className="w-3 h-3" />
+                            {formatTargetValue(exceededBy, target.targetType)}
+                          </p>
+                        </div>
+                      ) : !isCompleted ? (
+                        <div className="bg-orange-100 rounded-lg p-1.5 border border-orange-400">
+                          <p className="text-xs text-gray-700 mb-0.5 font-medium">Remaining Target {target.targetType}</p>
+                          <p className="text-lg font-bold text-orange-700">
+                            {formatTargetValue(remaining, target.targetType)}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
+                          <p className="text-xs text-gray-700 mb-0.5 font-medium">Status</p>
+                          <p className="text-base font-bold text-green-700">Target Achieved!</p>
+                        </div>
+                      )
+                    )}
+                    {/* Achieved when amount-only target and completed */}
+                    {!hasOrderTarget && isCompleted && (target.targetAmount == null || target.targetAmount <= 0) && (
                       <div className="bg-green-100 rounded-lg p-1.5 border border-green-400">
                         <p className="text-xs text-gray-700 mb-0.5 font-medium">Status</p>
                         <p className="text-base font-bold text-green-700">Target Achieved!</p>

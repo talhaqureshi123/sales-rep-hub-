@@ -232,12 +232,8 @@ const createSalesTarget = async (req, res) => {
       });
     }
 
-    if (!targetValue || targetValue <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid target value',
-      });
-    }
+    // targetValue optional; default 0 (no numeric target, progress still tracked)
+    const valueToUse = targetValue != null && Number(targetValue) >= 0 ? Number(targetValue) : 0;
 
     if (!period) {
       return res.status(400).json({
@@ -279,7 +275,7 @@ const createSalesTarget = async (req, res) => {
       approvedBy: req.user._id,
       targetName,
       targetType,
-      targetValue,
+      targetValue: valueToUse,
       targetAmount: (targetAmount != null && targetAmount !== '') ? Number(targetAmount) : undefined,
       period,
       startDate: start,
