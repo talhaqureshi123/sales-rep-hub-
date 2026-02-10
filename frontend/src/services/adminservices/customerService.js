@@ -19,6 +19,7 @@ export const getCustomers = async (params = {}) => {
     const queryParams = new URLSearchParams()
     if (params.salesman) queryParams.append('salesman', params.salesman)
     if (params.status) queryParams.append('status', params.status)
+    if (params.approvalStatus) queryParams.append('approvalStatus', params.approvalStatus)
     if (params.search) queryParams.append('search', params.search)
     if (params.createdBy) queryParams.append('createdBy', params.createdBy)
     if (params.listView) queryParams.append('listView', '1')
@@ -166,6 +167,31 @@ export const getCustomersBySalesman = async (salesmanId) => {
   }
 }
 
+// Import customers (bulk – from Excel)
+export const importCustomers = async (customers) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ customers }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error importing customers:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Get customer details with all related data (tasks, visits, samples, quotations, orders)
 export const getCustomerDetails = async (customerId) => {
   try {
@@ -198,6 +224,7 @@ export default {
   deleteCustomer,
   getCustomersBySalesman,
   getCustomerDetails,
+  importCustomers,
 }
 
 

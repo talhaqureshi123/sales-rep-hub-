@@ -11,6 +11,7 @@ const getCustomers = async (req, res) => {
     const {
       salesman,
       status,
+      approvalStatus,
       search,
       city,
       state,
@@ -26,6 +27,20 @@ const getCustomers = async (req, res) => {
     } = req.query;
 
     const filter = {};
+
+    if (approvalStatus && approvalStatus !== "All") {
+      if (approvalStatus === "Approved") {
+        (filter.$and = filter.$and || []).push({
+          $or: [
+            { approvalStatus: "Approved" },
+            { approvalStatus: { $exists: false } },
+            { approvalStatus: null },
+          ],
+        });
+      } else {
+        filter.approvalStatus = approvalStatus; // Pending
+      }
+    }
 
     // Status filter
     if (status && status !== "All") {
@@ -119,7 +134,7 @@ const getCustomers = async (req, res) => {
     const listView = req.query.listView === "1" || req.query.listView === "true";
     const limit = Math.min(parseInt(req.query.limit, 10) || 2000, 5000);
 
-    const listSelect = "firstName name contactPerson email phone address city state pincode postcode company status orderPotential monthlySpend latitude longitude allottedSalesman createdBy createdAt source";
+    const listSelect = "firstName name contactPerson email phone address city state pincode postcode company status orderPotential monthlySpend latitude longitude allottedSalesman createdBy createdAt source approvalStatus";
 
     const customers = listView
       ? await Customer.find(filter)
@@ -249,7 +264,7 @@ const createCustomer = async (req, res) => {
 
     const customer = await Customer.create({
       firstName: firstName || customerName,
-      name: customerName, // Keep name for backward compatibility
+      name: customerName,
       contactPerson: contactPerson || undefined,
       email: email || undefined,
       phone: phone || undefined,
@@ -269,13 +284,13 @@ const createCustomer = async (req, res) => {
       company: company || undefined,
       orderPotential: orderPotential || undefined,
       monthlySpend: monthlySpend || 0,
-      // REMOVED: assignedSalesman - Customers and Salesmen are separate
       status: status || "Not Visited",
       notes: notes || undefined,
       competitorInfo: competitorInfo || undefined,
-      view: view || "admin_salesman", // Default: visible to both admin and salesman
+      view: view || "admin_salesman",
       createdBy: req.user._id,
-      source: "app", // Mark app-created customers as 'app' source
+      source: "app",
+      approvalStatus: "Approved", // Admin-created are approved by default
     });
 
     const populatedCustomer = await Customer.findById(customer._id).populate(
@@ -340,6 +355,7 @@ const updateCustomer = async (req, res) => {
       competitorInfo,
       view,
       allottedSalesman,
+      approvalStatus,
     } = req.body;
 
     let customer = await Customer.findById(req.params.id);
@@ -386,6 +402,8 @@ const updateCustomer = async (req, res) => {
     if (view !== undefined) customer.view = view;
     if (allottedSalesman !== undefined)
       customer.allottedSalesman = allottedSalesman || null;
+    if (approvalStatus !== undefined && ["Pending", "Approved"].includes(approvalStatus))
+      customer.approvalStatus = approvalStatus;
 
     await customer.save();
 
@@ -553,6 +571,95 @@ const getCustomerDetails = async (req, res) => {
   }
 };
 
+// @desc    Import customers from Excel (bulk create – same shape as form-created customers)
+// @route   POST /api/admin/customers/import
+// @access  Private/Admin
+const importCustomers = async (req, res) => {
+  try {
+    const { customers: rawCustomers } = req.body;
+    if (!Array.isArray(rawCustomers) || rawCustomers.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a non-empty array of customers",
+      });
+    }
+
+    const created = [];
+    const skipped = [];
+    const validStatuses = [
+      "Active",
+      "Inactive",
+      "Not Visited",
+      "Visited",
+      "Follow-up Needed",
+      "Qualified Lead",
+      "Not Interested",
+    ];
+
+    for (let i = 0; i < rawCustomers.length; i++) {
+      const row = rawCustomers[i];
+      const firstName =
+        row.firstName != null && String(row.firstName).trim()
+          ? String(row.firstName).trim()
+          : row.name != null && String(row.name).trim()
+            ? String(row.name).trim()
+            : null;
+      if (!firstName) {
+        skipped.push({ row: i + 1, reason: "Missing first name" });
+        continue;
+      }
+
+      const status =
+        row.status && validStatuses.includes(row.status)
+          ? row.status
+          : "Not Visited";
+      const monthlySpend =
+        row.monthlySpend != null && !isNaN(Number(row.monthlySpend))
+          ? Number(row.monthlySpend)
+          : 0;
+
+      try {
+        const customer = await Customer.create({
+          firstName,
+          name: firstName,
+          contactPerson: row.contactPerson ? String(row.contactPerson).trim() : undefined,
+          email: row.email ? String(row.email).trim().toLowerCase() : undefined,
+          phone: row.phone ? String(row.phone).trim() : undefined,
+          address: row.address ? String(row.address).trim() : undefined,
+          city: row.city ? String(row.city).trim() : undefined,
+          state: row.state ? String(row.state).trim() : undefined,
+          pincode: row.pincode || row.postcode ? String(row.pincode || row.postcode).trim() : undefined,
+          postcode: row.postcode || row.pincode ? String(row.postcode || row.pincode).trim() : undefined,
+          company: row.company ? String(row.company).trim() : undefined,
+          orderPotential: row.orderPotential ? String(row.orderPotential).trim() : undefined,
+          monthlySpend,
+          status,
+          notes: row.notes ? String(row.notes).trim() : undefined,
+          competitorInfo: row.competitorInfo ? String(row.competitorInfo).trim() : undefined,
+          view: "admin_salesman",
+          createdBy: req.user._id,
+          source: "app",
+          approvalStatus: "Approved",
+        });
+        created.push({ _id: customer._id, firstName: customer.firstName, email: customer.email });
+      } catch (err) {
+        skipped.push({ row: i + 1, reason: err.message || "Validation error" });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Imported ${created.length} customer(s)`,
+      data: { created, skipped, createdCount: created.length, skippedCount: skipped.length },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error importing customers",
+    });
+  }
+};
+
 // @desc    Get customers by salesman (through tasks/visits)
 // @route   GET /api/admin/customers/salesman/:salesmanId
 // @access  Private/Admin
@@ -618,4 +725,5 @@ module.exports = {
   deleteCustomer,
   getCustomersBySalesman,
   getCustomerDetails,
+  importCustomers,
 };

@@ -8,6 +8,7 @@ const {
   deleteCustomer,
   getCustomersBySalesman,
   getCustomerDetails,
+  importCustomers,
 } = require('../controllers/customerController');
 const { protect, authorize } = require('../../middleware/auth');
 
@@ -16,6 +17,7 @@ router.use(protect);
 router.use(authorize('admin'));
 
 router.route('/').get(getCustomers).post(createCustomer);
+router.route('/import').post(importCustomers);
 router.route('/salesman/:salesmanId').get(getCustomersBySalesman);
 router.route('/:id/details').get(getCustomerDetails);
 router.route('/:id').get(getCustomer).put(updateCustomer).delete(deleteCustomer);

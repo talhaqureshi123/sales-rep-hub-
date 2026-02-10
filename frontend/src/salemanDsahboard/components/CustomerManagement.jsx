@@ -228,7 +228,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
           <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Extra top padding on mobile so title not cut off */}
             <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 pt-5 pb-3 sm:py-4 border-b-2 border-gray-200">
-              <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Customer will be visible to you. Admin approval is required for the company list.</p>
+              </div>
               <button
                 onClick={handleCloseForm}
                 className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-500 hover:text-gray-700 rounded-lg"
@@ -508,13 +511,20 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <h3 className="text-base font-semibold text-gray-900 mb-1">{customer.name}</h3>
-                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      customer.status === 'Active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {customer.status}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        customer.status === 'Active'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {customer.status}
+                      </span>
+                      {(customer.approvalStatus === 'Pending' || customer.approvalStatus === 'Approved') && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${customer.approvalStatus === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {customer.approvalStatus}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2 text-sm">
@@ -653,13 +663,20 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                         <div className="text-sm text-gray-900">{customer.company || 'N/A'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          customer.status === 'Active'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {customer.status}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            customer.status === 'Active'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {customer.status}
+                          </span>
+                          {(customer.approvalStatus === 'Pending' || customer.approvalStatus === 'Approved') && (
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${customer.approvalStatus === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {customer.approvalStatus}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

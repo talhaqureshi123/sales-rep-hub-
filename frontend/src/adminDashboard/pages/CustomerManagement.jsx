@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails } from '../../services/adminservices/customerService'
+import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustomersBySalesman, getCustomerDetails, importCustomers } from '../../services/adminservices/customerService'
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
 import LeafletMapView from '../../universalcomponents/LeafletMapView'
-import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash } from 'react-icons/fa'
+import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash, FaFileExcel } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = () => {
@@ -12,9 +12,14 @@ const CustomerManagement = () => {
   const [loading, setLoading] = useState(false)
   const [hubspotImporting, setHubspotImporting] = useState(false)
   const [hubspotPushing, setHubspotPushing] = useState(false)
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false)
+  const [importExcelFile, setImportExcelFile] = useState(null)
+  const [importExcelPreview, setImportExcelPreview] = useState([])
+  const [importExcelLoading, setImportExcelLoading] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [filterStatus, setFilterStatus] = useState('All')
+  const [filterApproval, setFilterApproval] = useState('All') // All | Pending | Approved
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
   const [userRole, setUserRole] = useState(null) // Current user role
@@ -63,6 +68,11 @@ const CustomerManagement = () => {
     { value: 'Qualified Lead', label: 'Qualified Lead' },
     { value: 'Not Interested', label: 'Not Interested' },
   ]
+  const approvalOptions = [
+    { value: 'All', label: 'All' },
+    { value: 'Pending', label: 'Pending' },
+    { value: 'Approved', label: 'Approved' },
+  ]
 
   // Load customers first so list shows fast; salesmen in background for dropdowns
   useEffect(() => {
@@ -90,13 +100,14 @@ const CustomerManagement = () => {
     }
     setCurrentPage(1)
     loadCustomers()
-  }, [filterStatus, searchTerm])
+  }, [filterStatus, filterApproval, searchTerm])
 
   const loadCustomers = async () => {
     setLoading(true)
     try {
       const params = { listView: true, limit: 1000 }
       if (filterStatus && filterStatus !== 'All') params.status = filterStatus
+      if (filterApproval && filterApproval !== 'All') params.approvalStatus = filterApproval
       if (searchTerm) params.search = searchTerm
 
       const result = await getCustomers(params)
@@ -336,6 +347,40 @@ const CustomerManagement = () => {
     }
   }
 
+  const handleApproveCustomer = async (id, e) => {
+    if (e) e.stopPropagation()
+    setLoading(true)
+    try {
+      const result = await updateCustomer(id, { approvalStatus: 'Approved' })
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Approved',
+          text: 'Customer is now approved and visible in the company list.',
+          confirmButtonColor: '#e9931c',
+        })
+        loadCustomers()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to approve customer',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (error) {
+      console.error('Error approving customer:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error approving customer',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Load customer details with all related data
   const loadCustomerDetails = async (customerId) => {
     setLoadingCustomerDetails(true)
@@ -515,6 +560,162 @@ const CustomerManagement = () => {
     }
   }
 
+  // Map Excel header (any case, with spaces) to customer field name
+  const excelHeaderToField = (header) => {
+    if (!header || typeof header !== 'string') return null
+    const key = header.trim().toLowerCase().replace(/\s+/g, ' ')
+    const map = {
+      'first name': 'firstName',
+      'firstname': 'firstName',
+      'name': 'firstName',
+      'contact person': 'contactPerson',
+      'contactperson': 'contactPerson',
+      'company': 'company',
+      'email': 'email',
+      'phone': 'phone',
+      'address': 'address',
+      'city': 'city',
+      'state': 'state',
+      'pincode': 'postcode',
+      'postcode': 'postcode',
+      'pin code': 'postcode',
+      'post code': 'postcode',
+      'status': 'status',
+      'notes': 'notes',
+      'order potential': 'orderPotential',
+      'orderpotential': 'orderPotential',
+      'monthly spend': 'monthlySpend',
+      'monthlyspend': 'monthlySpend',
+      'competitor info': 'competitorInfo',
+      'competitorinfo': 'competitorInfo',
+    }
+    return map[key] || (key.replace(/\s+/g, '') ? key.replace(/\s+/g, '') : null)
+  }
+
+  // Parse CSV text (first row = headers) into array of objects
+  const parseCSV = (text) => {
+    const lines = text.split(/\r?\n/).filter((line) => line.trim())
+    if (!lines.length) return []
+    const parseRow = (line) => {
+      const out = []
+      let cur = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i]
+        if (c === '"') {
+          inQuotes = !inQuotes
+        } else if ((c === ',' && !inQuotes) || (c === '\t' && !inQuotes)) {
+          out.push(cur.trim())
+          cur = ''
+        } else {
+          cur += c
+        }
+      }
+      out.push(cur.trim())
+      return out
+    }
+    const headerRow = parseRow(lines[0])
+    const headers = headerRow.map((h) => excelHeaderToField(String(h).trim()) || String(h).trim())
+    const preview = []
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseRow(lines[i])
+      const obj = {}
+      headers.forEach((field, j) => {
+        const val = cells[j]
+        if (field && val !== undefined && String(val).trim() !== '') {
+          const trimmed = String(val).trim()
+          obj[field] = field === 'monthlySpend' && !isNaN(Number(trimmed)) ? Number(trimmed) : trimmed
+        }
+      })
+      if (obj.firstName || obj.name) {
+        if (!obj.name && obj.firstName) obj.name = obj.firstName
+        if (!obj.firstName && obj.name) obj.firstName = obj.name
+        preview.push(obj)
+      }
+    }
+    return preview
+  }
+
+  const handleExcelFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isCSV = /\.csv$/i.test(file.name) || file.type === 'text/csv'
+    if (!isCSV) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Use CSV file',
+        text: 'Please select a CSV file. In Excel: File → Save As → CSV (Comma delimited).',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result
+        const preview = parseCSV(String(text))
+        setImportExcelPreview(preview)
+      } catch (err) {
+        console.error('Parse error:', err)
+        Swal.fire({
+          icon: 'error',
+          title: 'Parse error',
+          text: err.message || 'Could not read file',
+          confirmButtonColor: '#e9931c',
+        })
+        setImportExcelPreview([])
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const handleImportExcelSubmit = async () => {
+    if (!importExcelPreview.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No data',
+        text: 'No valid rows to import. Ensure the first row has headers (e.g. First Name, Email, Phone) and at least one data row.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelLoading(true)
+    try {
+      const result = await importCustomers(importExcelPreview)
+      if (result.success) {
+        const { createdCount = 0, skippedCount = 0 } = result.data || {}
+        setShowImportExcelModal(false)
+        setImportExcelFile(null)
+        setImportExcelPreview([])
+        loadCustomers()
+        Swal.fire({
+          icon: 'success',
+          title: 'Import complete',
+          html: `<p>Imported <strong>${createdCount}</strong> customer(s).</p>${skippedCount > 0 ? `<p>Skipped: ${skippedCount} row(s).</p>` : ''}`,
+          confirmButtonColor: '#e9931c',
+        })
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Import failed',
+          text: result.message || 'Failed to import customers',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (err) {
+      console.error('Import error:', err)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message || 'Error importing customers',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setImportExcelLoading(false)
+    }
+  }
+
   const getWhatsAppHref = (phone) => {
     if (!phone) return null
     const digits = String(phone).replace(/\D/g, '')
@@ -558,6 +759,22 @@ const CustomerManagement = () => {
             )}
           </button>
 
+          {/* Import from Excel - Only Admin */}
+          {userRole === 'admin' && (
+            <button
+              onClick={() => {
+                setShowImportExcelModal(true)
+                setImportExcelFile(null)
+                setImportExcelPreview([])
+              }}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Import customers from Excel"
+            >
+              <FaFileExcel className="w-5 h-5" />
+              <span className="whitespace-nowrap">Import from Excel</span>
+            </button>
+          )}
           {/* Add Customer Button - Only Admin */}
           {userRole === 'admin' && (
             <button
@@ -604,8 +821,21 @@ const CustomerManagement = () => {
                 {option.label}
               </button>
             ))}
+            <span className="text-gray-400 mx-1">|</span>
+            <span className="text-sm text-gray-600">Approval:</span>
+            {approvalOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setFilterApproval(option.value)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterApproval === option.value
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-          {/* Salesman filter removed – assignment is done via Customer Allotment only */}
         </div>
 
         {/* View Toggles */}
@@ -632,6 +862,99 @@ const CustomerManagement = () => {
           </button>
         </div>
       </div>
+
+      {/* Import from Excel Modal */}
+      {showImportExcelModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-xl shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <FaFileExcel className="w-6 h-6 text-green-600" />
+                Import customers from Excel
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportExcelModal(false)
+                  setImportExcelFile(null)
+                  setImportExcelPreview([])
+                }}
+                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-600">
+                Upload a <strong>CSV</strong> file. First row = headers. In Excel: File → Save As → CSV. Supported columns: <strong>First Name</strong>, Contact Person, Company, Email, Phone, Address, City, State, Pincode/Postcode, Status, Notes, Order Potential, Monthly Spend.
+              </p>
+              <label className="block">
+                <span className="sr-only">Choose file</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleExcelFileSelect}
+                  className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#e9931c] file:text-white file:font-semibold hover:file:bg-[#d8820a]"
+                />
+              </label>
+              {importExcelFile && (
+                <p className="text-sm text-gray-700">
+                  File: <strong>{importExcelFile.name}</strong>
+                </p>
+              )}
+              {importExcelPreview.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-sm font-semibold text-gray-800 mb-2">
+                    Preview: {importExcelPreview.length} row(s) to import
+                  </p>
+                  <div className="max-h-40 overflow-y-auto text-xs text-gray-600">
+                    {importExcelPreview.slice(0, 5).map((row, i) => (
+                      <div key={i} className="py-1 border-b border-gray-100 last:border-0">
+                        {row.firstName || row.name} {row.email ? `(${row.email})` : ''}
+                      </div>
+                    ))}
+                    {importExcelPreview.length > 5 && (
+                      <p className="py-1 text-gray-500">... and {importExcelPreview.length - 5} more</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 justify-end p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportExcelModal(false)
+                  setImportExcelFile(null)
+                  setImportExcelPreview([])
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportExcelSubmit}
+                disabled={importExcelLoading || importExcelPreview.length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {importExcelLoading ? (
+                  <>
+                    <FaSpinner className="w-4 h-4 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <FaCheckCircle className="w-4 h-4" />
+                    Import {importExcelPreview.length > 0 ? `(${importExcelPreview.length})` : ''}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Customer Form Modal */}
       {showAddForm && (
@@ -1012,7 +1335,12 @@ const CustomerManagement = () => {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(customer.approvalStatus === 'Pending' || customer.approvalStatus === 'Approved') && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${customer.approvalStatus === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {customer.approvalStatus}
+                        </span>
+                      )}
                       {/* Show "Push" button for app-created customers, "Imported" badge for HubSpot-imported customers */}
                       {customer?.source !== 'hubspot' ? (
                         <button
@@ -1100,6 +1428,19 @@ const CustomerManagement = () => {
                       <p className="text-gray-500 text-xs italic">
                         Salesman assigned through tasks/visits
                       </p>
+                    )}
+                    {(customer.approvalStatus === 'Pending') && (
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={(e) => handleApproveCustomer(customer._id, e)}
+                          disabled={loading}
+                          className="w-full py-2 px-3 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          <FaCheckCircle className="w-4 h-4 inline mr-2" />
+                          Approve Customer
+                        </button>
+                      </div>
                     )}
                     <div className="pt-2 flex items-center justify-between">
                       <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(customer.status)}`}>

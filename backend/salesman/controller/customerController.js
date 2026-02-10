@@ -20,18 +20,16 @@ const getMyCustomers = async (req, res) => {
       monthlySpendMax
     } = req.query;
     
-    // Get customers through tasks/visits allotted to this salesman (only allotted customers)
+    // Get customers: created by this salesman OR through tasks/visits/allotment
     const FollowUp = require('../../database/models/FollowUp');
     const VisitTarget = require('../../database/models/VisitTarget');
     
-    // Get unique customer IDs from tasks
     const taskCustomerIds = await FollowUp.find({ salesman: req.user._id }).distinct('customer');
-    // Get unique customer IDs from visits (VisitTarget uses customerId)
     const visitCustomerIds = await VisitTarget.find({ salesman: req.user._id }).distinct('customerId');
-    // Customers allotted via Customer Allotment (simple allotment – no task)
     const allottedCustomerIds = await Customer.find({ allottedSalesman: req.user._id }).distinct('_id');
+    const createdByMeIds = await Customer.find({ createdBy: req.user._id }).distinct('_id');
 
-    const relatedCustomerIds = [...new Set([...taskCustomerIds, ...visitCustomerIds, ...allottedCustomerIds].filter(id => id))];
+    const relatedCustomerIds = [...new Set([...taskCustomerIds, ...visitCustomerIds, ...allottedCustomerIds, ...createdByMeIds].filter(id => id))];
 
     const filter = { _id: { $in: relatedCustomerIds } };
 
@@ -119,25 +117,18 @@ const getCustomer = async (req, res) => {
       });
     }
 
-    // Only allotted customers: task, visit, or Customer Allotment (allottedSalesman)
     const FollowUp = require('../../database/models/FollowUp');
     const VisitTarget = require('../../database/models/VisitTarget');
-    
+    const createdByMe = (customer.createdBy?._id || customer.createdBy)?.toString() === req.user._id.toString();
     const allottedId = customer.allottedSalesman?._id || customer.allottedSalesman;
     const allottedToMe = allottedId && allottedId.toString() === req.user._id.toString();
-    const hasTasks = await FollowUp.findOne({
-      customer: customer._id,
-      salesman: req.user._id,
-    });
-    const hasVisits = await VisitTarget.findOne({
-      customerId: customer._id,
-      salesman: req.user._id,
-    });
+    const hasTasks = await FollowUp.findOne({ customer: customer._id, salesman: req.user._id });
+    const hasVisits = await VisitTarget.findOne({ customerId: customer._id, salesman: req.user._id });
 
-    if (!allottedToMe && !hasTasks && !hasVisits) {
+    if (!createdByMe && !allottedToMe && !hasTasks && !hasVisits) {
       return res.status(404).json({
         success: false,
-        message: 'Customer not found or not allotted to you',
+        message: 'Customer not found or not assigned to you',
       });
     }
 
@@ -207,17 +198,17 @@ const createCustomer = async (req, res) => {
       }
     }
 
-    // Create customer - set createdBy (no direct salesman assignment)
+    // Create customer – createdBy salesman; approvalStatus Pending until admin approves
     const customer = await Customer.create({
       firstName: customerName,
-      name: customerName, // Keep name for backward compatibility
+      name: customerName,
       contactPerson,
       email,
       phone,
       address,
       city,
       state,
-      pincode: postcode || pincode, // Use postcode if provided, otherwise pincode
+      pincode: postcode || pincode,
       postcode: postcode || pincode,
       company,
       orderPotential,
@@ -231,6 +222,7 @@ const createCustomer = async (req, res) => {
       lastEngagement: lastEngagement ? new Date(lastEngagement) : undefined,
       view: view || 'admin_salesman',
       createdBy: req.user._id,
+      approvalStatus: 'Pending',
     });
 
     const populatedCustomer = await Customer.findById(customer._id)

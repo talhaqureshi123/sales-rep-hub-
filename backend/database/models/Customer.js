@@ -71,6 +71,12 @@ const customerSchema = new mongoose.Schema({
     ref: "User",
     default: null,
   },
+  // Salesman-created customers start as Pending; admin approves to show in company list
+  approvalStatus: {
+    type: String,
+    enum: ["Pending", "Approved"],
+    default: "Approved",
+  },
   status: {
     type: String,
     enum: [
@@ -143,5 +149,6 @@ customerSchema.index({ createdBy: 1 });
 customerSchema.index({ status: 1 });
 customerSchema.index({ allottedSalesman: 1 });
 customerSchema.index({ createdAt: -1 }); // for list sort
+customerSchema.index({ approvalStatus: 1 });
 
 module.exports = mongoose.model("Customer", customerSchema);
