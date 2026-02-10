@@ -10,6 +10,7 @@ import SalesTargets from '../components/SalesTargets'
 import SalesOrders from '../../adminDashboard/pages/SalesOrders'
 import ProductVideos from '../components/ProductVideos'
 import Notifications from '../components/Notifications'
+import SampleTracker from '../components/SampleTracker'
 import SalesmanSidebar from '../components/SalesmanSidebar'
 import BottomNavbar from '../components/BottomNavbar'
 
@@ -59,6 +60,8 @@ const SalesmanDashboard = ({ onLogout }) => {
         return <CustomerManagement openAddForm={openAddCustomer} onAddFormClose={() => setOpenAddCustomer(false)} />
       case 'tasks':
         return <Tasks />
+      case 'sample-tracker':
+        return <SampleTracker />
       case 'sales-targets':
         return <SalesTargets />
       case 'sales-orders':

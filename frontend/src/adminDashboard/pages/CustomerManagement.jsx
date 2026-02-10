@@ -6,7 +6,7 @@ import LeafletMapView from '../../universalcomponents/LeafletMapView'
 import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash, FaFileExcel } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
-const CustomerManagement = () => {
+const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
   const [customers, setCustomers] = useState([])
   const [salesmen, setSalesmen] = useState([])
   const [loading, setLoading] = useState(false)
@@ -19,7 +19,8 @@ const CustomerManagement = () => {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [filterStatus, setFilterStatus] = useState('All')
-  const [filterApproval, setFilterApproval] = useState('All') // All | Pending | Approved
+  const [filterSource, setFilterSource] = useState('All') // All | My Customers (admin + HubSpot only; no salesman-created)
+  const [filterSalesman, setFilterSalesman] = useState('') // '' = All; salesmanId = only that salesman's allotted customers
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
   const [userRole, setUserRole] = useState(null) // Current user role
@@ -31,6 +32,7 @@ const CustomerManagement = () => {
   const [customerDetailData, setCustomerDetailData] = useState(null)
   const [loadingCustomerDetails, setLoadingCustomerDetails] = useState(false)
   const [customerDetailTab, setCustomerDetailTab] = useState('overview') // 'overview', 'tasks', 'visits', 'samples', 'quotations', 'orders'
+  const [geocodingAddress, setGeocodingAddress] = useState(false) // Auto-fill postcode & lat/lng from address
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
@@ -45,6 +47,8 @@ const CustomerManagement = () => {
     email: '',
     phone: '',
     address: '',
+    city: '',
+    state: '',
     postcode: '',
     latitude: '',
     longitude: '',
@@ -68,18 +72,24 @@ const CustomerManagement = () => {
     { value: 'Qualified Lead', label: 'Qualified Lead' },
     { value: 'Not Interested', label: 'Not Interested' },
   ]
-  const approvalOptions = [
-    { value: 'All', label: 'All' },
-    { value: 'Pending', label: 'Pending' },
-    { value: 'Approved', label: 'Approved' },
-  ]
+  // When opened from dashboard "View My Customers", apply filter so only My Customers show (not All)
+  useEffect(() => {
+    if (initialFilter === 'myCustomers') {
+      setFilterSource('My Customers')
+      if (typeof onFilterConsumed === 'function') onFilterConsumed()
+    }
+  }, [initialFilter, onFilterConsumed])
 
-  // Load customers first so list shows fast; salesmen in background for dropdowns
+  // Load customers on mount; if opening from dashboard "My Customers", filter effect will load with correct filter
   useEffect(() => {
     const role = localStorage.getItem('userRole')
     setUserRole(role)
     let cancelled = false
     const run = async () => {
+      if (initialFilter === 'myCustomers') {
+        if (!cancelled) loadSalesmen().catch(() => {})
+        return
+      }
       setLoading(true)
       try {
         await loadCustomers()
@@ -100,14 +110,16 @@ const CustomerManagement = () => {
     }
     setCurrentPage(1)
     loadCustomers()
-  }, [filterStatus, filterApproval, searchTerm])
+  }, [filterStatus, filterSource, filterSalesman, searchTerm])
 
   const loadCustomers = async () => {
     setLoading(true)
     try {
       const params = { listView: true, limit: 1000 }
       if (filterStatus && filterStatus !== 'All') params.status = filterStatus
-      if (filterApproval && filterApproval !== 'All') params.approvalStatus = filterApproval
+      // Approval filter removed – no admin approval for customers
+      if (filterSource === 'My Customers') params.myCustomersOnly = true
+      if (filterSalesman) params.salesman = filterSalesman
       if (searchTerm) params.search = searchTerm
 
       const result = await getCustomers(params)
@@ -145,6 +157,102 @@ const CustomerManagement = () => {
     })
   }
 
+  // Geocode address → get postcode, latitude, longitude (and optionally city, state) via Nominatim
+  const handleGeocodeAddress = async () => {
+    const trim = (s) => (s != null && typeof s === 'string' ? s.trim() : '')
+    const addressPart = trim(formData.address)
+    const cityPart = trim(formData.city)
+    const statePart = trim(formData.state)
+    const parts = [addressPart, cityPart, statePart].filter(Boolean)
+    if (!parts.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Address required',
+        text: 'Please enter address (and optionally city, state) to auto-fill postcode and location.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setGeocodingAddress(true)
+    try {
+      const doSearch = async (q) => {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+          { headers: { Accept: 'application/json', 'User-Agent': 'SalesRapHub/1.0' } }
+        )
+        return res.json()
+      }
+      let query = parts.join(', ')
+      let searchData = await doSearch(query)
+      if (!Array.isArray(searchData) || !searchData[0]?.lat || !searchData[0]?.lon) {
+        const hasCountry = /pakistan|uk|united kingdom|india|uae|usa|germany|france|china|canada|australia|bangladesh|sri lanka|nepal|saudi|oman|qatar|bahrain|kuwait|turkey|malaysia|singapore/i.test(query)
+        if (!hasCountry) {
+          await new Promise((r) => setTimeout(r, 1100))
+          searchData = await doSearch(query + ', Pakistan')
+        }
+      }
+      if (!Array.isArray(searchData) || !searchData[0]?.lat || !searchData[0]?.lon) {
+        const fallbackPart = (cityPart || statePart || '').trim()
+        if (fallbackPart) {
+          await new Promise((r) => setTimeout(r, 1100))
+          searchData = await doSearch(fallbackPart)
+          if (!Array.isArray(searchData) || !searchData[0]?.lat) {
+            await new Promise((r) => setTimeout(r, 1100))
+            searchData = await doSearch(fallbackPart + ', Pakistan')
+          }
+        }
+      }
+      if (!Array.isArray(searchData) || !searchData[0]?.lat || !searchData[0]?.lon) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Location not found',
+          text: 'Could not find this address. Try adding city and country, then use "Auto-fill" again.',
+          confirmButtonColor: '#e9931c',
+        })
+        setGeocodingAddress(false)
+        return
+      }
+      const lat = parseFloat(searchData[0].lat)
+      const lon = parseFloat(searchData[0].lon)
+      await new Promise((r) => setTimeout(r, 1100))
+      const reverseRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+        { headers: { Accept: 'application/json', 'User-Agent': 'SalesRapHub/1.0' } }
+      )
+      const reverseData = await reverseRes.json()
+      const addr = reverseData?.address || {}
+      const postcode = addr.postcode || addr.postal_code || ''
+      const city = addr.city || addr.town || addr.village || addr.county || addr.state_district || ''
+      const state = addr.state || addr.region || ''
+      setFormData((prev) => ({
+        ...prev,
+        postcode: postcode || prev.postcode,
+        city: city || prev.city,
+        state: state || prev.state,
+        latitude: String(lat),
+        longitude: String(lon),
+      }))
+      Swal.fire({
+        icon: 'success',
+        title: 'Location updated',
+        text: postcode ? `Postcode ${postcode} and coordinates set from address.` : 'Latitude and longitude set from address.',
+        confirmButtonColor: '#e9931c',
+        timer: 2000,
+        timerProgressBar: true,
+      })
+    } catch (err) {
+      console.error('Geocode error:', err)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Could not fetch location. Please try again or enter postcode/lat-lng manually.',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setGeocodingAddress(false)
+    }
+  }
+
   const handleAddCustomer = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -158,6 +266,8 @@ const CustomerManagement = () => {
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
         postcode: formData.postcode,
         latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
         longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
@@ -216,6 +326,8 @@ const CustomerManagement = () => {
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
+      city: customer.city || '',
+      state: customer.state || '',
       postcode: customer.postcode || customer.pincode || '',
       latitude: customer.latitude != null ? String(customer.latitude) : '',
       longitude: customer.longitude != null ? String(customer.longitude) : '',
@@ -245,6 +357,8 @@ const CustomerManagement = () => {
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
         postcode: formData.postcode,
         latitude: formData.latitude !== '' && formData.latitude != null ? parseFloat(formData.latitude) : null,
         longitude: formData.longitude !== '' && formData.longitude != null ? parseFloat(formData.longitude) : null,
@@ -341,40 +455,6 @@ const CustomerManagement = () => {
         title: 'Error',
         text: 'Error deleting customer',
         confirmButtonColor: '#e9931c'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleApproveCustomer = async (id, e) => {
-    if (e) e.stopPropagation()
-    setLoading(true)
-    try {
-      const result = await updateCustomer(id, { approvalStatus: 'Approved' })
-      if (result.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Approved',
-          text: 'Customer is now approved and visible in the company list.',
-          confirmButtonColor: '#e9931c',
-        })
-        loadCustomers()
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Failed',
-          text: result.message || 'Failed to approve customer',
-          confirmButtonColor: '#e9931c',
-        })
-      }
-    } catch (error) {
-      console.error('Error approving customer:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error approving customer',
-        confirmButtonColor: '#e9931c',
       })
     } finally {
       setLoading(false)
@@ -524,6 +604,8 @@ const CustomerManagement = () => {
       email: '',
       phone: '',
       address: '',
+      city: '',
+      state: '',
       postcode: '',
       latitude: '',
       longitude: '',
@@ -822,19 +904,31 @@ const CustomerManagement = () => {
               </button>
             ))}
             <span className="text-gray-400 mx-1">|</span>
-            <span className="text-sm text-gray-600">Approval:</span>
-            {approvalOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setFilterApproval(option.value)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterApproval === option.value
-                    ? 'bg-[#e9931c] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                {option.label}
-              </button>
-            ))}
+            <span className="text-sm text-gray-600">Source:</span>
+            <button
+              type="button"
+              onClick={() => setFilterSource(filterSource === 'My Customers' ? 'All' : 'My Customers')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterSource === 'My Customers'
+                  ? 'bg-[#e9931c] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              title={filterSource === 'My Customers' ? 'Showing only admin + HubSpot (click to show all)' : 'Click to show only My Customers (admin + HubSpot)'}
+            >
+              My Customers
+            </button>
+            <span className="text-gray-400 mx-1">|</span>
+            <span className="text-sm text-gray-600">Salesman:</span>
+            <select
+              value={filterSalesman}
+              onChange={(e) => setFilterSalesman(e.target.value || '')}
+              className="px-3 py-2 rounded-full text-sm font-medium border border-gray-200 bg-white focus:outline-none focus:border-[#e9931c]"
+              title="Filter by allotted salesman (Customer Allotment)"
+            >
+              <option value="">All</option>
+              {salesmen.map((s) => (
+                <option key={s._id || s.id} value={s._id || s.id}>{s.name || s.email || s._id}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -1051,8 +1145,57 @@ const CustomerManagement = () => {
                   rows="3"
                   disabled={loading}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter address"
+                  placeholder="Enter full address (street, area, etc.)"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="City"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">State / Region</label>
+                  <input
+                    type="text"
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="State or region"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleGeocodeAddress}
+                  disabled={loading || geocodingAddress}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {geocodingAddress ? (
+                    <>
+                      <FaSpinner className="w-4 h-4 animate-spin" />
+                      Getting location...
+                    </>
+                  ) : (
+                    <>
+                      <FaMapMarkerAlt className="w-4 h-4" />
+                      Auto-fill postcode & location from address
+                    </>
+                  )}
+                </button>
+                <p className="text-xs text-gray-500">Uses address + city/state to set postcode, latitude and longitude</p>
               </div>
 
               <div>
@@ -1064,9 +1207,9 @@ const CustomerManagement = () => {
                   onChange={handleInputChange}
                   disabled={loading}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="e.g., 75400, 75500 (used for map location)"
+                  placeholder="Auto-filled from address or enter manually (e.g. 75400)"
                 />
-                <p className="mt-1 text-xs text-gray-500">Postcode for accurate map location and directions</p>
+                <p className="mt-1 text-xs text-gray-500">Auto-filled when you use &quot;Auto-fill postcode & location&quot;. Used for map and visit tasks.</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1079,9 +1222,9 @@ const CustomerManagement = () => {
                     onChange={handleInputChange}
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="e.g. 24.8607 (for visit location)"
+                    placeholder="Auto-filled from address or enter manually"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Used for Visit Target location when creating tasks</p>
+                  <p className="mt-1 text-xs text-gray-500">Used for Visit Target location (correct lat/lng from address)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
@@ -1092,9 +1235,9 @@ const CustomerManagement = () => {
                     onChange={handleInputChange}
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="e.g. 67.0011 (for visit location)"
+                    placeholder="Auto-filled from address or enter manually"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Leave empty to use address geocoding for visits</p>
+                  <p className="mt-1 text-xs text-gray-500">Used for Visit Target location (correct lat/lng from address)</p>
                 </div>
               </div>
 
@@ -1336,11 +1479,6 @@ const CustomerManagement = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {(customer.approvalStatus === 'Pending' || customer.approvalStatus === 'Approved') && (
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${customer.approvalStatus === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {customer.approvalStatus}
-                        </span>
-                      )}
                       {/* Show "Push" button for app-created customers, "Imported" badge for HubSpot-imported customers */}
                       {customer?.source !== 'hubspot' ? (
                         <button
@@ -1428,19 +1566,6 @@ const CustomerManagement = () => {
                       <p className="text-gray-500 text-xs italic">
                         Salesman assigned through tasks/visits
                       </p>
-                    )}
-                    {(customer.approvalStatus === 'Pending') && (
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={(e) => handleApproveCustomer(customer._id, e)}
-                          disabled={loading}
-                          className="w-full py-2 px-3 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
-                        >
-                          <FaCheckCircle className="w-4 h-4 inline mr-2" />
-                          Approve Customer
-                        </button>
-                      </div>
                     )}
                     <div className="pt-2 flex items-center justify-between">
                       <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(customer.status)}`}>

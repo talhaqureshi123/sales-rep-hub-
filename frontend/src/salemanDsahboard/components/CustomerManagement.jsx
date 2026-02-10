@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getMyCustomers, createCustomer } from '../../services/salemanservices/customerService'
-import { FaWhatsapp, FaEnvelope } from 'react-icons/fa'
+import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
@@ -11,6 +11,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [filterStatus, setFilterStatus] = useState('')
   const [userRole, setUserRole] = useState(null) // Current user role
 
+  const [geocodingAddress, setGeocodingAddress] = useState(false)
   const [formData, setFormData] = useState({
     firstName: '',
     contactPerson: '',
@@ -18,7 +19,11 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     email: '',
     phone: '',
     address: '',
+    city: '',
+    state: '',
     postcode: '',
+    latitude: '',
+    longitude: '',
     orderPotential: '',
     monthlySpend: 0,
     status: 'Not Visited',
@@ -89,6 +94,101 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     })
   }
 
+  const handleGeocodeAddress = async () => {
+    const trim = (s) => (s != null && typeof s === 'string' ? s.trim() : '')
+    const addressPart = trim(formData.address)
+    const cityPart = trim(formData.city)
+    const statePart = trim(formData.state)
+    const parts = [addressPart, cityPart, statePart].filter(Boolean)
+    if (!parts.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Address required',
+        text: 'Please enter address (and optionally city, state) to auto-fill postcode and location.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setGeocodingAddress(true)
+    try {
+      const doSearch = async (q) => {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+          { headers: { Accept: 'application/json', 'User-Agent': 'SalesRapHub/1.0' } }
+        )
+        return res.json()
+      }
+      let query = parts.join(', ')
+      let searchData = await doSearch(query)
+      if (!Array.isArray(searchData) || !searchData[0]?.lat || !searchData[0]?.lon) {
+        const hasCountry = /pakistan|uk|united kingdom|india|uae|usa|germany|france|china|canada|australia|bangladesh|sri lanka|nepal|saudi|oman|qatar|bahrain|kuwait|turkey|malaysia|singapore/i.test(query)
+        if (!hasCountry) {
+          await new Promise((r) => setTimeout(r, 1100))
+          searchData = await doSearch(query + ', Pakistan')
+        }
+      }
+      if (!Array.isArray(searchData) || !searchData[0]?.lat || !searchData[0]?.lon) {
+        const fallbackPart = (cityPart || statePart || '').trim()
+        if (fallbackPart) {
+          await new Promise((r) => setTimeout(r, 1100))
+          searchData = await doSearch(fallbackPart)
+          if (!Array.isArray(searchData) || !searchData[0]?.lat) {
+            await new Promise((r) => setTimeout(r, 1100))
+            searchData = await doSearch(fallbackPart + ', Pakistan')
+          }
+        }
+      }
+      if (!Array.isArray(searchData) || !searchData[0]?.lat || !searchData[0]?.lon) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Location not found',
+          text: 'Could not find this address. Try adding city and country, then use "Auto-fill" again.',
+          confirmButtonColor: '#e9931c',
+        })
+        setGeocodingAddress(false)
+        return
+      }
+      const lat = parseFloat(searchData[0].lat)
+      const lon = parseFloat(searchData[0].lon)
+      await new Promise((r) => setTimeout(r, 1100))
+      const reverseRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+        { headers: { Accept: 'application/json', 'User-Agent': 'SalesRapHub/1.0' } }
+      )
+      const reverseData = await reverseRes.json()
+      const addr = reverseData?.address || {}
+      const postcode = addr.postcode || addr.postal_code || ''
+      const city = addr.city || addr.town || addr.village || addr.county || addr.state_district || ''
+      const state = addr.state || addr.region || ''
+      setFormData((prev) => ({
+        ...prev,
+        postcode: postcode || prev.postcode,
+        city: city || prev.city,
+        state: state || prev.state,
+        latitude: String(lat),
+        longitude: String(lon),
+      }))
+      Swal.fire({
+        icon: 'success',
+        title: 'Location updated',
+        text: postcode ? `Postcode ${postcode} and coordinates set from address.` : 'Latitude and longitude set from address.',
+        confirmButtonColor: '#e9931c',
+        timer: 2000,
+        timerProgressBar: true,
+      })
+    } catch (err) {
+      console.error('Geocode error:', err)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Could not fetch location. Please try again or enter postcode/lat-lng manually.',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setGeocodingAddress(false)
+    }
+  }
+
   const handleAddCustomer = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -102,7 +202,11 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
         postcode: formData.postcode,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
         orderPotential: formData.orderPotential,
         monthlySpend: formData.monthlySpend || 0,
         status: formData.status,
@@ -131,7 +235,11 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
           email: '',
           phone: '',
           address: '',
+          city: '',
+          state: '',
           postcode: '',
+          latitude: '',
+          longitude: '',
           orderPotential: '',
           monthlySpend: 0,
           status: 'Not Visited',
@@ -320,8 +428,57 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     rows="3"
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Enter address"
+                    placeholder="Enter full address (street, area, etc.)"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="City"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">State / Region</label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="State or region"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGeocodeAddress}
+                    disabled={loading || geocodingAddress}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {geocodingAddress ? (
+                      <>
+                        <FaSpinner className="w-4 h-4 animate-spin" />
+                        Getting location...
+                      </>
+                    ) : (
+                      <>
+                        <FaMapMarkerAlt className="w-4 h-4" />
+                        Auto-fill postcode & location from address
+                      </>
+                    )}
+                  </button>
+                  <p className="text-xs text-gray-500">Uses address + city/state to set postcode, latitude and longitude</p>
                 </div>
 
                 <div>
@@ -333,9 +490,38 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     onChange={handleInputChange}
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="e.g., 75400, 75500 (used for map location)"
+                    placeholder="Auto-filled from address or enter manually (e.g. 75400)"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Postcode for accurate map location and directions</p>
+                  <p className="mt-1 text-xs text-gray-500">Auto-filled when you use &quot;Auto-fill postcode & location&quot;. Used for map and visit tasks.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
+                    <input
+                      type="text"
+                      name="latitude"
+                      value={formData.latitude}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Auto-filled from address or enter manually"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Used for visit location (correct lat/lng from address)</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
+                    <input
+                      type="text"
+                      name="longitude"
+                      value={formData.longitude}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Auto-filled from address or enter manually"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Used for visit location (correct lat/lng from address)</p>
+                  </div>
                 </div>
 
                 <div>

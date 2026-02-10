@@ -85,6 +85,13 @@ const SampleTracker = () => {
     }
   }, [])
 
+  // Refresh when salesman creates samples from Tasks (Sample Track) so new samples show here
+  useEffect(() => {
+    const onSamplesCreated = () => loadSamples()
+    window.addEventListener('samples-created', onSamplesCreated)
+    return () => window.removeEventListener('samples-created', onSamplesCreated)
+  }, [])
+
   const loadCustomers = async () => {
     try {
       const result = await getMyCustomers()
@@ -235,7 +242,17 @@ const SampleTracker = () => {
         }
         const result = await createSample(payload)
         if (result.success) created++
-        else failed++
+        else {
+          failed++
+          if (result.message && result.message.includes('not assigned')) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'Customer not allotted',
+              text: result.message,
+              confirmButtonColor: '#e9931c',
+            })
+          }
+        }
       }
       if (created > 0) {
         Swal.fire({
@@ -247,7 +264,7 @@ const SampleTracker = () => {
         setShowCreateModal(false)
         resetCreateForm()
         loadSamples()
-      } else {
+      } else if (failed > 0) {
         Swal.fire({
           icon: 'error',
           title: 'Failed',
@@ -257,10 +274,11 @@ const SampleTracker = () => {
       }
     } catch (error) {
       console.error('Error creating sample:', error)
+      const msg = error?.message || (error?.response?.data?.message) || 'Error creating sample'
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error creating sample',
+        text: msg,
         confirmButtonColor: '#e9931c',
       })
     } finally {

@@ -149,9 +149,17 @@ const SalesTracking = () => {
     return localStorage.getItem('userEmail') || ''
   }
 
-  // Coords for a visit: resolved (geocoded) first, else stored – so same logic everywhere
+  // Coords for a visit: PREFER customer lat/lng (exit location), then resolved (geocoded), then visit's stored – so route uses customer location
   const getCoordsForTarget = (target) => {
     const id = target._id || target.id
+    const customer = target.customerId || target.customer
+    const hasCustomerCoords = customer && customer.latitude != null && customer.longitude != null &&
+      !isNaN(parseFloat(customer.latitude)) && !isNaN(parseFloat(customer.longitude))
+    if (hasCustomerCoords) {
+      const lat = parseFloat(customer.latitude)
+      const lng = parseFloat(customer.longitude)
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng }
+    }
     const resolved = resolvedVisitCoords[id]
     const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
     const lat = resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(target.latitude) : NaN)
@@ -317,19 +325,11 @@ const SalesTracking = () => {
       return dateA.getTime() - dateB.getTime()
     })
 
-    // For Today: order by distance (nearest first); use postcode-based coords when available
+    // For Today: order by distance (nearest first); use customer coords (exit location) then resolved/stored
     if (dateFilter === 'Today' && userLocation?.latitude != null && userLocation?.longitude != null) {
-      const getLatLng = (t) => {
-        const id = t._id || t.id
-        const resolved = resolvedVisitCoords[id]
-        const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-        const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
-        const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
-        return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
-      }
       sorted = [...sorted].sort((a, b) => {
-        const posA = getLatLng(a)
-        const posB = getLatLng(b)
+        const posA = getCoordsForTarget(a)
+        const posB = getCoordsForTarget(b)
         if (!posA && !posB) return 0
         if (!posA) return 1
         if (!posB) return -1
@@ -344,8 +344,16 @@ const SalesTracking = () => {
   // Keep function for backward compatibility
   const getFilteredVisits = () => filteredVisits
 
-  // Helper: target has valid lat/long – PREFER address/postcode geocoded (resolved), else stored
+  // Helper: target has valid lat/long – PREFER customer (exit location), then resolved (geocode), else stored
   const hasValidCoords = (target) => {
+    const customer = target.customerId || target.customer
+    const hasCustomerCoords = customer && customer.latitude != null && customer.longitude != null &&
+      !isNaN(parseFloat(customer.latitude)) && !isNaN(parseFloat(customer.longitude))
+    if (hasCustomerCoords) {
+      const lat = parseFloat(customer.latitude)
+      const lng = parseFloat(customer.longitude)
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return true
+    }
     const id = target._id || target.id
     const resolved = resolvedVisitCoords[id]
     const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
@@ -354,16 +362,12 @@ const SalesTracking = () => {
     return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
   }
 
-  // Map coords: PREFER resolved (address/postcode geocode), else stored – taaki location address/postcode se aaye
+  // Map coords: PREFER customer lat/lng (exit location), then resolved (geocode), else stored – route sahi bane
   const visitsForMap = useMemo(() => {
     const withCoords = filteredVisits.map(target => {
-      const id = target._id || target.id
-      const resolved = resolvedVisitCoords[id]
-      const hasStored = target.latitude != null && target.longitude != null && !isNaN(parseFloat(target.latitude)) && !isNaN(parseFloat(target.longitude))
-      let lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(target.latitude) : null))
-      let lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(target.longitude) : null))
-      if (lat == null || lng == null || isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
-      return { ...target, latitude: lat, longitude: lng }
+      const coords = getCoordsForTarget(target)
+      if (!coords) return null
+      return { ...target, latitude: coords.lat, longitude: coords.lng }
     }).filter(Boolean)
 
     // Same postal/area = same geocode point. Offset so DONO markers clearly alag dikhen (ek hi point na lagein)
@@ -398,7 +402,7 @@ const SalesTracking = () => {
     return result
   }, [filteredVisits, resolvedVisitCoords, routeToVisitTarget?.target?._id, routeToVisitTarget?.target?.id])
 
-  // Pending targets with valid coords for route – order: nearest first (kareeb wala pehle), so route = start → nearest visit → next → … → last (last par end meter)
+  // Pending targets with valid coords for route – order: nearest first (kareeb wala pehle), so route = start → nearest visit → next → … → last (last par end meter). Uses customer lat/lng for exit location.
   const pendingTargetsWithLocation = useMemo(() => {
     const pending = filteredVisits
       .filter((t) => t.status === 'Pending' || t.status === 'In Progress')
@@ -406,20 +410,11 @@ const SalesTracking = () => {
 
     if (pending.length === 0) return []
 
-    const getLatLng = (t) => {
-      const id = t._id || t.id
-      const resolved = resolvedVisitCoords[id]
-      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
-      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
-      return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
-    }
-
-    // When we have user location: sort by distance (nearest first) – kharreb wala visit pehle, phir next
+    // When we have user location: sort by distance (nearest first) – kharreb wala visit pehle, phir next. Coords = customer → resolved → stored.
     if (userLocation?.latitude != null && userLocation?.longitude != null) {
       return [...pending].sort((a, b) => {
-        const posA = getLatLng(a)
-        const posB = getLatLng(b)
+        const posA = getCoordsForTarget(a)
+        const posB = getCoordsForTarget(b)
         if (!posA && !posB) return 0
         if (!posA) return 1
         if (!posB) return -1
@@ -438,7 +433,7 @@ const SalesTracking = () => {
     })
   }, [filteredVisits, userLocation, resolvedVisitCoords])
 
-  // Today's Pending/In Progress visits in distance order (nearest first) – for remaining count, Next Visit, and visit numbers
+  // Today's Pending/In Progress visits in distance order (nearest first) – for remaining count, Next Visit, and visit numbers. Uses customer coords for distance.
   const todayPendingVisitsOrdered = useMemo(() => {
     const todayStr = toLocalDateString(new Date())
     const pending = (visitTargets || []).filter((t) => {
@@ -450,19 +445,10 @@ const SalesTracking = () => {
     })
     if (pending.length === 0) return []
 
-    const getLatLng = (t) => {
-      const id = t._id || t.id
-      const resolved = resolvedVisitCoords[id]
-      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
-      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
-      return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
-    }
-
     if (userLocation?.latitude != null && userLocation?.longitude != null) {
       return [...pending].sort((a, b) => {
-        const posA = getLatLng(a)
-        const posB = getLatLng(b)
+        const posA = getCoordsForTarget(a)
+        const posB = getCoordsForTarget(b)
         if (!posA && !posB) return 0
         if (!posA) return 1
         if (!posB) return -1
@@ -479,7 +465,7 @@ const SalesTracking = () => {
     })
   }, [visitTargets, userLocation, resolvedVisitCoords])
 
-  // Today's ALL visits in distance order (nearest first) – for Visit 1, Visit 2, ... numbering
+  // Today's ALL visits in distance order (nearest first) – for Visit 1, Visit 2, ... numbering. Uses customer coords for distance.
   const todayVisitsOrdered = useMemo(() => {
     const todayStr = toLocalDateString(new Date())
     const todayList = (visitTargets || []).filter((t) => {
@@ -490,19 +476,10 @@ const SalesTracking = () => {
     })
     if (todayList.length === 0) return []
 
-    const getLatLng = (t) => {
-      const id = t._id || t.id
-      const resolved = resolvedVisitCoords[id]
-      const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
-      const lat = (resolved?.latitude != null ? parseFloat(resolved.latitude) : (hasStored ? parseFloat(t.latitude) : NaN))
-      const lng = (resolved?.longitude != null ? parseFloat(resolved.longitude) : (hasStored ? parseFloat(t.longitude) : NaN))
-      return isNaN(lat) || isNaN(lng) ? null : { lat, lng }
-    }
-
     if (userLocation?.latitude != null && userLocation?.longitude != null) {
       return [...todayList].sort((a, b) => {
-        const posA = getLatLng(a)
-        const posB = getLatLng(b)
+        const posA = getCoordsForTarget(a)
+        const posB = getCoordsForTarget(b)
         if (!posA && !posB) return 0
         if (!posA) return 1
         if (!posB) return -1
@@ -1150,7 +1127,7 @@ const SalesTracking = () => {
       }
     }
     // Clear route only when tracking off AND no pending visits (don’t clear on pause after one visit – keep route to next)
-    const pendingCount = visitTargets.filter(t => (t.status === 'Pending' || t.status === 'In Progress') && t.latitude && t.longitude).length
+    const pendingCount = visitTargets.filter(t => (t.status === 'Pending' || t.status === 'In Progress') && hasValidCoords(t)).length
     if (!isTracking && pendingCount === 0) {
       setRouteToVisitTarget(null)
     }
@@ -1290,23 +1267,21 @@ const SalesTracking = () => {
     // No notifications will be shown for today's visits or missed visits
   }
 
-  // Check proximity to visit targets and show notifications (Real-time detection)
+  // Check proximity to visit targets and show notifications (Real-time detection). Uses customer lat/lng (exit location) when available.
   const checkVisitTargetProximity = (currentLocation) => {
     if (!currentLocation || visitTargets.length === 0) return
 
-    // Check each visit target
     visitTargets.forEach((target) => {
-      // Only check pending targets
       if (target.status !== 'Pending' && target.status !== 'In Progress') return
 
-      if (!target.latitude || !target.longitude) return
+      const coords = getCoordsForTarget(target)
+      if (!coords) return
 
-      // Calculate distance to target
       const distance = calculateDistance(
         currentLocation.latitude,
         currentLocation.longitude,
-        parseFloat(target.latitude),
-        parseFloat(target.longitude)
+        coords.lat,
+        coords.lng
       )
 
       // Check if within 100 meters (0.1 km) - proximity threshold
@@ -2850,8 +2825,16 @@ const SalesTracking = () => {
 
     setRouteDistanceKm(null)
     const from = { lat: userLocation.latitude, lng: userLocation.longitude }
-    // Effective coords = PREFER address/postcode geocoded (resolved), else stored
+    // Effective coords = PREFER customer lat/lng (exit location), then resolved (geocoded), else visit's stored – route sahi bane
     const getEffective = (t) => {
+      const customer = t.customerId || t.customer
+      const hasCustomerCoords = customer && customer.latitude != null && customer.longitude != null &&
+        !isNaN(parseFloat(customer.latitude)) && !isNaN(parseFloat(customer.longitude))
+      if (hasCustomerCoords) {
+        const lat = parseFloat(customer.latitude)
+        const lng = parseFloat(customer.longitude)
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng }
+      }
       const id = t._id || t.id
       const resolved = resolvedVisitCoords[id]
       const hasStored = t.latitude != null && t.longitude != null && !isNaN(parseFloat(t.latitude)) && !isNaN(parseFloat(t.longitude))
@@ -2930,12 +2913,10 @@ const SalesTracking = () => {
     if (isTracking && userLocation && userLocation.latitude && userLocation.longitude) {
       return { lat: userLocation.latitude, lng: userLocation.longitude }
     }
-    // Priority: selectedVisitTarget (when clicked) > userLocation > today's visits center > default
+    // Priority: selectedVisitTarget (when clicked) > userLocation > today's visits center > default. Use customer coords (exit location) when available.
     if (selectedVisitTarget) {
-      const sid = selectedVisitTarget._id || selectedVisitTarget.id
-      let lat = selectedVisitTarget.latitude != null ? parseFloat(selectedVisitTarget.latitude) : (resolvedVisitCoords[sid]?.latitude != null ? Number(resolvedVisitCoords[sid].latitude) : NaN)
-      let lng = selectedVisitTarget.longitude != null ? parseFloat(selectedVisitTarget.longitude) : (resolvedVisitCoords[sid]?.longitude != null ? Number(resolvedVisitCoords[sid].longitude) : NaN)
-      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng }
+      const coords = getCoordsForTarget(selectedVisitTarget)
+      if (coords) return { lat: coords.lat, lng: coords.lng }
     }
     if (userLocation && userLocation.latitude && userLocation.longitude) {
       return { lat: userLocation.latitude, lng: userLocation.longitude }
@@ -2955,6 +2936,7 @@ const SalesTracking = () => {
     selectedVisitTarget?._id || selectedVisitTarget?.id,
     selectedVisitTarget?.latitude,
     selectedVisitTarget?.longitude,
+    selectedVisitTarget?.customerId,
     userLocation?.latitude,
     userLocation?.longitude,
     visitTargets.length,

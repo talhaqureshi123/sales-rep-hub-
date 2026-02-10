@@ -6,7 +6,7 @@ const getAuthToken = () => localStorage.getItem('token')
 
 /**
  * Get tasks list (follow-ups + visit targets) in one request. Backend returns max 200 of each for fast load.
- * @param {Object} opts - { limit: number } optional
+ * @param {Object} opts - { limit: number, approvalStatus: string } optional. approvalStatus: 'Pending' fetches only Pending tasks (Sample Track / follow-ups for admin approval).
  */
 export const getTasksList = async (opts = {}) => {
   try {
@@ -16,6 +16,7 @@ export const getTasksList = async (opts = {}) => {
     }
     const params = new URLSearchParams()
     if (opts.limit != null) params.append('limit', opts.limit)
+    if (opts.approvalStatus) params.append('approvalStatus', opts.approvalStatus)
     const url = params.toString() ? `${API_BASE_URL}?${params.toString()}` : API_BASE_URL
 
     const response = await fetch(url, {

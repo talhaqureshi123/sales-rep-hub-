@@ -57,27 +57,15 @@ const getFollowUps = async (req, res) => {
       filter.hubspotTaskId = { $exists: true, $ne: "" };
     }
 
-    // Filter by approval status if needed
     if (req.query.approvalStatus) {
       filter.approvalStatus = req.query.approvalStatus;
+    }
 
-      // If filtering for Pending approval, only show tasks created by salesman (not admin)
-      // Admin tasks are auto-approved, so they shouldn't appear in Pending tab
-      if (req.query.approvalStatus === "Pending") {
-        // Get all salesman users
-        const salesmanUsers = await User.find({ role: "salesman" }).select(
-          "_id",
-        );
-        const salesmanIds = salesmanUsers.map((u) => u._id);
-
-        // Only show tasks created by salesman (not admin)
-        if (salesmanIds.length > 0) {
-          filter.createdBy = { $in: salesmanIds };
-        } else {
-          // If no salesmen exist, return empty result
-          filter.createdBy = { $in: [] };
-        }
-      }
+    // Only show admin-created tasks; salesman-created (sample track, follow-ups) show only in salesman dashboard
+    const salesmanUsers = await User.find({ role: "salesman" }).select("_id").lean();
+    const salesmanIds = salesmanUsers.map((u) => u._id);
+    if (salesmanIds.length > 0) {
+      filter.createdBy = { $nin: salesmanIds };
     }
 
     const listView = req.query.listView === "1" || req.query.listView === "true";
@@ -237,7 +225,7 @@ const createFollowUp = async (req, res) => {
       lastContacted: lastContacted ? new Date(lastContacted) : undefined,
       lastEngagement: lastEngagement ? new Date(lastEngagement) : undefined,
       createdBy: req.user._id,
-      approvalStatus: "Approved",
+      approvalStatus: "Approved", // Admin-created tasks (follow-up / Sample Track) never need approval
       source: "app",
     });
 

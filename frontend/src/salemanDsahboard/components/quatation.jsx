@@ -902,9 +902,10 @@ const Quotation = () => {
     URL.revokeObjectURL(url)
   }
 
-  // Open WhatsApp with customer number and pre-filled message
+  // Open WhatsApp with customer number and pre-filled message (anchor click avoids popup blocker)
   const handleSendQuoteWhatsApp = (quote) => {
-    const phone = (quote.customerPhone || quote.phone || '').replace(/\D/g, '')
+    const raw = (quote.customerPhone || quote.phone || (quote.customer && (quote.customer.phone || quote.customer.contactPhone)) || '').trim()
+    const phone = raw.replace(/\D/g, '')
     if (!phone || phone.length < 10) {
       Swal.fire({
         icon: 'warning',
@@ -914,11 +915,24 @@ const Quotation = () => {
       })
       return
     }
-    const num = phone.startsWith('0') ? '92' + phone.slice(1) : phone.length === 10 ? '92' + phone : phone
+    let num = phone
+    if (phone.startsWith('0') && phone.length >= 10) {
+      num = '92' + phone.slice(1)
+    } else if (phone.length === 10 && !phone.startsWith('0')) {
+      num = '92' + phone
+    } else if (phone.length >= 11 && (phone.startsWith('44') || phone.startsWith('92'))) {
+      num = phone
+    }
     const qNum = quote.quotationNumber || quote.quoteNumber || ''
     const msg = `Hello, your quotation #${qNum} is ready. Total: £${Number(quote.total || 0).toFixed(2)}. Please contact us for details.`
     const url = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
-    window.open(url, '_blank')
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }
 
   const handleSendQuoteEmail = async (quote) => {

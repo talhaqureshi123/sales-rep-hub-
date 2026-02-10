@@ -23,6 +23,7 @@ import { logoutService } from '../../services/adminservices/loginservice'
 
 const AdminDashboard = ({ onLogout }) => {
   const [activePage, setActivePage] = useState('dashboard')
+  const [customerManagementInitialFilter, setCustomerManagementInitialFilter] = useState(null)
 
   const handleLogout = () => {
     logoutService()
@@ -34,8 +35,14 @@ const AdminDashboard = ({ onLogout }) => {
   // Listen for navigation events from dashboard
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (event.detail && ['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(event.detail)) {
-        setActivePage(event.detail)
+      const d = event.detail
+      if (!d) return
+      const tab = typeof d === 'object' && d.tab ? d.tab : d
+      if (['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(tab)) {
+        setActivePage(tab)
+        if (typeof d === 'object' && d.filter && tab === 'customer-management') {
+          setCustomerManagementInitialFilter(d.filter)
+        }
       }
     }
     window.addEventListener('navigateToTab', handleNavigate)
@@ -66,7 +73,12 @@ const AdminDashboard = ({ onLogout }) => {
       case 'user-management':
         return <UserManagement />
       case 'customer-management':
-        return <CustomerManagement />
+        return (
+          <CustomerManagement
+            initialFilter={customerManagementInitialFilter}
+            onFilterConsumed={() => setCustomerManagementInitialFilter(null)}
+          />
+        )
       case 'customer-allotment':
         return <CustomerAllotment />
       case 'visited-targets':

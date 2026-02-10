@@ -10,7 +10,6 @@ import {
   FaToggleOff,
   FaTasks,
   FaFlask,
-  FaCalendarAlt,
   FaClock,
   FaCheckCircle,
   FaExclamationTriangle,
@@ -63,60 +62,47 @@ const LiveTracking = () => {
           row.salesman?.role === 'salesman' || !row.salesman?.role // Include if role is salesman or undefined (backward compatibility)
         )
         
-        // Debug log to see what we're getting
-        console.log('📍 Live Tracking - Loaded salesmen:', rows.length)
-        rows.forEach(row => {
-          const hasLocation = !!(row.latestLocation?.latitude && row.latestLocation?.longitude)
-          const locationAge = row.latestLocation?.timestamp 
-            ? Math.round((Date.now() - new Date(row.latestLocation.timestamp).getTime()) / 60000)
-            : null
-          console.log(`   ${row.salesman?.name || 'Unknown'}: Online=${row.isOnline}, HasLocation=${hasLocation}, LocationAge=${locationAge ? locationAge + ' min' : 'N/A'}`)
-        })
-        
-        setSalesmenLocations(rows)
         // Recalculate online count for filtered salesmen only
         const filteredOnlineCount = rows.reduce((sum, r) => sum + (r.isOnline ? 1 : 0), 0)
         setOnlineCount(filteredOnlineCount)
 
-        // Fetch addresses only if not already loading and Google Maps is available
+        // Defer address loading so list/map show immediately; fetch addresses in background
         if (!loadingAddressesRef.current && window.google && window.google.maps) {
-          loadingAddressesRef.current = true
-          
-          // Fetch addresses for all locations (only new ones - check cache ref instead of state)
-          const addressPromises = rows
-            .filter(row => {
-              const salesmanId = row.salesman?._id
-              return salesmanId && 
-                     row.latestLocation?.latitude && 
-                     row.latestLocation?.longitude &&
-                     !addressCacheRef.current[salesmanId] // Check cache ref instead of state
-            })
-            .map(async (row) => {
-              const salesmanId = row.salesman?._id
-              if (!salesmanId) return null
-
-              const lat = parseFloat(row.latestLocation.latitude)
-              const lng = parseFloat(row.latestLocation.longitude)
-              const address = await getAddressFromCoordinates(lat, lng)
-              
-              return { salesmanId, address }
-            })
-
-          if (addressPromises.length > 0) {
-            const addressResults = await Promise.all(addressPromises)
-            setLocationAddresses(prev => {
-              const newMap = { ...prev }
-              addressResults.forEach(result => {
-                if (result && result.salesmanId && result.address) {
-                  newMap[result.salesmanId] = result.address
-                  addressCacheRef.current[result.salesmanId] = result.address // Update cache ref
-                }
+          const toFetch = rows.filter(row => {
+            const salesmanId = row.salesman?._id
+            return salesmanId &&
+              row.latestLocation?.latitude &&
+              row.latestLocation?.longitude &&
+              !addressCacheRef.current[salesmanId]
+          })
+          if (toFetch.length > 0) {
+            loadingAddressesRef.current = true
+            setTimeout(() => {
+              Promise.all(
+                toFetch.map(async (row) => {
+                  const salesmanId = row.salesman?._id
+                  if (!salesmanId) return null
+                  const lat = parseFloat(row.latestLocation.latitude)
+                  const lng = parseFloat(row.latestLocation.longitude)
+                  const address = await getAddressFromCoordinates(lat, lng)
+                  return { salesmanId, address }
+                })
+              ).then((addressResults) => {
+                setLocationAddresses(prev => {
+                  const newMap = { ...prev }
+                  addressResults.forEach(result => {
+                    if (result && result.salesmanId && result.address) {
+                      newMap[result.salesmanId] = result.address
+                      addressCacheRef.current[result.salesmanId] = result.address
+                    }
+                  })
+                  return newMap
+                })
+              }).finally(() => {
+                loadingAddressesRef.current = false
               })
-              return newMap
-            })
+            }, 100)
           }
-          
-          loadingAddressesRef.current = false
         }
       }
     } catch (error) {
@@ -466,9 +452,6 @@ const LiveTracking = () => {
                 <div className="bg-white/90 backdrop-blur-sm px-4 py-3 rounded-lg shadow-md text-center max-w-xs">
                   <FaMapMarkerAlt className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-600 text-sm font-medium">No rep locations yet</p>
-                  <p className="text-gray-500 text-xs mt-1 max-w-[260px]">
-                    Reps appear when they open <strong>Sales Tracking</strong> and tap <strong>Start</strong>.
-                  </p>
                 </div>
               </div>
             )}
@@ -697,7 +680,7 @@ const LiveTracking = () => {
                               <div className="mt-2 pt-2 border-t border-gray-200">
                                 <p className="text-xs text-gray-500 flex items-center gap-1.5 break-words">
                                   <FaInfoCircle className="w-3 h-3 flex-shrink-0" />
-                                  No location yet. Location is shared when rep opens <strong>Sales Tracking</strong> and taps <strong>Start</strong>.
+                                  No location yet.
                                 </p>
                               </div>
                             ) : null}
@@ -899,7 +882,7 @@ const LiveTracking = () => {
                                 {sample.productName && (
                                   <p className="text-sm text-gray-600 mb-1">Product: {sample.productName}</p>
                                 )}
-                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
                                   {sample.quantity && (
                                     <span>Quantity: {sample.quantity}</span>
                                   )}
@@ -913,10 +896,7 @@ const LiveTracking = () => {
                                     </span>
                                   )}
                                   {sample.visitDate && (
-                                    <span className="flex items-center gap-1">
-                                      <FaCalendarAlt className="w-3 h-3" />
-                                      {new Date(sample.visitDate).toLocaleDateString()}
-                                    </span>
+                                    <span>{new Date(sample.visitDate).toLocaleDateString()}</span>
                                   )}
                                 </div>
                               </div>
@@ -969,10 +949,7 @@ const LiveTracking = () => {
                                 )}
                                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                                   {visit.visitDate && (
-                                    <span className="flex items-center gap-1">
-                                      <FaCalendarAlt className="w-3 h-3" />
-                                      {new Date(visit.visitDate).toLocaleDateString()}
-                                    </span>
+                                    <span>{new Date(visit.visitDate).toLocaleDateString()}</span>
                                   )}
                                   {visit.latitude && visit.longitude && (
                                     <span className="flex items-center gap-1">

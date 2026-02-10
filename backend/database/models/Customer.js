@@ -71,7 +71,7 @@ const customerSchema = new mongoose.Schema({
     ref: "User",
     default: null,
   },
-  // Salesman-created customers start as Pending; admin approves to show in company list
+  // No admin approval needed; salesman-created customers are created with Approved
   approvalStatus: {
     type: String,
     enum: ["Pending", "Approved"],

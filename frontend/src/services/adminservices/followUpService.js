@@ -21,6 +21,7 @@ export const getFollowUps = async (filters = {}) => {
     if (filters.startDate) queryParams.append('startDate', filters.startDate)
     if (filters.endDate) queryParams.append('endDate', filters.endDate)
     if (filters.source) queryParams.append('source', filters.source)
+    if (filters.approvalStatus) queryParams.append('approvalStatus', filters.approvalStatus)
     if (filters.listView) queryParams.append('listView', '1')
 
     const url = queryParams.toString() ? `${API_BASE_URL}?${queryParams.toString()}` : API_BASE_URL
@@ -85,7 +86,10 @@ export const createFollowUp = async (followUpData) => {
       body: JSON.stringify(followUpData),
     })
 
-    const data = await response.json()
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      return { success: false, message: data?.message || `Request failed (${response.status})` }
+    }
     return data
   } catch (error) {
     console.error('Error creating follow-up:', error)

@@ -24,9 +24,22 @@ const getCustomers = async (req, res) => {
       createdTo,
       updatedFrom,
       updatedTo,
+      myCustomersOnly,
     } = req.query;
 
     const filter = {};
+
+    // My Customers only: admin-created OR HubSpot-imported (exclude salesman-created)
+    if (myCustomersOnly === "1" || myCustomersOnly === "true") {
+      const adminId = req.user?._id;
+      filter.$and = filter.$and || [];
+      filter.$and.push({
+        $or: [
+          { createdBy: adminId },
+          { source: "hubspot" },
+        ],
+      });
+    }
 
     if (approvalStatus && approvalStatus !== "All") {
       if (approvalStatus === "Approved") {

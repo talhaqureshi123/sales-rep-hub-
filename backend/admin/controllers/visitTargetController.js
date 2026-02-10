@@ -52,6 +52,13 @@ const getVisitTargets = async (req, res) => {
       }
     }
 
+    // Only show admin-created visits; salesman-created show only in salesman dashboard
+    const salesmanUsers = await User.find({ role: "salesman" }).select("_id").lean();
+    const salesmanIds = salesmanUsers.map((u) => u._id);
+    if (salesmanIds.length > 0) {
+      filter.createdBy = { $nin: salesmanIds };
+    }
+
     const listView = req.query.listView === "1" || req.query.listView === "true";
     const listLimit = Math.min(parseInt(req.query.limit, 10) || 150, 400);
 

@@ -23,9 +23,12 @@ import {
   FaChevronRight,
   FaEllipsisH,
   FaSyncAlt,
+  FaFileAlt,
+  FaVideo,
 } from 'react-icons/fa'
 import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp } from '../../services/salemanservices/followUpService'
 import { getMyCustomers, getCustomer } from '../../services/salemanservices/customerService'
+import { getQuotations } from '../../services/salemanservices/quotationService'
 import { createSample } from '../../services/salemanservices/sampleService'
 import { getMyProducts } from '../../services/salemanservices/productService'
 import appTheme from '../../apptheme/apptheme'
@@ -37,6 +40,18 @@ const getLocalDateString = (d = new Date()) => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+// Format date/time for activity note line: [DD/MM/YYYY, HH:MM:SS] (parser expects this)
+const formatActivityDateTime = (d) => {
+  const date = d instanceof Date ? d : new Date(d)
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = date.getFullYear()
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  const s = String(date.getSeconds()).padStart(2, '0')
+  return { dateStr: `${day}/${month}/${year}`, timeStr: `${h}:${m}:${s}` }
 }
 
 const TABS = [
@@ -76,6 +91,7 @@ const Tasks = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
   const [taskCustomerDetails, setTaskCustomerDetails] = useState(null) // Full customer details for selected task
+  const [taskQuotations, setTaskQuotations] = useState([]) // Quotations for selected task (Deals section)
   const [taskActivities, setTaskActivities] = useState([]) // Activities/notes for selected task
   const [noteInput, setNoteInput] = useState('') // Input for quick note typing
   const noteInputRef = useRef(null) // Ref for note input field
@@ -132,12 +148,10 @@ const Tasks = () => {
       if (isHubSpotImported) return false
       
       // Show tasks that are:
-      // 1. Created by salesman – show all (Pending + Approved) so he sees his tasks before and after admin approval
+      // 1. Created by salesman – show all (no admin approval needed)
       // 2. Created by admin AND approved AND customer is assigned to this salesman
       const createdByRole = t.createdBy?.role
       const isAdminCreated = createdByRole === 'admin'
-      const isApproved = t.approvalStatus === 'Approved'
-
       const taskCustomerId = t.customer?._id || t.customer || null
       const taskCustomerEmail = (t.customerEmail || '').toLowerCase()
       const taskCustomerName = (t.customerName || '').toLowerCase()
@@ -147,10 +161,11 @@ const Tasks = () => {
         (taskCustomerEmail && assignedCustomerEmails.includes(taskCustomerEmail)) ||
         (taskCustomerName && assignedCustomerNames.some(name => taskCustomerName.includes(name) || name.includes(taskCustomerName)))
 
-      if (createdByRole === 'salesman') {
+      // Salesman-created tasks (and tasks with no createdBy – e.g. just assigned to me) always show
+      if (createdByRole === 'salesman' || !createdByRole) {
         return true
       }
-      if (isAdminCreated && isApproved) {
+      if (isAdminCreated) {
         return isCustomerAssigned
       }
 
@@ -387,27 +402,43 @@ const Tasks = () => {
         }
 
         if (created > 0) {
-          // Create a follow-up task (Sample Feedback) so it appears in admin Tasks Pending/Approved
+          // Create a follow-up task (Sample Feedback) so it appears in salesman Tasks and admin Tasks
+          let sampleTaskCreated = false
           if (createdSampleIds.length > 0) {
             const datePart = (formData.expectedDate || formData.visitDate || getLocalDateString()).trim()
             const timePart = (formData.expectedTime || '09:00').trim().slice(0, 5) // HH:MM
-            const dueDateTime = datePart.includes('T') ? datePart : `${datePart}T${timePart || '09:00'}:00`
-            const taskData = {
+            let dueDateTime = datePart.includes('T') ? datePart : `${datePart}T${timePart || '09:00'}:00`
+            const buildTaskData = (due) => ({
               customer: customerId,
               customerName: custName,
               customerEmail: (formData.customerEmail || '').trim() || undefined,
               customerPhone: (formData.customerPhone || '').trim() || undefined,
               type: 'Sample Feedback',
               priority: formData.priority || 'Medium',
-              dueDate: dueDateTime,
-              scheduledDate: dueDateTime,
+              dueDate: due,
+              scheduledDate: due,
               description: `Sample follow-up: ${custName}`,
               notes: (formData.notes || '').trim() || undefined,
               relatedSample: createdSampleIds[0],
-            }
-            const taskRes = await createFollowUp(taskData)
+            })
+            let taskRes = await createFollowUp(buildTaskData(dueDateTime))
             if (!taskRes.success) {
-              console.warn('Sample task (admin Tasks) could not be created:', taskRes.message)
+              // Retry once with +1 minute to avoid time conflict (same-minute task/visit)
+              const isTimeConflict = (taskRes.message || '').toLowerCase().includes('already exists') || (taskRes.message || '').toLowerCase().includes('same time')
+              if (isTimeConflict) {
+                const d = new Date(dueDateTime)
+                if (!isNaN(d.getTime())) {
+                  d.setMinutes(d.getMinutes() + 1)
+                  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+                  const h = String(d.getHours()).padStart(2, '0'), min = String(d.getMinutes()).padStart(2, '0')
+                  dueDateTime = `${y}-${m}-${day}T${h}:${min}:00`
+                  taskRes = await createFollowUp(buildTaskData(dueDateTime))
+                }
+              }
+              if (taskRes.success) sampleTaskCreated = true
+              else console.warn('Sample Feedback task could not be created:', taskRes.message)
+            } else {
+              sampleTaskCreated = true
             }
           }
           const successText = failed > 0
@@ -415,14 +446,18 @@ const Tasks = () => {
             : created === 1
               ? '1 sample created successfully!'
               : `${created} samples created successfully!`
+          const taskNote = sampleTaskCreated
+            ? ' Task has been created and will appear in your Tasks list.'
+            : ' Follow-up task could not be created (e.g. another task at same time). You can add a follow-up manually.'
           await Swal.fire({
             icon: 'success',
             title: 'Success!',
-            text: successText + ' Task is pending admin approval and will appear in admin Tasks.',
+            text: successText + taskNote,
             confirmButtonColor: '#e9931c',
           })
           setShowCreateForm(false)
           resetForm()
+          window.dispatchEvent(new CustomEvent('samples-created'))
           await loadTasks()
         } else {
           const failText = failed === 1 ? 'Failed to create 1 sample.' : `Failed to create ${failed} samples.`
@@ -462,20 +497,30 @@ const Tasks = () => {
       if (formData.notes) notesParts.push(formData.notes)
       const combinedNotes = notesParts.length > 0 ? notesParts.join('\n\n') : undefined
 
+      const taskType = formData.type === 'Follow-up'
+        ? (formData.followUpType || 'Call')
+        : mapTaskType(formData.type)
+      const description = formData.description || `Follow up with ${formData.customerName}`
+
       const taskData = {
         customer: formData.customer || undefined,
         customerName: formData.customerName,
         customerEmail: formData.customerEmail || undefined,
         customerPhone: formData.customerPhone || undefined,
-        type: formData.type === 'Follow-up' && formData.followUpType 
-          ? formData.followUpType 
-          : mapTaskType(formData.type), // Map to backend enum value
+        type: taskType,
         priority: formData.priority,
         scheduledDate: dueDateTime,
         dueDate: dueDateTime,
-        description: formData.description || `Follow up with ${formData.customerName}`,
+        description,
         notes: combinedNotes,
-        approvalStatus: 'Pending', // Salesman-created tasks need admin approval
+      }
+
+      // When creating a Meeting follow-up, add a note line so it shows in Activities when task is opened
+      if (taskType === 'Meeting') {
+        const { dateStr, timeStr } = formatActivityDateTime(dueDateTime)
+        const meetLink = 'https://meet.google.com/new'
+        const meetingLine = `[${dateStr}, ${timeStr}] Meeting: ${description} - Google Meet: ${meetLink}`
+        taskData.notes = taskData.notes ? `${meetingLine}\n${taskData.notes}` : meetingLine
       }
 
       const res = await createFollowUp(taskData)
@@ -483,18 +528,28 @@ const Tasks = () => {
         Swal.fire({
           icon: 'success',
           title: 'Task Created!',
-          text: 'Task created successfully! It is pending admin approval. Once approved by admin, it will appear in your tasks list.',
+          text: 'Task created successfully! No admin approval needed — it will appear in your tasks list.',
           confirmButtonColor: '#e9931c'
         })
         setShowCreateForm(false)
         resetForm()
         await loadTasks()
       } else {
-        alert(res.message || 'Failed to create task')
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Cannot create task',
+          text: res.message || 'Failed to create task',
+          confirmButtonColor: '#e9931c',
+        })
       }
     } catch (e) {
       console.error(e)
-      alert('Error creating task')
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error creating task',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setSubmitting(false)
     }
@@ -529,13 +584,14 @@ const Tasks = () => {
         const index = filtered.findIndex(t => t._id === task._id)
         setCurrentTaskIndex(index >= 0 ? index : 0)
         
-        // Load customer details if customer ID exists
+        let loadedCustomer = null
         if (res.data.customer) {
           try {
             const customerId = typeof res.data.customer === 'object' ? res.data.customer._id : res.data.customer
             if (customerId) {
               const customerRes = await getCustomer(customerId)
               if (customerRes.success) {
+                loadedCustomer = customerRes.data
                 setTaskCustomerDetails(customerRes.data)
               } else {
                 setTaskCustomerDetails(null)
@@ -548,13 +604,12 @@ const Tasks = () => {
         } else {
           setTaskCustomerDetails(null)
         }
-        
+
         // Parse activities from notes
+        let parsedActivities = []
         if (res.data.notes) {
           try {
             const notesLines = res.data.notes.split('\n').filter(line => line.trim())
-            const parsedActivities = []
-            
             notesLines.forEach(line => {
               // Match pattern: [DD/MM/YYYY, HH:MM:SS] Type: Content
               const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
@@ -581,21 +636,55 @@ const Tasks = () => {
                 }
               }
             })
-            
-            // Sort by date (newest first)
-            parsedActivities.sort((a, b) => {
-              return b.date.getTime() - a.date.getTime()
-            })
-            
-            setTaskActivities(parsedActivities)
           } catch (e) {
             console.error('Error parsing activities:', e)
-            setTaskActivities([])
+          }
+        }
+        // If task type is Meeting but no Meeting activity in notes, add one from task so it always shows
+        const taskType = (res.data.type || '').toString().trim()
+        if (taskType === 'Meeting') {
+          const hasMeeting = parsedActivities.some(a => (a.type || '').toString() === 'Meeting')
+          if (!hasMeeting) {
+            const due = res.data.dueDate ? new Date(res.data.dueDate) : new Date()
+            const { dateStr, timeStr } = formatActivityDateTime(due)
+            parsedActivities.unshift({
+              type: 'Meeting',
+              content: (res.data.description || 'Meeting') + ' - Google Meet: https://meet.google.com/new',
+              date: due,
+              dateStr,
+              timeStr
+            })
+          }
+        }
+        parsedActivities.sort((a, b) => b.date.getTime() - a.date.getTime())
+        setTaskActivities(parsedActivities)
+
+        // Load quotations for this task's customer (Deals section – show in modal)
+        const taskEmail = (res.data.customerEmail || loadedCustomer?.email || res.data.customer?.email || '').trim().toLowerCase()
+        const taskName = (res.data.customerName || loadedCustomer?.name || loadedCustomer?.firstName || res.data.customer?.name || res.data.customer?.firstName || '').trim()
+        if (taskEmail || taskName) {
+          try {
+            const quotationsRes = await getQuotations()
+            if (quotationsRes.success && quotationsRes.data) {
+              const matchingQuotations = quotationsRes.data.filter(q => {
+                const qEmail = (q.customerEmail || '').trim().toLowerCase()
+                const qName = (q.customerName || '').trim().toLowerCase()
+                return (
+                  (taskEmail && qEmail && qEmail === taskEmail) ||
+                  (taskName && qName && qName.includes(taskName.toLowerCase()))
+                )
+              })
+              setTaskQuotations(matchingQuotations)
+            } else {
+              setTaskQuotations([])
+            }
+          } catch (err) {
+            console.error('Error loading quotations for task:', err)
+            setTaskQuotations([])
           }
         } else {
-          setTaskActivities([])
+          setTaskQuotations([])
         }
-        
       }
     } catch (e) {
       console.error(e)
@@ -1324,23 +1413,7 @@ const Tasks = () => {
                           >
                             {task.status}
                           </span>
-                          {task.approvalStatus === 'Pending' && (
-                            <span
-                              className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-yellow-100 text-black transition-all hover:opacity-80 cursor-default"
-                              title="Pending Approval"
-                            >
-                              Pending
-                            </span>
-                          )}
-                          {task.approvalStatus === 'Rejected' && (
-                            <span
-                              className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-red-100 text-black transition-all hover:opacity-80 cursor-default"
-                              title="Rejected"
-                            >
-                              Rejected
-                            </span>
-                          )}
-                          {task.approvalStatus === 'Approved' && task.hubspotTaskId && (
+                          {task.hubspotTaskId && (
                             <span
                               className="px-2 py-0.5 rounded text-xs font-medium font-sans bg-green-100 text-black transition-all hover:opacity-80 cursor-default"
                               title="Posted to HubSpot"
@@ -2092,7 +2165,7 @@ const Tasks = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {selectedTask.status !== 'Completed' && selectedTask.approvalStatus === 'Approved' && (
+                {selectedTask.status !== 'Completed' && (
                   <button
                     onClick={() => handleCompleteTask(selectedTask._id)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
@@ -2434,12 +2507,6 @@ const Tasks = () => {
                               {selectedTask.status || '—'}
                             </span>
                           </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Approval Status</p>
-                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                              {selectedTask.approvalStatus || '—'}
-                            </span>
-                          </div>
                         </div>
                       </div>
 
@@ -2542,12 +2609,14 @@ const Tasks = () => {
                                               activity.type === 'Email' ? 'bg-green-100 text-green-800' :
                                               activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
                                               activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                              activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
                                               'bg-gray-100 text-gray-800'
                                             }`}>
                                               {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
                                               {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
                                               {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
                                               {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
+                                              {activity.type === 'Meeting' && <FaVideo className="w-3 h-3 mr-1" />}
                                               {activity.type}
                                             </span>
                                             <span className="text-xs text-gray-500">
@@ -2802,12 +2871,14 @@ const Tasks = () => {
                                       activity.type === 'Email' ? 'bg-green-100 text-green-800' :
                                       activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
                                       activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                      activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
                                       'bg-gray-100 text-gray-800'
                                     }`}>
                                       {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
                                       {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
                                       {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
                                       {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
+                                      {activity.type === 'Meeting' && <FaVideo className="w-3 h-3 mr-1" />}
                                       {activity.type}
                                     </span>
                                     <span className="text-xs text-gray-500">
@@ -2880,8 +2951,41 @@ const Tasks = () => {
                   )}
 
                   <div className="mt-6 pt-6 border-t border-gray-200">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Deals (0)</h3>
-                    <p className="text-sm text-gray-500">No deals associated</p>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Deals / Quotations ({taskQuotations.length})</h3>
+                    {taskQuotations.length > 0 ? (
+                      <div className="space-y-3">
+                        {taskQuotations.map((quotation) => (
+                          <div
+                            key={quotation.id || quotation._id}
+                            className="p-3 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                <FaFileAlt className="w-4 h-4 text-[#e9931c]" />
+                                {quotation.quotationNumber || quotation.quoteNumber || `Quote #${(quotation.id || quotation._id)?.toString().slice(-6) || '—'}`}
+                              </span>
+                              <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                {quotation.status || 'Pending'}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <p>Total: £{Number(quotation.total || 0).toFixed(2)}</p>
+                              {quotation.validUntil && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Valid until: {new Date(quotation.validUntil).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No quotations associated with this contact</p>
+                    )}
                   </div>
 
                   <div className="mt-6 pt-6 border-t border-gray-200">

@@ -10,7 +10,6 @@ const SalesOrders = () => {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('All')
-  const [showCreateModal, setShowCreateModal] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingOrderId, setEditingOrderId] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
@@ -28,18 +27,6 @@ const SalesOrders = () => {
     'Delivered',
     'Cancelled'
   ]
-
-  const [formData, setFormData] = useState({
-    orderNumber: '',
-    customerName: '',
-    customerEmail: '',
-    customerPhone: '',
-    items: [],
-    totalAmount: 0,
-    status: 'Draft',
-    notes: '',
-    deliveryAddress: '',
-  })
 
   useEffect(() => {
     loadOrders()
@@ -167,74 +154,6 @@ const SalesOrders = () => {
     setFilteredOrders(filtered)
   }
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target
-    setFormData({
-      ...formData,
-      [name]: value,
-    })
-  }
-
-  const generateOrderNumber = () => {
-    const prefix = 'ORD'
-    const randomNum = Math.floor(100000 + Math.random() * 900000)
-    return `${prefix}${randomNum}`
-  }
-
-  const handleCreateOrder = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      const orderData = {
-        ...formData,
-        orderNumber: formData.orderNumber || generateOrderNumber(),
-        orderDate: new Date().toISOString(),
-      }
-
-      // TODO: Implement API call to create order
-      // const result = await createSalesOrder(orderData)
-      // if (result.success) {
-      //   Swal.fire({ icon: 'success', title: 'Success', text: 'Order created successfully!', confirmButtonColor: '#e9931c' })
-      //   setShowCreateModal(false)
-      //   resetForm()
-      //   loadOrders()
-      // }
-      await Swal.fire({
-        icon: 'info',
-        title: 'Coming Soon',
-        text: 'Order creation functionality will be implemented with backend API',
-        confirmButtonColor: '#e9931c'
-      })
-      setShowCreateModal(false)
-      resetForm()
-    } catch (error) {
-      console.error('Error creating order:', error)
-      await Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error creating order. Please try again.',
-        confirmButtonColor: '#e9931c'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const resetForm = () => {
-    setFormData({
-      orderNumber: '',
-      customerName: '',
-      customerEmail: '',
-      customerPhone: '',
-      items: [],
-      totalAmount: 0,
-      status: 'Draft',
-      notes: '',
-      deliveryAddress: '',
-    })
-    setSelectedOrder(null)
-  }
-
   const getStatusColor = (status) => {
     switch (status) {
       case 'Draft':
@@ -341,13 +260,12 @@ const SalesOrders = () => {
         <p className="text-gray-600">{isSalesman ? 'View and manage your sales orders' : 'Create and manage customer orders'}</p>
       </div>
 
-      {/* Create Order Button */}
+      {/* Create Order Button - opens full SalesOrderForm */}
       <div className="mb-6">
         <button
           onClick={() => {
             setEditingOrderId(null)
             setShowForm(true)
-            setShowCreateModal(false)
           }}
           className="flex items-center gap-2 px-6 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-lg hover:shadow-xl"
         >
@@ -429,8 +347,8 @@ const SalesOrders = () => {
           <p className="text-gray-600 mb-6">Create your first order to get started</p>
           <button
             onClick={() => {
-              resetForm()
-              setShowCreateModal(true)
+              setEditingOrderId(null)
+              setShowForm(true)
             }}
             className="px-6 py-3 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
           >
@@ -681,148 +599,6 @@ const SalesOrders = () => {
         </div>
       )}
 
-      {/* Create Order Modal (Legacy - can be removed) */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" aria-modal="true">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
-            <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-              <h3 className="text-xl font-semibold text-gray-800">Create New Order</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateModal(false)
-                  resetForm()
-                }}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg"
-                aria-label="Close"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <form onSubmit={handleCreateOrder} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Order Number (Auto-generated if empty)</label>
-                  <input
-                    type="text"
-                    name="orderNumber"
-                    value={formData.orderNumber}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Leave empty for auto-generation"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
-                  <select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  >
-                    {statusOptions.filter(s => s !== 'All').map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Name *</label>
-                  <input
-                    type="text"
-                    name="customerName"
-                    value={formData.customerName}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter customer name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Email</label>
-                  <input
-                    type="email"
-                    name="customerEmail"
-                    value={formData.customerEmail}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter customer email"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Phone</label>
-                  <input
-                    type="tel"
-                    name="customerPhone"
-                    value={formData.customerPhone}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter customer phone"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Total Amount *</label>
-                  <input
-                    type="number"
-                    name="totalAmount"
-                    value={formData.totalAmount}
-                    onChange={handleInputChange}
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter total amount"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Address</label>
-                  <textarea
-                    name="deliveryAddress"
-                    value={formData.deliveryAddress}
-                    onChange={handleInputChange}
-                    rows="2"
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter delivery address"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                  <textarea
-                    name="notes"
-                    value={formData.notes}
-                    onChange={handleInputChange}
-                    rows="3"
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter any notes about the order"
-                  />
-                </div>
-              </div>
-              </div>
-              <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false)
-                    resetForm()
-                  }}
-                  className="px-3 py-1.5 text-sm min-h-[36px] sm:px-6 sm:py-2.5 sm:min-h-[44px] sm:text-base bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 text-sm min-h-[36px] sm:px-6 sm:py-2.5 sm:min-h-[44px] sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
-                >
-                  Create Order
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -185,10 +185,8 @@ const createMyFollowUp = async (req, res) => {
       relatedOrder,
       visitTarget,
       createdBy: req.user._id,
-      approvalStatus: "Pending", // Salesman tasks need admin approval
+      approvalStatus: "Approved", // Salesman-created follow-ups: no admin approval needed
     });
-
-    // ❌ NO HUBSPOT SYNC - Will be posted to HubSpot only after admin approval
 
     const populatedFollowUp = await FollowUp.findById(followUp._id)
       .populate("customer", "name email phone company")
@@ -197,8 +195,7 @@ const createMyFollowUp = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message:
-        "Follow-up created successfully. It will also be posted to HubSpot.",
+      message: "Follow-up created successfully.",
       data: populatedFollowUp,
     });
   } catch (error) {

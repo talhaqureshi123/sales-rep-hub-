@@ -22,7 +22,8 @@ const getDashboardStats = async (req, res) => {
       activeCustomersCount,
       completedVisits,
       pendingVisits,
-      todaySchedule,
+      todayVisits,
+      todayTasks,
       recentActivity,
       dailyChart,
       monthlyChart,
@@ -43,7 +44,15 @@ const getDashboardStats = async (req, res) => {
       })
         .select('name address city visitDate priority')
         .sort({ visitDate: 1 })
-        .limit(5)
+        .limit(10)
+        .lean(),
+      FollowUp.find({
+        status: { $ne: 'Completed' },
+        dueDate: { $gte: startOfToday, $lt: endOfToday },
+      })
+        .select('customerName type dueDate priority description')
+        .sort({ dueDate: 1 })
+        .limit(10)
         .lean(),
       VisitTarget.find({ status: 'Completed', completedAt: { $exists: true, $ne: null } })
         .select('name address city completedAt')
@@ -60,9 +69,15 @@ const getDashboardStats = async (req, res) => {
             .lean()
         : Promise.resolve([]),
       adminId
-        ? Customer.find({ createdBy: adminId })
-            .select('name firstName company email phone')
-            .limit(5)
+        ? Customer.find({
+            $or: [
+              { createdBy: adminId },
+              { source: 'hubspot' },
+            ],
+          })
+            .select('name firstName company email phone source')
+            .sort({ updatedAt: -1 })
+            .limit(10)
             .lean()
         : Promise.resolve([]),
       adminId
@@ -81,12 +96,24 @@ const getDashboardStats = async (req, res) => {
         : Promise.resolve([]),
     ]);
 
-    const todayScheduleMapped = todaySchedule.map((vt) => ({
+    const visitItems = (todayVisits || []).map((vt) => ({
+      type: 'visit',
       name: vt.name,
       address: vt.address || vt.city || 'Location',
       priority: vt.priority || 'Medium',
-      visitDate: vt.visitDate,
+      date: vt.visitDate,
     }));
+    const taskItems = (todayTasks || []).map((t) => ({
+      type: 'task',
+      name: t.customerName || t.description || 'Task',
+      address: '',
+      priority: t.priority || 'Medium',
+      date: t.dueDate,
+      taskType: t.type,
+    }));
+    const todayScheduleMapped = [...visitItems, ...taskItems]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 10);
 
     const recentActivityMapped = recentActivity.map((vt) => ({
       type: 'visit',

@@ -160,6 +160,8 @@ const createCustomer = async (req, res) => {
       state,
       pincode,
       postcode,
+      latitude,
+      longitude,
       company,
       orderPotential,
       monthlySpend,
@@ -198,7 +200,7 @@ const createCustomer = async (req, res) => {
       }
     }
 
-    // Create customer – createdBy salesman; approvalStatus Pending until admin approves
+    // Create customer – salesman-created; no admin approval needed (auto-approved)
     const customer = await Customer.create({
       firstName: customerName,
       name: customerName,
@@ -210,6 +212,8 @@ const createCustomer = async (req, res) => {
       state,
       pincode: postcode || pincode,
       postcode: postcode || pincode,
+      latitude: latitude != null && !isNaN(parseFloat(latitude)) ? parseFloat(latitude) : undefined,
+      longitude: longitude != null && !isNaN(parseFloat(longitude)) ? parseFloat(longitude) : undefined,
       company,
       orderPotential,
       monthlySpend: monthlySpend || 0,
@@ -222,7 +226,7 @@ const createCustomer = async (req, res) => {
       lastEngagement: lastEngagement ? new Date(lastEngagement) : undefined,
       view: view || 'admin_salesman',
       createdBy: req.user._id,
-      approvalStatus: 'Pending',
+      approvalStatus: 'Approved',
     });
 
     const populatedCustomer = await Customer.findById(customer._id)

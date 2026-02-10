@@ -185,6 +185,7 @@ const getVisitTargets = async (req, res) => {
     const visitTargets = await VisitTarget.find(filter)
       .populate("salesman", "name email")
       .populate("createdBy", "name email")
+      .populate("customerId", "latitude longitude name address")
       .sort({ createdAt: -1 })
       .lean();
 

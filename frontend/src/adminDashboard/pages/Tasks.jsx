@@ -52,6 +52,54 @@ const getLocalDateString = (d = new Date()) => {
   return `${y}-${m}-${day}`
 }
 
+// Format date for activity notes so regex [DD/MM/YYYY, HH:MM:SS] always matches
+const formatActivityDateTime = (d) => {
+  const day = String(d.getDate()).padStart(2, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const year = d.getFullYear()
+  const h = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  const sec = String(d.getSeconds()).padStart(2, '0')
+  return `${day}/${month}/${year}, ${h}:${min}:${sec}`
+}
+
+// Parse notes string into activities (supports Meeting with link + meetLink)
+const parseNotesToActivities = (notesStr) => {
+  if (!notesStr || typeof notesStr !== 'string') return []
+  const notesLines = notesStr.split('\n').filter(line => line.trim())
+  const parsed = []
+  const regex = /\[(\d{1,2}\/\d{1,2}\/\d{4}),\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(\w+):\s*(.+)/ 
+  notesLines.forEach(line => {
+    const match = line.match(regex)
+    if (!match) return
+    const [, dateStr, timeStr, type, content] = match
+    const [d, m, y] = dateStr.split('/')
+    const datePart = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+    const timePart = timeStr.includes(':') && timeStr.split(':').length === 2 ? `${timeStr}:00` : timeStr
+    const dateTime = new Date(`${datePart}T${timePart}`)
+    if (isNaN(dateTime.getTime())) return
+    if (type === 'Meeting' && content.includes('http')) {
+      const linkMatch = content.match(/(https?:\/\/[^\s|]+)/)
+      const meetMatch = content.match(/Google Meet:\s*(https?:\/\/[^\s]+)/)
+      const link = linkMatch ? linkMatch[1] : ''
+      const meetLink = meetMatch ? meetMatch[1].trim() : ''
+      const meetingTitle = content.replace(/(https?:\/\/[^\s]+)/g, '').replace(/Google Meet:\s*/i, '').replace(/\|/g, '').trim().replace(/^-\s*/, '') || 'Meeting'
+      parsed.push({
+        type: 'Meeting',
+        content: meetingTitle,
+        link: link || undefined,
+        meetLink: meetLink || undefined,
+        date: dateTime.toISOString(),
+        createdAt: dateTime.toISOString()
+      })
+    } else {
+      parsed.push({ type: type, content: content, date: dateTime.toISOString(), createdAt: dateTime.toISOString() })
+    }
+  })
+  parsed.sort((a, b) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime())
+  return parsed
+}
+
 // Geocode customer address (Nominatim) – so visit target gets correct lat/lng per customer, not same default
 const geocodeCustomerAddress = async (customer) => {
   if (!customer) return null
@@ -82,7 +130,6 @@ const TABS = [
   { id: 'HubSpotImported', label: 'HubSpot Imported' },
   { id: 'PushedToHubSpot', label: 'Pushed to HubSpot' },
   { id: 'NotPushed', label: 'Not Pushed' },
-  { id: 'Pending', label: 'Pending Approval' },
   { id: 'Overdue', label: 'Overdue' },
   { id: 'Today', label: 'Due today' },
   { id: 'Upcoming', label: 'Upcoming' },
@@ -141,7 +188,6 @@ const Tasks = () => {
   })
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
-  const [openApprovalDropdown, setOpenApprovalDropdown] = useState(null) // Track which task's approval dropdown is open
   const [taskCustomerDetails, setTaskCustomerDetails] = useState(null) // Full customer details for selected task
   const [taskQuotations, setTaskQuotations] = useState([]) // Quotations for selected task
   const [taskActivities, setTaskActivities] = useState([]) // Activities/notes for selected task
@@ -169,7 +215,7 @@ const Tasks = () => {
     associatedCompanyName: '',
     associatedCompanyDomain: '',
     type: 'Visit Target',
-    followUpType: '', // Follow-up type (Call, Email, etc.)
+    followUpType: 'Call', // Follow-up type (Call, Email, Meeting, etc.)
     relatedSample: '', // Sample Track: link to Sample Tracker
     priority: 'Medium',
     dueDate: '',
@@ -273,16 +319,7 @@ const Tasks = () => {
     } else if (activeTab === 'NotPushed') {
       list = list.filter((t) => {
         const noHubSpotId = !t.hubspotTaskId || t.hubspotTaskId === '' || t.hubspotTaskId === null
-        return noHubSpotId && t.approvalStatus === 'Approved'
-      })
-    } else if (activeTab === 'Pending') {
-      // Show tasks with Pending approval status
-      // Also include tasks created by salesman that don't have approvalStatus set (for backward compatibility)
-      list = list.filter((t) => {
-        const approvalStatus = t.approvalStatus || 'Pending' // Default to Pending if not set
-        const createdByRole = t.createdBy?.role
-        // Show if approvalStatus is Pending, OR if created by salesman and no approvalStatus is set
-        return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
+        return noHubSpotId
       })
     } else if (activeTab !== 'All') {
       // Status-based filters (Overdue, Today, Upcoming, Completed) – case-insensitive match
@@ -290,9 +327,7 @@ const Tasks = () => {
       list = list.filter((t) => (t.status || '').toString().toLowerCase() === tabLower)
     }
     // Remove duplicate tasks for same customer - keep only one task per customer
-    // BUT: Skip deduplication for Pending tab to show all pending tasks
-    // This ensures same customer's tasks show only once in the main list (except Pending tab)
-    if (activeTab !== 'Pending') {
+    {
       const uniqueTasks = []
       const seenCustomers = new Set()
       
@@ -343,19 +378,10 @@ const Tasks = () => {
           
           if (existingIndex !== -1) {
             const existingTask = uniqueTasks[existingIndex]
-            const taskPending = (task.approvalStatus || '').toString() === 'Pending'
-            const existingPending = (existingTask.approvalStatus || '').toString() === 'Pending'
-            // Prefer Pending over Approved so approval-needed tasks stay visible in All view
-            if (taskPending && !existingPending) {
+            const taskDate = new Date(task.dueDate || task.createdAt || 0).getTime()
+            const existingDate = new Date(existingTask.dueDate || existingTask.createdAt || 0).getTime()
+            if (taskDate > existingDate) {
               uniqueTasks[existingIndex] = task
-            } else if (!taskPending && existingPending) {
-              // keep existing (Pending)
-            } else {
-              const taskDate = new Date(task.dueDate || task.createdAt || 0).getTime()
-              const existingDate = new Date(existingTask.dueDate || existingTask.createdAt || 0).getTime()
-              if (taskDate > existingDate) {
-                uniqueTasks[existingIndex] = task
-              }
             }
           }
         }
@@ -515,7 +541,7 @@ const Tasks = () => {
     setCurrentPage(1)
   }, [activeTab, activeFilters, search])
 
-  // Load tasks first so list appears fast; salesmen + customers load in background for dropdowns
+  // Load tasks first so list appears fast; salesmen + customers load in background for dropdowns.
   useEffect(() => {
     let cancelled = false
     const run = async () => {
@@ -538,7 +564,7 @@ const Tasks = () => {
       cancelled = true
       clearInterval(intervalId)
     }
-  }, [])
+  }, [activeTab])
 
   // Load products when Create Task form opens (for Sample Track Add Item)
   useEffect(() => {
@@ -569,7 +595,6 @@ const Tasks = () => {
         setShowPriorityDropdown(false)
         setShowSalesmanDropdown(false)
         setShowTimeDropdown(false)
-        setOpenApprovalDropdown(null)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -577,10 +602,11 @@ const Tasks = () => {
   }, [])
 
 
-  const loadTasks = async () => {
+  const loadTasks = async (tabOverride) => {
     try {
-      // Single fast API: follow-ups + visit targets in one request, limited (200 each) for fast load
-      const res = await getTasksList()
+      const tab = tabOverride !== undefined ? tabOverride : activeTab
+      const opts = { limit: 200 }
+      const res = await getTasksList(opts)
       const followUpsData = res.success && res.data ? res.data : {}
       let followUpTasks = Array.isArray(followUpsData.followUps) ? followUpsData.followUps : []
       const visitTargetsRaw = Array.isArray(followUpsData.visitTargets) ? followUpsData.visitTargets : []
@@ -644,12 +670,6 @@ const Tasks = () => {
         if (!id || seenIds.has(id)) return false
         seenIds.add(id)
         return true
-      })
-
-      const pendingTasks = allTasks.filter(t => {
-        const approvalStatus = t.approvalStatus || 'Pending'
-        const createdByRole = t.createdBy?.role
-        return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
       })
 
       setTasks(allTasks)
@@ -723,11 +743,9 @@ const Tasks = () => {
       // Map task type to valid backend enum values
       const mapTaskType = (type) => {
         const typeLower = (type || '').toLowerCase().trim()
-        // Map task types to backend enum values
         if (typeLower === 'visit target' || typeLower.includes('visit')) return 'Visit'
-        if (typeLower === 'follow-up' || typeLower === 'follow up' || typeLower.includes('follow')) return 'Call'
         if (typeLower === 'sample track' || typeLower.includes('sample')) return 'Sample Feedback'
-        // Default fallback
+        if (typeLower === 'follow-up' || typeLower === 'follow up' || typeLower.includes('follow')) return 'Call'
         return 'Call'
       }
 
@@ -914,8 +932,8 @@ const Tasks = () => {
         associatedContactEmail: formData.associatedContactEmail || undefined,
         associatedCompanyName: formData.associatedCompanyName || undefined,
         associatedCompanyDomain: formData.associatedCompanyDomain || undefined,
-        type: (formData.type === 'Follow-up' && formData.followUpType) 
-          ? formData.followUpType 
+        type: formData.type === 'Follow-up' 
+          ? (formData.followUpType || 'Call') 
           : mapTaskType(formData.type),
         priority: formData.priority,
         scheduledDate: dueDateTime,
@@ -936,8 +954,8 @@ const Tasks = () => {
         // Reload task to check if HubSpot sync was successful
         const updatedRes = await getFollowUp(res.data._id)
         const approvalMessage = approvalStatus === 'Approved' 
-          ? 'Task has been automatically approved.' 
-          : 'Task is pending approval. It will appear in tasks list once approved by admin.'
+          ? 'Task has been created and is visible in tasks list.' 
+          : 'Task will appear in tasks list.'
         
         const sampleMessage = formData.type === 'Sample Track' && createdSamplesCount > 0
           ? (createdSamplesCount === 1 ? ' 1 sample created.' : ` ${createdSamplesCount} samples created.`)
@@ -1034,64 +1052,10 @@ const Tasks = () => {
         const index = filtered.findIndex(t => t._id === task._id)
         setCurrentTaskIndex(index >= 0 ? index : 0)
         
-        // Parse activities from notes
+        // Parse activities from notes (Meeting gets link + meetLink for Join Google Meet)
         if (res.data.notes) {
           try {
-            // Parse notes to extract activities
-            const notesLines = res.data.notes.split('\n').filter(line => line.trim())
-            const parsedActivities = []
-            
-            notesLines.forEach(line => {
-              // Match pattern: [DD/MM/YYYY, HH:MM:SS] Type: Content
-              const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
-              if (match) {
-                const [, dateStr, timeStr, type, content] = match
-                try {
-                  // Parse date: DD/MM/YYYY -> YYYY-MM-DD
-                  const [day, month, year] = dateStr.split('/')
-                  const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
-                  
-                  // Handle Meeting type with link
-                  if (type === 'Meeting' && content.includes('http')) {
-                    const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
-                    const link = linkMatch ? linkMatch[1] : ''
-                    const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
-                    parsedActivities.push({
-                      type: 'Meeting',
-                      content: meetingTitle || 'Meeting',
-                      link: link,
-                      date: dateTime.toISOString(),
-                      createdAt: dateTime.toISOString()
-                    })
-                  } else {
-                    parsedActivities.push({
-                      type: type,
-                      content: content,
-                      date: dateTime.toISOString(),
-                      createdAt: dateTime.toISOString()
-                    })
-                  }
-                } catch (dateError) {
-                  console.error('Error parsing date:', dateError, line)
-                  // Fallback: use current date
-                  parsedActivities.push({
-                    type: type,
-                    content: content,
-                    date: new Date().toISOString(),
-                    createdAt: new Date().toISOString()
-                  })
-                }
-              }
-            })
-            
-            // Sort activities by date (newest first)
-            parsedActivities.sort((a, b) => {
-              const dateA = new Date(a.date || a.createdAt || 0)
-              const dateB = new Date(b.date || b.createdAt || 0)
-              return dateB.getTime() - dateA.getTime()
-            })
-            
-            setTaskActivities(parsedActivities)
+            setTaskActivities(parseNotesToActivities(res.data.notes))
           } catch (e) {
             console.error('Error parsing activities from notes:', e)
             setTaskActivities([])
@@ -1925,7 +1889,7 @@ const Tasks = () => {
       associatedCompanyName: '',
       associatedCompanyDomain: '',
       type: 'Visit Target',
-      followUpType: '',
+      followUpType: 'Call',
       relatedSample: '',
       priority: 'Medium',
       dueDate: '',
@@ -2109,12 +2073,7 @@ const Tasks = () => {
       }).length,
       NotPushed: tasks.filter(t => {
         const noHubSpotId = !t.hubspotTaskId || t.hubspotTaskId === '' || t.hubspotTaskId === null
-        return noHubSpotId && t.approvalStatus === 'Approved'
-      }).length,
-      Pending: tasks.filter(t => {
-        const approvalStatus = t.approvalStatus || 'Pending'
-        const createdByRole = t.createdBy?.role
-        return approvalStatus === 'Pending' || (createdByRole === 'salesman' && !t.approvalStatus)
+        return noHubSpotId
       }).length,
       Overdue: tasks.filter(t => t.status === 'Overdue').length,
       Today: tasks.filter(t => t.status === 'Today').length,
@@ -2298,6 +2257,22 @@ const Tasks = () => {
 
         {/* Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Salesman filter – visible like Customer Management */}
+          <span className="text-sm text-gray-600 font-medium">Salesman:</span>
+          <select
+            value={activeFilters.salesman.length > 0 ? activeFilters.salesman[0] : ''}
+            onChange={(e) => {
+              const v = e.target.value
+              setActiveFilters(prev => ({ ...prev, salesman: v ? [v] : [] }))
+            }}
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-[#e9931c] focus:border-[#e9931c]"
+            title="Filter tasks by assigned salesman"
+          >
+            <option value="">All</option>
+            {salesmen.map((s) => (
+              <option key={s._id || s.id} value={s._id || s.id}>{s.name || s.email || 'Salesman'}</option>
+            ))}
+          </select>
           {/* My creation only */}
           <label className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 cursor-pointer">
             <input
@@ -2742,9 +2717,6 @@ const Tasks = () => {
                       <SortIcon field="dueDate" />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
-                    APPROVAL
-                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 z-10" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     ACTIONS
                   </th>
@@ -2772,42 +2744,9 @@ const Tasks = () => {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 whitespace-nowrap group relative">
                           <StatusIcon className="w-4 h-4" style={{ color: statusStyle.text }} />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              // Cycle through: Approved -> Reject -> Pending -> Approved
-                              const statusOrder = ['Approved', 'Reject', 'Pending']
-                              const currentStatus = task.taskStatus || task.status || 'Approved'
-                              const currentIndex = statusOrder.indexOf(currentStatus) >= 0 ? statusOrder.indexOf(currentStatus) : 0
-                              const nextIndex = (currentIndex + 1) % statusOrder.length
-                              const newStatus = statusOrder[nextIndex]
-                              
-                              handleUpdateTaskStatus(task._id, newStatus)
-                            }}
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:opacity-80 cursor-pointer ${
-                              task.taskStatus === 'Approved' || (!task.taskStatus && task.status === 'Approved') ? 'bg-gray-100 text-gray-800' :
-                              task.taskStatus === 'Reject' || task.status === 'Reject' ? 'bg-gray-100 text-gray-800' :
-                              task.taskStatus === 'Pending' || task.status === 'Pending' ? 'bg-gray-100 text-gray-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}
-                            style={{ 
-                              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-                              color: '#1f2937'
-                            }}
-                            title={`Current status: ${task.taskStatus || task.status || 'Approved'}. Click to change.`}
-                          >
-                            {(task.taskStatus === 'Approved' || (!task.taskStatus && task.status === 'Approved')) && '✓ '}
-                            {task.taskStatus || task.status}
-                          </button>
-                        {task.approvalStatus === 'Pending' && (
-                            <span 
-                              className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 transition-all hover:opacity-80 cursor-default"
-                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-                              title="Pending Approval"
-                            >
-                              Pending
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif', color: '#1f2937' }}>
+                            {task.status || '—'}
                           </span>
-                        )}
                         {/* Show HubSpot badge if task is pushed to HubSpot */}
                         {task.hubspotTaskId && (
                             <span 
@@ -3004,92 +2943,6 @@ const Tasks = () => {
                           <span className="text-sm text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        {task.source !== 'hubspot' ? (
-                          <div className="relative flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setOpenApprovalDropdown(openApprovalDropdown === task._id ? null : task._id)
-                              }}
-                              className="inline-flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition-all hover:opacity-90 bg-gray-200 text-gray-800"
-                              style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-                            >
-                              <span>{task.approvalStatus || 'Pending'}</span>
-                              <FaChevronDown className="w-3 h-3" />
-                              <div className="ml-1 w-4 h-4 bg-white bg-opacity-30 rounded flex items-center justify-center">
-                                <FaCheckCircle className="w-3 h-3 text-white" />
-                              </div>
-                            </button>
-                            {openApprovalDropdown === task._id && (
-                              <div 
-                                className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[150px]"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="py-1">
-                                  {task.approvalStatus !== 'Approved' && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setOpenApprovalDropdown(null)
-                                        handleApproveTask(task._id)
-                                      }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                      style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-                                    >
-                                      <FaCheckCircle className="w-3 h-3" />
-                                      Approve
-                                    </button>
-                                  )}
-                                  {task.approvalStatus !== 'Rejected' && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setOpenApprovalDropdown(null)
-                                        handleRejectTask(task._id)
-                                      }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                      style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-                                    >
-                                      <FaTimes className="w-3 h-3" />
-                                      Reject
-                                    </button>
-                                  )}
-                                  {task.approvalStatus === 'Approved' && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setOpenApprovalDropdown(null)
-                                        const approvedDate = task.approvedAt 
-                                          ? new Date(task.approvedAt).toLocaleDateString('en-GB', { 
-                                              day: '2-digit', 
-                                              month: 'short', 
-                                              year: 'numeric' 
-                                            })
-                                          : null
-                                        Swal.fire({
-                                          icon: 'info',
-                                          title: 'Task Already Approved',
-                                          text: approvedDate 
-                                            ? `This task was approved on ${approvedDate}` 
-                                            : 'This task has been approved.',
-                                          confirmButtonColor: '#e9931c'
-                                        })
-                                      }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                    >
-                                      <FaCheckCircle className="w-3 h-3" />
-                                      View Details
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </td>
                       <td className="px-4 py-3 text-right sticky right-0 bg-white z-10" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           {/* Show Push button for tasks that can be pushed to HubSpot */}
@@ -3097,36 +2950,7 @@ const Tasks = () => {
                             - Admin-created tasks: No approval needed, show if not pushed and not imported
                             - Salesman-created tasks: Must be approved, show if approved + not pushed + not imported
                           */}
-                          {(() => {
-                            // Check if task is imported from HubSpot (not app-created)
-                            const isImportedFromHubSpot = task.source === 'hubspot';
-                            const isAdminCreated = task.createdBy?.role === 'admin';
-                            const isSalesmanCreated = task.createdBy?.role === 'salesman';
-                            
-                            // Admin-created tasks: Always show push button (unless imported from HubSpot)
-                            // Backend will verify if task actually exists in HubSpot before blocking duplicate push
-                            if (isAdminCreated) {
-                              // Show push button if source is 'app' or undefined/null (app-created)
-                              // Don't show if source is 'hubspot' (imported from HubSpot)
-                              return !isImportedFromHubSpot;
-                            }
-                            
-                            // Salesman-created tasks: Must be approved and not pushed and not imported
-                            if (isSalesmanCreated) {
-                              const hasHubspotId = task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null;
-                              return task.approvalStatus === 'Approved' && !hasHubspotId && !isImportedFromHubSpot;
-                            }
-                            
-                            // Fallback: if role is unknown, check source field
-                            // If source is 'app' or undefined, show push button if approved
-                            // If source is 'hubspot', don't show push button
-                            if (!isImportedFromHubSpot) {
-                              const hasHubspotId = task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null;
-                              return task.approvalStatus === 'Approved' && !hasHubspotId;
-                            }
-                            
-                            return false;
-                          })() && (
+                          {task.source !== 'hubspot' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -4029,37 +3853,24 @@ const Tasks = () => {
                               if (email) {
                                 window.location.href = `mailto:${email}`
                                 
-                                // Save email activity to backend
+                                // Save email activity to backend so "Email sent" shows in activities
                                 try {
                                   if (selectedTask && selectedTask._id) {
                                     const currentNotes = selectedTask.notes || ''
-                                    const activityNote = `[${new Date().toLocaleString('en-GB')}] Email: Sent to ${email}`
+                                    const activityNote = `[${formatActivityDateTime(new Date())}] Email: Sent to ${email}`
                                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
                                     
-                                    await updateFollowUp(selectedTask._id, {
-                                      notes: updatedNotes
-                                    })
-                                    
-                                    // Add to activities
-                                    const newActivity = {
-                                      type: 'Email',
-                                      content: `Email sent to ${email}`,
-                                      date: new Date().toISOString(),
-                                      createdAt: new Date().toISOString()
-                                    }
-                                    setTaskActivities([...taskActivities, newActivity])
-                                    
-                                    // Reload task to get updated push status
-                                    const updatedRes = await getFollowUp(selectedTask._id)
-                                    if (updatedRes.success) {
-                                      setSelectedTask(updatedRes.data)
+                                    if (selectedTask.isVisitTarget) {
+                                      await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
+                                      const updatedRes = await getVisitTarget(selectedTask._id)
+                                      if (updatedRes.success && updatedRes.data) setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...updatedRes.data }))
                                     } else {
-                                      // Fallback: Update selectedTask manually
-                                      const updatedTask = { ...selectedTask, notes: updatedNotes }
-                                      setSelectedTask(updatedTask)
+                                      await updateFollowUp(selectedTask._id, { notes: updatedNotes })
+                                      const updatedRes = await getFollowUp(selectedTask._id)
+                                      if (updatedRes.success) setSelectedTask(updatedRes.data)
+                                      else setSelectedTask(prev => ({ ...prev, notes: updatedNotes }))
                                     }
-                                    
-                                    // Reload tasks list to update push button status
+                                    setTaskActivities(parseNotesToActivities(updatedNotes))
                                     await loadTasks()
                                   }
                                 } catch (e) {
@@ -4106,7 +3917,7 @@ const Tasks = () => {
                                     try {
                                       if (selectedTask && selectedTask._id) {
                                         const currentNotes = selectedTask.notes || ''
-                                        const activityNote = `[${new Date().toLocaleString('en-GB')}] Call: Called ${phone}`
+                                        const activityNote = `[${formatActivityDateTime(new Date())}] Call: Called ${phone}`
                                         const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
                                         
                                         await updateFollowUp(selectedTask._id, {
@@ -4147,7 +3958,7 @@ const Tasks = () => {
                                     try {
                                       if (selectedTask && selectedTask._id) {
                                         const currentNotes = selectedTask.notes || ''
-                                        const activityNote = `[${new Date().toLocaleString('en-GB')}] WhatsApp: Messaged ${phone}`
+                                        const activityNote = `[${formatActivityDateTime(new Date())}] WhatsApp: Messaged ${phone}`
                                         const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
                                         
                                         await updateFollowUp(selectedTask._id, {
@@ -4468,12 +4279,6 @@ const Tasks = () => {
                               {selectedTask.status || '—'}
                 </span>
                           </div>
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Approval Status</p>
-                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                              {selectedTask.approvalStatus || '—'}
-                            </span>
-                          </div>
                           {selectedTask.hubspotTaskId && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">HubSpot Task ID</p>
@@ -4593,66 +4398,17 @@ const Tasks = () => {
                   </div>
                           )}
                           {selectedTask.notes && (() => {
-                            // Parse notes to extract activities
-                            const notesLines = selectedTask.notes.split('\n').filter(line => line.trim())
-                            const parsedActivities = []
-                            
-                            notesLines.forEach(line => {
-                              // Match pattern: [DD/MM/YYYY, HH:MM:SS] Type: Content
-                              const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
-                              if (match) {
-                                const [, dateStr, timeStr, type, content] = match
-                                try {
-                                  // Parse date: DD/MM/YYYY -> YYYY-MM-DD
-                                  const [day, month, year] = dateStr.split('/')
-                                  const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
-                                  
-                                  // Handle Meeting type with link
-                                  if (type === 'Meeting' && content.includes('http')) {
-                                    const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
-                                    const link = linkMatch ? linkMatch[1] : ''
-                                    const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
-                                    parsedActivities.push({
-                                      type: 'Meeting',
-                                      content: meetingTitle || 'Meeting',
-                                      link: link,
-                                      date: dateTime,
-                                      dateStr: dateStr,
-                                      timeStr: timeStr
-                                    })
-                                  } else {
-                                    parsedActivities.push({
-                                      type: type,
-                                      content: content,
-                                      date: dateTime,
-                                      dateStr: dateStr,
-                                      timeStr: timeStr
-                                    })
-                                  }
-                                } catch (e) {
-                                  // If parsing fails, still add as activity
-                                  parsedActivities.push({
-                                    type: type,
-                                    content: content,
-                                    date: new Date(),
-                                    dateStr: dateStr,
-                                    timeStr: timeStr
-                                  })
-                                }
-                              }
-                            })
-                            
-                            // Sort by date (newest first)
-                            parsedActivities.sort((a, b) => {
-                              return b.date.getTime() - a.date.getTime()
-                            })
-                            
+                            const parsedActivities = parseNotesToActivities(selectedTask.notes)
                             return (
                             <div>
                                 <p className="text-xs text-gray-500 mb-3">Activity History</p>
                                 {parsedActivities.length > 0 ? (
                                   <div className="space-y-3">
-                                    {parsedActivities.map((activity, idx) => (
+                                    {parsedActivities.map((activity, idx) => {
+                                      const d = activity.date ? new Date(activity.date) : new Date()
+                                      const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                                      return (
                                       <div 
                                         key={idx}
                                         className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
@@ -4676,27 +4432,35 @@ const Tasks = () => {
                                                 {activity.type}
                                               </span>
                                               <span className="text-xs text-gray-500">
-                                                {activity.dateStr} {activity.timeStr}
+                                                {dateStr} {timeStr}
                                               </span>
-                            </div>
+                                            </div>
                                             <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
                                               {activity.content}
                                             </p>
-                                            {activity.link && (
-                                              <a 
-                                                href={activity.link} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                                              >
-                                                <FaCalendarAlt className="w-3 h-3" />
-                                                Open Calendar Link
+                                            {activity.type === 'Meeting' && (
+                                              <div className="mt-2 flex flex-wrap gap-2">
+                                                {activity.meetLink && (
+                                                  <a href={activity.meetLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700">
+                                                    Join Google Meet
+                                                  </a>
+                                                )}
+                                                {activity.link && (
+                                                  <a href={activity.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                                    <FaCalendarAlt className="w-3 h-3" /> Open Calendar
+                                                  </a>
+                                                )}
+                                              </div>
+                                            )}
+                                            {activity.type !== 'Meeting' && activity.link && (
+                                              <a href={activity.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                                Open Link
                                               </a>
                                             )}
                                           </div>
                                         </div>
                                       </div>
-                                    ))}
+                                    )})}
                                   </div>
                                 ) : (
                                   <p className="text-sm text-gray-500 italic">No activities recorded yet</p>
@@ -4747,51 +4511,6 @@ const Tasks = () => {
                   </div>
                 </div>
               )}
-
-                      {/* Approval Information */}
-                      {selectedTask.approvalStatus && (
-                        <div className="bg-white rounded-lg p-4 border border-gray-200">
-                          <h3 className="text-sm font-semibold text-gray-900 mb-4">Approval Information</h3>
-                          <div className="space-y-2">
-                <div>
-                              <p className="text-xs text-gray-500 mb-1">Approval Status</p>
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                {selectedTask.approvalStatus}
-                              </span>
-                            </div>
-                            {selectedTask.approvedBy && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Approved By</p>
-                                <p className="text-sm text-gray-900">
-                                  {selectedTask.approvedBy?.name || selectedTask.approvedBy?.email || '—'}
-                  </p>
-                </div>
-                            )}
-                            {selectedTask.approvedAt && (
-                  <div>
-                                <p className="text-xs text-gray-500 mb-1">Approved At</p>
-                                <p className="text-sm text-gray-900">
-                                  {`${new Date(selectedTask.approvedAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.approvedAt).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`}
-                    </p>
-                  </div>
-                )}
-                            {selectedTask.rejectionReason && (
-                              <div>
-                                <p className="text-xs text-gray-500 mb-1">Rejection Reason</p>
-                                <p className="text-sm text-gray-900">{selectedTask.rejectionReason}</p>
-              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
 
                       {/* Data Highlights */}
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -4982,7 +4701,7 @@ const Tasks = () => {
                                       try {
                                         if (selectedTask && selectedTask._id) {
                                           const currentNotes = selectedTask.notes || ''
-                                          const activityNote = `[${new Date().toLocaleString('en-GB')}] Note: ${noteContent}`
+                                          const activityNote = `[${formatActivityDateTime(new Date())}] Note: ${noteContent}`
                                           const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
                                           
                                           await updateFollowUp(selectedTask._id, {
@@ -4993,53 +4712,7 @@ const Tasks = () => {
                                           const updatedRes = await getFollowUp(selectedTask._id)
                                           if (updatedRes.success) {
                                             setSelectedTask(updatedRes.data)
-                                            // Re-parse activities from updated notes
-                                            if (updatedRes.data.notes) {
-                                              const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
-                                              const parsedActivities = []
-                                              notesLines.forEach(line => {
-                                                const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
-                                                if (match) {
-                                                  const [, dateStr, timeStr, type, content] = match
-                                                  try {
-                                                    const [day, month, year] = dateStr.split('/')
-                                                    const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
-                                                    if (type === 'Meeting' && content.includes('http')) {
-                                                      const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
-                                                      const link = linkMatch ? linkMatch[1] : ''
-                                                      const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
-                                                      parsedActivities.push({
-                                                        type: 'Meeting',
-                                                        content: meetingTitle || 'Meeting',
-                                                        link: link,
-                                                        date: dateTime.toISOString(),
-                                                        createdAt: dateTime.toISOString()
-                                                      })
-                                                    } else {
-                                                      parsedActivities.push({
-                                                        type: type,
-                                                        content: content,
-                                                        date: dateTime.toISOString(),
-                                                        createdAt: dateTime.toISOString()
-                                                      })
-                                                    }
-                                                  } catch (e) {
-                                                    parsedActivities.push({
-                                                      type: type,
-                                                      content: content,
-                                                      date: new Date().toISOString(),
-                                                      createdAt: new Date().toISOString()
-                                                    })
-                                                  }
-                                                }
-                                              })
-                                              parsedActivities.sort((a, b) => {
-                                                const dateA = new Date(a.date || a.createdAt || 0)
-                                                const dateB = new Date(b.date || b.createdAt || 0)
-                                                return dateB.getTime() - dateA.getTime()
-                                              })
-                                              setTaskActivities(parsedActivities)
-                                            }
+                                            setTaskActivities(parseNotesToActivities(updatedNotes))
                                           } else {
                                             // Fallback: Update selectedTask manually
                                             const updatedTask = { ...selectedTask, notes: updatedNotes }
@@ -5091,7 +4764,7 @@ const Tasks = () => {
                                 try {
                                   if (selectedTask && selectedTask._id) {
                                     const currentNotes = selectedTask.notes || ''
-                                    const activityNote = `[${new Date().toLocaleString('en-GB')}] Note: ${noteContent}`
+                                    const activityNote = `[${formatActivityDateTime(new Date())}] Note: ${noteContent}`
                                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
                                     
                                     await updateFollowUp(selectedTask._id, {
@@ -5371,8 +5044,8 @@ const Tasks = () => {
                             if (activity.type === 'Meeting') {
                               return (
                                 <div key={`meeting-${index}`} className="flex items-start gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                    <FaCalendarAlt className="w-4 h-4 text-gray-600" />
+                                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                                    <FaCalendarAlt className="w-4 h-4 text-purple-600" />
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors">
@@ -5396,17 +5069,30 @@ const Tasks = () => {
                                         </span>
                                       </div>
                                       <p className="text-sm text-gray-900 mb-2">{activity.content || 'Meeting'}</p>
-                                      {activity.link && (
-                                        <a 
-                                          href={activity.link} 
-                                          target="_blank" 
-                                          rel="noopener noreferrer"
-                                          className="text-xs text-gray-700 hover:text-gray-900 underline inline-flex items-center gap-1"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          Open Google Calendar
-                                        </a>
-                                      )}
+                                      <div className="flex flex-wrap gap-2">
+                                        {activity.meetLink && (
+                                          <a
+                                            href={activity.meetLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            Join Google Meet
+                                          </a>
+                                        )}
+                                        {activity.link && (
+                                          <a
+                                            href={activity.link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-200 text-gray-800 text-xs font-medium hover:bg-gray-300 transition-colors"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            Open Google Calendar
+                                          </a>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -5899,7 +5585,7 @@ const Tasks = () => {
                 try {
                   if (selectedTask && selectedTask._id) {
                     const currentNotes = selectedTask.notes || ''
-                    const activityNote = `[${noteDateTime.toLocaleString('en-GB')}] Note: ${noteContent}`
+                    const activityNote = `[${formatActivityDateTime(noteDateTime)}] Note: ${noteContent}`
                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
 
                     if (selectedTask.isVisitTarget) {
@@ -5914,45 +5600,10 @@ const Tasks = () => {
                       const updatedRes = await getFollowUp(selectedTask._id)
                       if (updatedRes.success) {
                         setSelectedTask(updatedRes.data)
-                      // Re-parse activities from updated notes
-                      if (updatedRes.data.notes) {
-                        const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
-                        const parsedActivities = []
-                        notesLines.forEach(line => {
-                          const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
-                          if (match) {
-                            const [, dateStr, timeStr, type, content] = match
-                            try {
-                              const [day, month, year] = dateStr.split('/')
-                              const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
-                              parsedActivities.push({
-                                type: type,
-                                content: content,
-                                date: dateTime.toISOString(),
-                                createdAt: dateTime.toISOString()
-                              })
-                            } catch (e) {
-                              parsedActivities.push({
-                                type: type,
-                                content: content,
-                                date: new Date().toISOString(),
-                                createdAt: new Date().toISOString()
-                              })
-                            }
-                          }
-                        })
-                        parsedActivities.sort((a, b) => {
-                          const dateA = new Date(a.date || a.createdAt || 0)
-                          const dateB = new Date(b.date || b.createdAt || 0)
-                          return dateB.getTime() - dateA.getTime()
-                        })
-                        setTaskActivities(parsedActivities)
+                      } else {
+                        setSelectedTask(prev => ({ ...prev, notes: updatedNotes }))
                       }
-                    } else {
-                      // Fallback: Update selectedTask manually
-                      const updatedTask = { ...selectedTask, notes: updatedNotes }
-                      setSelectedTask(updatedTask)
-                    }
+                      setTaskActivities(parseNotesToActivities(updatedNotes))
                     }
                     
                     await loadTasks()
@@ -6188,29 +5839,37 @@ const Tasks = () => {
                 const meetingDateTime = new Date(`${meetingDate}T${meetingTime}`)
                 const endDateTime = new Date(meetingDateTime.getTime() + parseInt(meetingDuration) * 60000)
                 
-                // Create Google Calendar link
-                const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meetingTitle)}&dates=${meetingDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(`Meeting with ${selectedTask.customerName || selectedTask.associatedContactName || 'Contact'}`)}`
+                // Create Google Calendar link (add Meet when creating event in Calendar)
+                const meetingWith = selectedTask.customerName || selectedTask.associatedContactName || 'Contact'
+                const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meetingTitle)}&dates=${meetingDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(`Meeting with ${meetingWith}`)}`
+                const googleMeetLink = 'https://meet.google.com/new'
                 
-                // Open Google Calendar
-                window.open(googleCalendarLink, '_blank')
+                // Open Google Calendar in new tab
+                const calendarAnchor = document.createElement('a')
+                calendarAnchor.href = googleCalendarLink
+                calendarAnchor.target = '_blank'
+                calendarAnchor.rel = 'noopener noreferrer'
+                document.body.appendChild(calendarAnchor)
+                calendarAnchor.click()
+                document.body.removeChild(calendarAnchor)
                 
-                // Add meeting to activities
+                // Add meeting to activities (with meetLink so "Join Google Meet" works)
                 const newActivity = {
                   type: 'Meeting',
                   content: meetingTitle,
                   date: meetingDateTime.toISOString(),
                   link: googleCalendarLink,
+                  meetLink: googleMeetLink,
                   createdAt: new Date().toISOString()
                 }
                 const updatedActivities = [...taskActivities, newActivity]
                 setTaskActivities(updatedActivities)
-                setShowMeetingModal(false)
-                
+
                 // Save to backend and create Meeting task (meeting bane – sirf show nahi, actual task create)
                 try {
                   if (selectedTask && selectedTask._id) {
                     const currentNotes = selectedTask.notes || ''
-                    const activityNote = `[${meetingDateTime.toLocaleString('en-GB')}] Meeting: ${meetingTitle} - ${googleCalendarLink}`
+                    const activityNote = `[${formatActivityDateTime(meetingDateTime)}] Meeting: ${meetingTitle} - ${googleCalendarLink} | Google Meet: ${googleMeetLink}`
                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
 
                     if (selectedTask.isVisitTarget) {
@@ -6220,96 +5879,90 @@ const Tasks = () => {
                         const vt = updatedRes.data
                         setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
                       }
+                      setTaskActivities(parseNotesToActivities(updatedNotes))
                     } else {
                       await updateFollowUp(selectedTask._id, { notes: updatedNotes })
                       const updatedRes = await getFollowUp(selectedTask._id)
-                      if (updatedRes.success) {
-                        setSelectedTask(updatedRes.data)
-                      // Re-parse activities from updated notes
-                      if (updatedRes.data.notes) {
-                        const notesLines = updatedRes.data.notes.split('\n').filter(line => line.trim())
-                        const parsedActivities = []
-                        notesLines.forEach(line => {
-                          const match = line.match(/\[(\d{2}\/\d{2}\/\d{4}),\s*(\d{2}:\d{2}:\d{2})\]\s*(\w+):\s*(.+)/)
-                          if (match) {
-                            const [, dateStr, timeStr, type, content] = match
-                            try {
-                              const [day, month, year] = dateStr.split('/')
-                              const dateTime = new Date(`${year}-${month}-${day}T${timeStr}`)
-                              if (type === 'Meeting' && content.includes('http')) {
-                                const linkMatch = content.match(/(https?:\/\/[^\s]+)/)
-                                const link = linkMatch ? linkMatch[1] : ''
-                                const meetingTitle = content.replace(link, '').trim().replace(/^-\s*/, '')
-                                parsedActivities.push({
-                                  type: 'Meeting',
-                                  content: meetingTitle || 'Meeting',
-                                  link: link,
-                                  date: dateTime.toISOString(),
-                                  createdAt: dateTime.toISOString()
-                                })
-                              } else {
-                                parsedActivities.push({
-                                  type: type,
-                                  content: content,
-                                  date: dateTime.toISOString(),
-                                  createdAt: dateTime.toISOString()
-                                })
-                              }
-                            } catch (e) {
-                              parsedActivities.push({
-                                type: type,
-                                content: content,
-                                date: new Date().toISOString(),
-                                createdAt: new Date().toISOString()
-                              })
-                            }
-                          }
-                        })
-                        parsedActivities.sort((a, b) => {
-                          const dateA = new Date(a.date || a.createdAt || 0)
-                          const dateB = new Date(b.date || b.createdAt || 0)
-                          return dateB.getTime() - dateA.getTime()
-                        })
-                        setTaskActivities(parsedActivities)
-                      }
-                    } else {
-                      const updatedTask = { ...selectedTask, notes: updatedNotes }
-                      setSelectedTask(updatedTask)
-                    }
+                      if (updatedRes.success) setSelectedTask(updatedRes.data)
+                      // Parse from the notes we just saved so meeting shows immediately in activities
+                      setTaskActivities(parseNotesToActivities(updatedNotes))
                     }
 
-                    // Create new Meeting follow-up task (meeting bane – actual task list mein aaye)
-                    try {
-                      const salesmanId = selectedTask.salesman?._id || selectedTask.salesman
-                      if (salesmanId) {
-                        await createFollowUp({
-                          salesman: salesmanId,
-                          customer: selectedTask.customer?._id || selectedTask.customer || undefined,
-                          customerName: selectedTask.customerName || 'Contact',
-                          customerEmail: selectedTask.customerEmail || '',
-                          customerPhone: selectedTask.customerPhone || '',
+                    // Create new Meeting follow-up task (meeting follow – task list mein aaye, Google Meet link ke sath)
+                    let meetingTaskCreated = false
+                    const salesmanRef = selectedTask.salesman
+                    const salesmanId = salesmanRef != null ? (salesmanRef._id ?? salesmanRef) : null
+                    const salesmanIdStr = salesmanId != null ? String(salesmanId) : ''
+                    const customerRef = selectedTask.customer?._id ?? selectedTask.customer
+                    const customerIdStr = customerRef != null ? String(customerRef) : undefined
+                    if (salesmanIdStr) {
+                      try {
+                        const createRes = await createFollowUp({
+                          salesman: salesmanIdStr,
+                          customer: customerIdStr,
+                          customerName: (selectedTask.customerName || selectedTask.name || 'Contact').trim() || 'Contact',
+                          customerEmail: (selectedTask.customerEmail || '').trim() || undefined,
+                          customerPhone: (selectedTask.customerPhone || '').trim() || undefined,
                           type: 'Meeting',
                           priority: 'Medium',
                           scheduledDate: meetingDateTime.toISOString(),
                           dueDate: meetingDateTime.toISOString(),
-                          description: meetingTitle,
-                          notes: `Meeting: ${googleCalendarLink}`
+                          description: (meetingTitle || 'Meeting').trim(),
+                          notes: `Meeting: ${googleCalendarLink} | Google Meet: ${googleMeetLink}`
+                        })
+                        if (createRes && createRes.success) {
+                          meetingTaskCreated = true
+                        } else {
+                          console.error('Meeting task create failed:', createRes?.message, createRes)
+                          Swal.fire({
+                            icon: 'warning',
+                            title: 'Meeting task not created',
+                            text: createRes?.message || 'Meeting task could not be created. Notes saved on current task.',
+                            confirmButtonColor: '#e9931c'
+                          })
+                        }
+                      } catch (createErr) {
+                        console.error('Error creating meeting task:', createErr)
+                        Swal.fire({
+                          icon: 'warning',
+                          title: 'Meeting note saved',
+                          text: 'Meeting follow-up task could not be created. Notes saved on current task.',
+                          confirmButtonColor: '#e9931c'
                         })
                       }
-                    } catch (createErr) {
-                      console.error('Error creating meeting task:', createErr)
+                    } else {
+                      Swal.fire({
+                        icon: 'info',
+                        title: 'No salesman',
+                        text: 'Task has no salesman assigned. Meeting note saved; add a salesman to create a Meeting task.',
+                        confirmButtonColor: '#e9931c'
+                      })
                     }
 
-                    await loadTasks()
+                    // Refetch so new meeting task appears; if on Pending tab, load All so meeting (Approved) shows
+                    if (meetingTaskCreated) {
+                      setActiveTab('All')
+                      await loadTasks('All')
+                    } else {
+                      await loadTasks()
+                    }
                   }
                 } catch (e) {
                   console.error('Error saving meeting:', e)
+                  Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: e?.message || 'Failed to save meeting.',
+                    confirmButtonColor: '#e9931c'
+                  })
+                  return
                 }
 
+                setShowMeetingModal(false)
                 Swal.fire({
                   icon: 'success',
                   title: 'Meeting Created!',
-                  html: `Google Calendar opened. Meeting task created in list.<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a>`,
+                  html: `Google Calendar opened.${meetingTaskCreated ? ' Meeting task added to list.' : ''}<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a> &nbsp; <a href="${googleMeetLink}" target="_blank" class="text-gray-700 underline">Start Google Meet</a>`,
                   confirmButtonColor: '#e9931c'
                 })
               }}

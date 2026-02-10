@@ -3,7 +3,7 @@ const User = require("../../database/models/User");
 const Customer = require("../../database/models/Customer");
 const Product = require("../../database/models/Product");
 
-// @desc    Get all samples
+// @desc    Get all samples (admin-created only; salesman-created show in salesman Sample Tracker)
 // @route   GET /api/admin/samples
 // @access  Private/Admin
 const getSamples = async (req, res) => {
@@ -11,6 +11,13 @@ const getSamples = async (req, res) => {
     const { salesman, status, search, startDate, endDate, approvalStatus } =
       req.query;
     const filter = {};
+
+    // Only admin-created samples; salesman-created show only in salesman Sample Tracker
+    const salesmanUsers = await User.find({ role: "salesman" }).select("_id").lean();
+    const salesmanIds = salesmanUsers.map((u) => u._id);
+    if (salesmanIds.length > 0) {
+      filter.createdBy = { $nin: salesmanIds };
+    }
 
     if (salesman) {
       filter.salesman = salesman;
@@ -152,7 +159,7 @@ const createSample = async (req, res) => {
       expectedDate: expectedDate ? new Date(expectedDate) : undefined,
       notes: notes || undefined,
       status: "Pending",
-      approvalStatus: "Approved", // Admin-created samples are auto-approved
+      approvalStatus: "Approved", // Admin-created sample track never needs approval
       createdBy: req.user._id,
     });
 

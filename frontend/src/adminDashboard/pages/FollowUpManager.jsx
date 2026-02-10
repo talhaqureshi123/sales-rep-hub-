@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { FaBell, FaSearch, FaEdit, FaTrash, FaEye, FaPlus, FaClock, FaExclamationTriangle, FaCheckCircle, FaCalendarAlt, FaPhone, FaEnvelope, FaWalking, FaFileAlt, FaFlask, FaShoppingCart, FaChevronDown } from 'react-icons/fa'
-import { getFollowUps, getFollowUp, createFollowUp, updateFollowUp, deleteFollowUp } from '../../services/adminservices/followUpService'
+import { FaBell, FaSearch, FaEdit, FaTrash, FaEye, FaPlus, FaClock, FaExclamationTriangle, FaCheckCircle, FaCalendarAlt, FaPhone, FaEnvelope, FaWalking, FaFileAlt, FaFlask, FaShoppingCart, FaChevronDown, FaThumbsUp, FaTimesCircle } from 'react-icons/fa'
+import Swal from 'sweetalert2'
+import { getFollowUps, getFollowUp, createFollowUp, updateFollowUp, deleteFollowUp, approveFollowUp, rejectFollowUp } from '../../services/adminservices/followUpService'
 
 const FollowUpManager = () => {
   const [followUps, setFollowUps] = useState([])
@@ -9,6 +10,7 @@ const FollowUpManager = () => {
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedType, setSelectedType] = useState('All')
   const [selectedPriority, setSelectedPriority] = useState('All')
+  const [selectedApproval, setSelectedApproval] = useState('All') // All | Pending | Approved
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedFollowUp, setSelectedFollowUp] = useState(null)
@@ -33,7 +35,7 @@ const FollowUpManager = () => {
 
   useEffect(() => {
     loadFollowUps()
-  }, [selectedStatus, selectedType, selectedPriority])
+  }, [selectedStatus, selectedType, selectedPriority, selectedApproval])
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -49,6 +51,7 @@ const FollowUpManager = () => {
         status: selectedStatus !== 'All' ? selectedStatus : undefined,
         type: selectedType !== 'All' ? selectedType : undefined,
         priority: selectedPriority !== 'All' ? selectedPriority : undefined,
+        approvalStatus: selectedApproval !== 'All' ? selectedApproval : undefined,
         search: searchTerm || undefined,
       })
       if (result.success && result.data) {
@@ -159,6 +162,83 @@ const FollowUpManager = () => {
     } catch (error) {
       console.error('Error deleting follow-up:', error)
       alert('Error deleting follow-up')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleApproveFollowUp = async (followUpId) => {
+    setLoading(true)
+    try {
+      const result = await approveFollowUp(followUpId)
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Approved',
+          text: 'Follow-up task approved successfully.',
+          confirmButtonColor: '#e9931c',
+        })
+        loadFollowUps()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to approve follow-up',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (error) {
+      console.error('Error approving follow-up:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error approving follow-up',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRejectFollowUp = async (followUpId) => {
+    const { value: reason } = await Swal.fire({
+      icon: 'question',
+      title: 'Reject follow-up?',
+      input: 'textarea',
+      inputLabel: 'Rejection reason (optional)',
+      inputPlaceholder: 'Enter reason...',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+    if (reason === undefined) return
+    setLoading(true)
+    try {
+      const result = await rejectFollowUp(followUpId, reason || '')
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Rejected',
+          text: 'Follow-up task has been rejected.',
+          confirmButtonColor: '#e9931c',
+        })
+        loadFollowUps()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to reject follow-up',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (error) {
+      console.error('Error rejecting follow-up:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error rejecting follow-up',
+        confirmButtonColor: '#e9931c',
+      })
     } finally {
       setLoading(false)
     }
@@ -357,6 +437,26 @@ const FollowUpManager = () => {
             ))}
           </div>
         </div>
+
+        {/* Approval Filters */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Approval</label>
+          <div className="flex flex-wrap gap-2">
+            {['All', 'Pending', 'Approved'].map((approval) => (
+              <button
+                key={approval}
+                onClick={() => setSelectedApproval(approval)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedApproval === approval
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {approval}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -417,7 +517,7 @@ const FollowUpManager = () => {
                         )}
                       </div>
                       
-                      {/* Priority and Status Badges */}
+                      {/* Priority, Status and Approval Badges */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPriorityColor(followUp.priority)}`}>
                           {followUp.priority}
@@ -425,6 +525,11 @@ const FollowUpManager = () => {
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(followUp.status)}`}>
                           {displayStatus}
                         </span>
+                        {(followUp.approvalStatus === 'Pending' || followUp.approvalStatus === 'Approved') && (
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${followUp.approvalStatus === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
+                            {followUp.approvalStatus}
+                          </span>
+                        )}
                       </div>
                     </div>
                     
@@ -481,7 +586,25 @@ const FollowUpManager = () => {
                           <p className="text-sm text-gray-700">{followUp.notes}</p>
                         </div>
                       )}
-                      <div className="flex gap-2 pt-2">
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {followUp.approvalStatus === 'Pending' && (
+                          <>
+                            <button
+                              onClick={() => handleApproveFollowUp(followUpId)}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center gap-1"
+                            >
+                              <FaThumbsUp className="w-4 h-4" />
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleRejectFollowUp(followUpId)}
+                              className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors flex items-center gap-1"
+                            >
+                              <FaTimesCircle className="w-4 h-4" />
+                              Reject
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => handleEditFollowUp(followUpId)}
                           className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold hover:bg-green-600 transition-colors"

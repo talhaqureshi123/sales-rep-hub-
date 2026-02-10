@@ -308,6 +308,7 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
       emailAddress,
       phoneNumber,
       billingAddress,
+      deliveryAddress,
       salesPerson,
       invoiceNumber,
       items = [],
@@ -328,138 +329,129 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
       : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const reportDateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
+    const shipToAddress = deliveryAddress && String(deliveryAddress).trim() ? deliveryAddress : billingAddress;
+
     const itemsRows = (Array.isArray(items) ? items : []).map(
-      (item) => `
+      (item) => {
+        const desc = [item.productName, item.spec].filter(Boolean).join(' | ') || '-';
+        const vatLabel = `${vatRate || 20}.0% S`;
+        return `
         <tr>
-          <td style="padding:8px;border:1px solid #ddd">${item.productCode || '-'}</td>
-          <td style="padding:8px;border:1px solid #ddd">${item.productName || '-'}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${item.quantity || 0}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.unitPrice || 0).toFixed(2)}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.lineTotal || 0).toFixed(2)}</td>
-        </tr>`
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${item.productCode || '-'}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${desc}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">${vatLabel}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">${item.quantity || 0}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.unitPrice || 0).toFixed(2)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.lineTotal || 0).toFixed(2)}</td>
+        </tr>`;
+      }
     ).join('');
 
     const mailOptions = {
       from: `"Sales Rep Hub" <${fromEmail}>`,
       to: adminEmail,
-      subject: `Sales Order Report: ${soNumber} - ${customerName || 'Order'}`,
+      subject: `Sales Order ${soNumber} - ${customerName || 'Order'}`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-            .container { max-width: 680px; margin: 0 auto; background: #fff; }
-            .brand-header {
-              background: linear-gradient(135deg, #e9931c 0%, #d8820a 100%);
-              color: white;
-              padding: 24px;
-              text-align: center;
-              font-size: 22px;
-              font-weight: bold;
-              letter-spacing: 0.5px;
-            }
-            .report-title { font-size: 18px; color: #333; margin: 24px 0 16px; padding-bottom: 8px; border-bottom: 2px solid #e9931c; }
-            .section { margin: 20px 0; }
-            .section table { width: 100%; border-collapse: collapse; font-size: 14px; }
-            .section th { background: #f5f5f5; padding: 10px; text-align: left; border: 1px solid #ddd; }
-            .section td { padding: 8px; border: 1px solid #ddd; }
-            .section .label { font-weight: bold; color: #555; width: 140px; }
-            .totals { margin-top: 16px; text-align: right; }
-            .totals .row { padding: 6px 0; }
-            .totals .grand { font-size: 16px; font-weight: bold; color: #e9931c; margin-top: 8px; padding-top: 8px; border-top: 2px solid #ddd; }
-            .signature {
-              margin-top: 32px;
-              padding-top: 24px;
-              border-top: 1px solid #eee;
-              font-size: 13px;
-              color: #555;
-            }
-            .signature .company { font-weight: bold; color: #e9931c; font-size: 15px; margin-bottom: 4px; }
-            .footer { text-align: center; margin-top: 24px; padding: 16px; color: #888; font-size: 12px; }
+            body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 24px; background: #f9fafb; }
+            .doc { max-width: 720px; margin: 0 auto; background: #fff; padding: 32px; }
+            .head-row { width: 100%; margin-bottom: 20px; }
+            .head-left { font-size: 14px; color: #374151; }
+            .head-left .company { font-weight: bold; font-size: 16px; color: #111; margin-bottom: 6px; }
+            .head-mid .order-num { font-size: 28px; font-weight: bold; color: #ea580c; }
+            .head-right .logo { font-size: 24px; font-weight: bold; color: #ea580c; }
+            .head-right .tagline { font-size: 12px; color: #6b7280; margin-top: 2px; }
+            .divider { height: 3px; background: #ea580c; margin: 20px 0; }
+            .col-addr { font-size: 13px; vertical-align: top; padding-right: 16px; }
+            .col-addr .title { font-weight: bold; font-size: 11px; color: #6b7280; margin-bottom: 6px; letter-spacing: 0.5px; }
+            .col-addr .lines { color: #374151; white-space: pre-line; }
+            .box-date { display: inline-block; background: #fb923c; color: #fff; padding: 12px 20px; border-radius: 4px; margin-left: 8px; text-align: center; }
+            .box-date .label { font-size: 10px; letter-spacing: 0.5px; }
+            .box-date .val { font-size: 14px; font-weight: bold; }
+            .box-total { display: inline-block; background: #ea580c; color: #fff; padding: 14px 24px; border-radius: 4px; margin-left: 8px; text-align: center; }
+            .box-total .label { font-size: 10px; letter-spacing: 0.5px; }
+            .box-total .val { font-size: 20px; font-weight: bold; }
+            .tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+            .tbl th { text-align: left; padding: 12px 10px; border-bottom: 2px solid #e5e7eb; font-weight: bold; color: #374151; font-size: 12px; }
+            .tbl th:nth-child(3), .tbl th:nth-child(4) { text-align: center; }
+            .tbl th:nth-child(5), .tbl th:nth-child(6) { text-align: right; }
+            .totals-wrap { text-align: right; margin-top: 24px; margin-bottom: 32px; }
+            .totals-wrap .row { padding: 4px 0; font-size: 14px; }
+            .totals-wrap .total-row { border-top: 2px solid #ea580c; margin-top: 8px; padding-top: 12px; }
+            .totals-wrap .total-row .label { font-weight: bold; color: #ea580c; font-size: 16px; }
+            .totals-wrap .total-row .val { font-weight: bold; color: #ea580c; font-size: 20px; }
+            .thanks { font-size: 12px; color: #9ca3af; margin-top: 8px; }
+            .footer-row { margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
+            .footer-row .under { border-bottom: 1px solid #333; display: inline-block; min-width: 120px; padding-bottom: 2px; }
           </style>
         </head>
         <body>
-          <div class="container">
-            <div class="brand-header">SALES REP HUB</div>
-            <div style="padding: 24px;">
-              <div class="report-title">Sales Order Report</div>
-              <p style="margin:0 0 20px; color:#666;">Formal sales order notification. Report date: ${reportDateStr}.</p>
-
-              <div class="section">
-                <div class="report-title" style="font-size:16px; margin-top:20px;">Order Information</div>
-                <table class="section">
-                  <tr><td class="label">SO Number</td><td>${soNumber || 'N/A'}</td></tr>
-                  <tr><td class="label">Order Date</td><td>${orderDateStr}</td></tr>
-                  <tr><td class="label">Order Status</td><td>${orderStatus || 'N/A'}</td></tr>
-                  <tr><td class="label">PO Number</td><td>${poNumber || 'Not Provided'}</td></tr>
-                  ${invoiceNumber ? `<tr><td class="label">Invoice Number</td><td>${invoiceNumber}</td></tr>` : ''}
-                </table>
-              </div>
-
-              <div class="section">
-                <div class="report-title" style="font-size:16px;">Sales Representative</div>
-                <table class="section">
-                  <tr><td class="label">Name</td><td>${salesPerson?.name || 'N/A'}</td></tr>
-                  <tr><td class="label">Email</td><td>${salesPerson?.email || 'N/A'}</td></tr>
-                </table>
-              </div>
-
-              <div class="section">
-                <div class="report-title" style="font-size:16px;">Customer Information</div>
-                <table class="section">
-                  <tr><td class="label">Company / Name</td><td>${customerName || 'N/A'}</td></tr>
-                  <tr><td class="label">Contact Person</td><td>${contactPerson || 'N/A'}</td></tr>
-                  <tr><td class="label">Email</td><td>${emailAddress || 'N/A'}</td></tr>
-                  <tr><td class="label">Phone</td><td>${phoneNumber || 'N/A'}</td></tr>
-                  <tr><td class="label">Address</td><td>${billingAddress || 'N/A'}</td></tr>
-                </table>
-              </div>
-
-              <div class="section">
-                <div class="report-title" style="font-size:16px;">Line Items</div>
-                <table class="section">
-                  <thead>
-                    <tr>
-                      <th style="text-align:left">Product Code</th>
-                      <th style="text-align:left">Product Name</th>
-                      <th style="text-align:center">Quantity</th>
-                      <th style="text-align:right">Unit Price</th>
-                      <th style="text-align:right">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>${itemsRows || '<tr><td colspan="5" style="text-align:center;padding:16px">No items</td></tr>'}</tbody>
-                </table>
-              </div>
-
-              <div class="section">
-                <div class="report-title" style="font-size:16px;">Financial Summary</div>
-                <div class="totals">
-                  <div class="row">Subtotal: £${Number(subtotal).toFixed(2)}</div>
-                  ${discount ? `<div class="row">Discount: -£${Number(discount).toFixed(2)}</div>` : ''}
-                  ${deliveryCharges ? `<div class="row">Delivery: £${Number(deliveryCharges).toFixed(2)}</div>` : ''}
-                  <div class="row">VAT (${vatRate}%): £${Number(vat).toFixed(2)}</div>
-                  <div class="row grand">Total: £${Number(grandTotal).toFixed(2)}</div>
-                </div>
-              </div>
-
-              <div class="section">
-                <div class="report-title" style="font-size:16px;">Payment Details</div>
-                <table class="section">
-                  <tr><td class="label">Payment Method</td><td>${paymentMethod || 'N/A'}</td></tr>
-                  <tr><td class="label">Amount Paid</td><td>£${Number(amountPaid).toFixed(2)}</td></tr>
-                  <tr><td class="label">Balance Remaining</td><td>£${Number(balanceRemaining).toFixed(2)}</td></tr>
-                </table>
-              </div>
-
-              <div class="signature">
+          <div class="doc">
+            <table class="head-row" width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="38%" class="head-left" style="vertical-align:top">
                 <div class="company">Sales Rep Hub</div>
-                <div>This is an automated sales order report. For support, please use the admin dashboard.</div>
-                <div style="margin-top:8px;">© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.</div>
+                <div>Report date: ${reportDateStr}</div>
+                <div>${fromEmail}</div>
+              </td>
+              <td width="24%" style="text-align:center;vertical-align:top">
+                <div class="head-mid"><div class="order-num">Sales Order ${soNumber || 'N/A'}</div></div>
+              </td>
+              <td width="38%" style="text-align:right;vertical-align:top" class="head-right">
+                <div class="logo">SALES REP HUB</div>
+                <div class="tagline">Order Report</div>
+              </td>
+            </tr></table>
+            <div class="divider"></div>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border-bottom:1px solid #e5e7eb;padding-bottom:20px"><tr>
+              <td width="33%" class="col-addr">
+                <div class="title">ADDRESS</div>
+                <div class="lines">${customerName || ''}\n${(billingAddress || 'N/A').replace(/\n/g, '\n')}</div>
+              </td>
+              <td width="33%" class="col-addr">
+                <div class="title">SHIP TO</div>
+                <div class="lines">${customerName || ''}\n${(shipToAddress || 'Same as address').replace(/\n/g, '\n')}</div>
+              </td>
+              <td width="34%" style="vertical-align:top;text-align:right">
+                <span class="box-date"><div class="label">DATE</div><div class="val">${orderDateStr}</div></span>
+                <span class="box-total"><div class="label">TOTAL</div><div class="val">£${Number(grandTotal).toFixed(2)}</div></span>
+              </td>
+            </tr></table>
+
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>DESCRIPTION</th>
+                  <th>VAT</th>
+                  <th>QTY</th>
+                  <th>RATE</th>
+                  <th>AMOUNT</th>
+                </tr>
+              </thead>
+              <tbody>${itemsRows || '<tr><td colspan="6" style="text-align:center;padding:24px">No items</td></tr>'}</tbody>
+            </table>
+
+            <div class="totals-wrap">
+              <div class="row">SUBTOTAL &nbsp; ${Number(subtotal).toFixed(2)}</div>
+              ${discount ? `<div class="row">Discount &nbsp; -${Number(discount).toFixed(2)}</div>` : ''}
+              ${deliveryCharges ? `<div class="row">Delivery &nbsp; ${Number(deliveryCharges).toFixed(2)}</div>` : ''}
+              <div class="row">VAT TOTAL &nbsp; ${Number(vat).toFixed(2)}</div>
+              <div class="total-row">
+                <span class="label">TOTAL</span> <span class="val">£${Number(grandTotal).toFixed(2)}</span>
               </div>
+              <div class="thanks">THANK YOU.</div>
             </div>
-            <div class="footer">Sales Order Report — Sales Rep Hub</div>
+
+            <table width="100%" cellpadding="0" cellspacing="0" class="footer-row"><tr>
+              <td width="50%">Accepted By <span class="under">&nbsp;</span></td>
+              <td width="50%" style="text-align:right">Accepted Date <span class="under">&nbsp;</span></td>
+            </tr></table>
           </div>
         </body>
         </html>

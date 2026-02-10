@@ -1,4 +1,5 @@
 const VisitTarget = require('../../database/models/VisitTarget');
+const FollowUp = require('../../database/models/FollowUp');
 const Quotation = require('../../database/models/Quotation');
 const Customer = require('../../database/models/Customer');
 const Tracking = require('../../database/models/Tracking');
@@ -47,19 +48,48 @@ const getDashboardStats = async (req, res) => {
       status: 'Pending',
     });
 
-    // Today's Schedule (Visit targets scheduled for today)
-    const todaySchedule = await VisitTarget.find({
-      salesman: salesmanId,
-      visitDate: {
-        $gte: startOfToday,
-        $lt: new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000),
-      },
-      status: { $in: ['Pending', 'In Progress'] },
-    })
-      .sort({ priority: 1, visitDate: 1 })
-      .limit(10)
-      .select('name address city visitDate priority status')
-      .lean();
+    const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+
+    // Today's Schedule: visits + tasks due today (same as admin)
+    const [todayVisits, todayTasks] = await Promise.all([
+      VisitTarget.find({
+        salesman: salesmanId,
+        visitDate: { $gte: startOfToday, $lt: endOfToday },
+        status: { $in: ['Pending', 'In Progress'] },
+      })
+        .sort({ visitDate: 1 })
+        .limit(10)
+        .select('name address city visitDate priority status')
+        .lean(),
+      FollowUp.find({
+        salesman: salesmanId,
+        status: { $ne: 'Completed' },
+        dueDate: { $gte: startOfToday, $lt: endOfToday },
+      })
+        .select('customerName type dueDate priority description')
+        .sort({ dueDate: 1 })
+        .limit(10)
+        .lean(),
+    ]);
+
+    const visitItems = (todayVisits || []).map((vt) => ({
+      type: 'visit',
+      name: vt.name,
+      address: vt.address || vt.city || 'Location',
+      priority: vt.priority || 'Medium',
+      date: vt.visitDate,
+    }));
+    const taskItems = (todayTasks || []).map((t) => ({
+      type: 'task',
+      name: t.customerName || t.description || 'Task',
+      address: '',
+      priority: t.priority || 'Medium',
+      date: t.dueDate,
+      taskType: t.type,
+    }));
+    const todaySchedule = [...visitItems, ...taskItems]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 10);
 
     // Recent Activity (Last 10 completed visit targets and approved quotations)
     const recentVisits = await VisitTarget.find({

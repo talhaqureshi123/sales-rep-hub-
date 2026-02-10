@@ -12,7 +12,8 @@ import {
   FaUserPlus,
   FaCamera,
   FaBullseye,
-  FaTrophy
+  FaTrophy,
+  FaTasks
 } from 'react-icons/fa'
 import {
   LineChart,
@@ -237,8 +238,8 @@ const Dashboard = () => {
           {todaySchedule.length === 0 ? (
             <div className="text-center py-8">
               <FaCalendarAlt className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600 font-medium">No visits scheduled for today</p>
-              <p className="text-sm text-gray-500 mt-2">All caught up! 🎉</p>
+              <p className="text-gray-600 font-medium">No visits or tasks scheduled for today</p>
+              <p className="text-sm text-gray-500 mt-2">All caught up! 👋</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -247,10 +248,18 @@ const Dashboard = () => {
                   key={index}
                   className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
                 >
-                  <FaMapMarkerAlt className="w-5 h-5 text-[#e9931c] mt-1 flex-shrink-0" />
+                  {schedule.type === 'visit' ? (
+                    <FaMapMarkerAlt className="w-5 h-5 text-[#e9931c] mt-1 flex-shrink-0" />
+                  ) : (
+                    <FaTasks className="w-5 h-5 text-[#e9931c] mt-1 flex-shrink-0" />
+                  )}
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-800">{schedule.name}</p>
-                    <p className="text-sm text-gray-600">{schedule.address || schedule.city || 'Location'}</p>
+                    <p className="font-semibold text-gray-800">
+                      {schedule.type === 'task' && schedule.taskType ? `${schedule.taskType}: ` : ''}{schedule.name}
+                    </p>
+                    {(schedule.address || schedule.city) && (
+                      <p className="text-sm text-gray-600">{schedule.address || schedule.city}</p>
+                    )}
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${
                         schedule.priority === 'High' ? 'bg-red-100 text-red-700' :
@@ -259,9 +268,9 @@ const Dashboard = () => {
                       }`}>
                         {schedule.priority}
                       </span>
-                      {schedule.visitDate && (
+                      {schedule.date && (
                         <span className="text-xs text-gray-500">
-                          {new Date(schedule.visitDate).toLocaleTimeString('en-US', { 
+                          {new Date(schedule.date).toLocaleTimeString('en-US', { 
                             hour: '2-digit', 
                             minute: '2-digit' 
                           })}
