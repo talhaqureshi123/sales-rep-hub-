@@ -357,6 +357,72 @@ const downloadBarcode = async (req, res) => {
   }
 };
 
+// @desc    Import products from Excel/CSV (bulk create)
+// @route   POST /api/admin/products/import
+// @access  Private/Admin
+const importProducts = async (req, res) => {
+  try {
+    const { products: rawProducts } = req.body;
+    if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a non-empty array of products",
+      });
+    }
+
+    const created = [];
+    const skipped = [];
+
+    for (let i = 0; i < rawProducts.length; i++) {
+      const row = rawProducts[i];
+      const name = row.name != null ? String(row.name).trim() : null;
+      const productCode = row.productCode != null ? String(row.productCode).trim().toUpperCase() : (row.product_code != null ? String(row.product_code).trim().toUpperCase() : null);
+      if (!name || !productCode) {
+        skipped.push({ row: i + 1, reason: "Missing name or product code" });
+        continue;
+      }
+
+      const price = row.price != null && !isNaN(Number(row.price)) ? Number(row.price) : 0;
+      const category = row.category ? String(row.category).trim() : "Other";
+      const stock = row.stock != null && !isNaN(Number(row.stock)) ? Math.max(0, Number(row.stock)) : 0;
+      const isActive = row.isActive !== false && row.is_active !== false && row.active !== "0" && row.active !== "false";
+
+      try {
+        const existing = await Product.findOne({ productCode });
+        if (existing) {
+          skipped.push({ row: i + 1, reason: "Product code already exists" });
+          continue;
+        }
+        const product = await Product.create({
+          name,
+          productCode,
+          price,
+          category,
+          stock,
+          description: row.description ? String(row.description).trim() : undefined,
+          image: row.image || row.imageUrl || "",
+          keyFeatures: Array.isArray(row.keyFeatures) ? row.keyFeatures : (row.keyFeatures ? String(row.keyFeatures).split(",").map((f) => f.trim()).filter(Boolean) : []),
+          isActive,
+        });
+        created.push({ _id: product._id, name: product.name, productCode: product.productCode });
+      } catch (err) {
+        skipped.push({ row: i + 1, reason: err.message || "Validation error" });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Imported ${created.length} product(s)`,
+      data: { created, skipped, createdCount: created.length, skippedCount: skipped.length },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error importing products",
+    });
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -365,4 +431,5 @@ module.exports = {
   deleteProduct,
   downloadQRCode,
   downloadBarcode,
+  importProducts,
 };

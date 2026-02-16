@@ -9,11 +9,12 @@ import { getUsers } from '../../services/adminservices/userService'
 import { pushQuotationsToHubSpot } from '../../services/adminservices/hubspotService'
 import QRCameraScanner from '../../components/QRCameraScanner'
 
-const Quotes = () => {
+const Quotes = ({ initialFilter, onFilterConsumed }) => {
   const [quotes, setQuotes] = useState([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('All')
+  const [filterSource, setFilterSource] = useState('All') // 'All' or 'My Quotes'
   const [selectedQuotes, setSelectedQuotes] = useState([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedQuote, setSelectedQuote] = useState(null)
@@ -71,12 +72,20 @@ const Quotes = () => {
     notes: '',
   })
 
+  // Handle initial filter from dashboard navigation
+  useEffect(() => {
+    if (initialFilter === 'myQuotes') {
+      setFilterSource('My Quotes')
+      if (typeof onFilterConsumed === 'function') onFilterConsumed()
+    }
+  }, [initialFilter, onFilterConsumed])
+
   useEffect(() => {
     loadQuotes()
     loadCustomers()
     loadSalesmen()
     loadProducts()
-  }, [selectedStatus])
+  }, [selectedStatus, filterSource])
 
   const loadSalesmen = async () => {
     try {
@@ -102,10 +111,17 @@ const Quotes = () => {
   const loadQuotes = async () => {
     setLoading(true)
     try {
-      const result = await getQuotations({
+      const params = {
         status: selectedStatus !== 'All' ? selectedStatus : undefined,
         search: searchTerm || undefined,
-      })
+      }
+      
+      // Add myQuotes filter if "My Quotes" is selected
+      if (filterSource === 'My Quotes') {
+        params.myQuotesOnly = true
+      }
+      
+      const result = await getQuotations(params)
       if (result.success && result.data) {
         setQuotes(result.data)
       } else {
@@ -1075,7 +1091,7 @@ const Quotes = () => {
   const filteredQuotes = filterQuotes()
 
   return (
-    <div className="w-full">
+    <div className="w-full sm:w-auto lg:w-full md:w-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -1134,7 +1150,7 @@ const Quotes = () => {
 
       {/* Filters and Actions */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleSelectAll}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
@@ -1142,6 +1158,17 @@ const Quotes = () => {
             <FaCheckSquare className="w-4 h-4" />
             <span>Select</span>
           </button>
+          
+          {/* Source Filter */}
+          <select
+            value={filterSource}
+            onChange={(e) => setFilterSource(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e9931c] bg-white text-sm"
+          >
+            <option value="All">All Quotes</option>
+            <option value="My Quotes">My Quotes</option>
+          </select>
+          
           <div className="flex flex-wrap gap-2">
             {statusOptions.map((status) => (
               <button

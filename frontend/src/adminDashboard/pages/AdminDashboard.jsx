@@ -24,6 +24,7 @@ import { logoutService } from '../../services/adminservices/loginservice'
 const AdminDashboard = ({ onLogout }) => {
   const [activePage, setActivePage] = useState('dashboard')
   const [customerManagementInitialFilter, setCustomerManagementInitialFilter] = useState(null)
+  const [quotesInitialFilter, setQuotesInitialFilter] = useState(null)
 
   const handleLogout = () => {
     logoutService()
@@ -40,8 +41,12 @@ const AdminDashboard = ({ onLogout }) => {
       const tab = typeof d === 'object' && d.tab ? d.tab : d
       if (['dashboard', 'product-catalog', 'product-videos', 'hubspot-connect', 'hubspot-tasks', 'sales-orders', 'quotes', 'sales-targets', 'sales-submissions', 'user-management', 'customer-management', 'customer-allotment', 'visited-targets', 'conversions-tracking', 'shift-photos', 'live-tracking'].includes(tab)) {
         setActivePage(tab)
-        if (typeof d === 'object' && d.filter && tab === 'customer-management') {
-          setCustomerManagementInitialFilter(d.filter)
+        if (typeof d === 'object' && d.filter) {
+          if (tab === 'customer-management') {
+            setCustomerManagementInitialFilter(d.filter)
+          } else if (tab === 'quotes') {
+            setQuotesInitialFilter(d.filter)
+          }
         }
       }
     }
@@ -65,7 +70,12 @@ const AdminDashboard = ({ onLogout }) => {
       case 'sales-orders':
         return <SalesOrders />
       case 'quotes':
-        return <Quotes />
+        return (
+          <Quotes
+            initialFilter={quotesInitialFilter}
+            onFilterConsumed={() => setQuotesInitialFilter(null)}
+          />
+        )
       case 'sales-targets':
         return <SalesTargets />
       case 'sales-submissions':

@@ -9,6 +9,7 @@ import Tasks from '../components/Tasks'
 import SalesTargets from '../components/SalesTargets'
 import SalesOrders from '../../adminDashboard/pages/SalesOrders'
 import ProductVideos from '../components/ProductVideos'
+import ProductCatalog from '../components/ProductCatalog'
 import Notifications from '../components/Notifications'
 import SampleTracker from '../components/SampleTracker'
 import SalesmanSidebar from '../components/SalesmanSidebar'
@@ -33,7 +34,7 @@ const SalesmanDashboard = ({ onLogout }) => {
   // Listen for navigation events
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (event.detail && ['dashboard', 'quotation', 'achievements', 'sales-tracking', 'customers', 'tasks', 'sample-tracker', 'sales-targets', 'sales-orders', 'product-videos', 'notifications'].includes(event.detail)) {
+      if (event.detail && ['dashboard', 'product-catalog', 'quotation', 'achievements', 'sales-tracking', 'customers', 'tasks', 'sample-tracker', 'sales-targets', 'sales-orders', 'product-videos', 'notifications'].includes(event.detail)) {
         setActiveTab(event.detail)
         // If navigating to customers, check if we should open add form
         if (event.detail === 'customers' && (event.openAddForm || window.shouldOpenAddCustomer)) {
@@ -52,6 +53,8 @@ const SalesmanDashboard = ({ onLogout }) => {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard />
+      case 'product-catalog':
+        return <ProductCatalog />
       case 'sales-tracking':
         return <SalesTracking />
       case 'quotation':

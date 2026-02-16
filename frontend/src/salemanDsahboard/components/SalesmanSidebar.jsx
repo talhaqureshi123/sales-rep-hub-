@@ -10,7 +10,8 @@ import {
   FaBullseye,
   FaShoppingCart,
   FaVideo,
-  FaBell
+  FaBell,
+  FaBox
 } from 'react-icons/fa'
 import { useNotificationCount } from '../hooks/useNotificationCount'
 
@@ -19,6 +20,7 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: FaHome },
+    { id: 'product-catalog', label: 'Product Catalog', icon: FaBox },
     { id: 'notifications', label: 'Notifications', icon: FaBell, badge: notificationCount },
     { id: 'sales-tracking', label: 'Sales Tracking', icon: FaMapMarkerAlt },
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },

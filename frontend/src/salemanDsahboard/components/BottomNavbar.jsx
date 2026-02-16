@@ -9,7 +9,8 @@ import {
   FaBullseye,
   FaShoppingCart,
   FaVideo,
-  FaBell
+  FaBell,
+  FaBox
 } from 'react-icons/fa'
 import { useNotificationCount } from '../hooks/useNotificationCount'
 
@@ -18,6 +19,7 @@ const BottomNavbar = ({ activeTab, setActiveTab }) => {
   
   const tabs = [
     { id: 'dashboard', label: 'Home', icon: FaHome },
+    { id: 'product-catalog', label: 'Catalog', icon: FaBox },
     { id: 'notifications', label: 'Notifications', icon: FaBell, badge: notificationCount },
     { id: 'sales-tracking', label: 'Tracking', icon: FaMapMarkerAlt },
     { id: 'quotation', label: 'Quotation', icon: FaFileInvoice },

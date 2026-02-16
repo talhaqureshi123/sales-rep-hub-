@@ -25,8 +25,9 @@ import {
   FaSyncAlt,
   FaFileAlt,
   FaVideo,
+  FaFileExcel,
 } from 'react-icons/fa'
-import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp } from '../../services/salemanservices/followUpService'
+import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp, importFollowUps } from '../../services/salemanservices/followUpService'
 import { getMyCustomers, getCustomer } from '../../services/salemanservices/customerService'
 import { getQuotations } from '../../services/salemanservices/quotationService'
 import { createSample } from '../../services/salemanservices/sampleService'
@@ -103,7 +104,123 @@ const Tasks = () => {
   const [selectedItems, setSelectedItems] = useState([]) // Selected products for sample
   const [addItemProduct, setAddItemProduct] = useState('')
   const [addItemQty, setAddItemQty] = useState(1)
-  
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false)
+  const [importExcelFile, setImportExcelFile] = useState(null)
+  const [importExcelPreview, setImportExcelPreview] = useState([])
+  const [importExcelLoading, setImportExcelLoading] = useState(false)
+
+  const taskHeaderToField = (header) => {
+    if (!header || typeof header !== 'string') return null
+    const key = header.trim().toLowerCase().replace(/\s+/g, ' ')
+    const map = {
+      customername: 'customerName', 'customer name': 'customerName', customer_name: 'customerName',
+      type: 'type', tasktype: 'type', 'task type': 'type',
+      duedate: 'dueDate', 'due date': 'dueDate', due_date: 'dueDate', date: 'dueDate',
+      description: 'description',
+      priority: 'priority',
+      customeremail: 'customerEmail', 'customer email': 'customerEmail', customer_email: 'customerEmail',
+      customerphone: 'customerPhone', 'customer phone': 'customerPhone', customer_phone: 'customerPhone',
+      notes: 'notes',
+    }
+    return map[key] || null
+  }
+
+  const parseTaskCSV = (text) => {
+    const lines = text.split(/\r?\n/).filter((line) => line.trim())
+    if (!lines.length) return []
+    const parseRow = (line) => {
+      const out = []
+      let cur = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i]
+        if (c === '"') inQuotes = !inQuotes
+        else if ((c === ',' && !inQuotes) || (c === '\t' && !inQuotes)) { out.push(cur.trim()); cur = '' }
+        else cur += c
+      }
+      out.push(cur.trim())
+      return out
+    }
+    const headerRow = parseRow(lines[0])
+    const headers = headerRow.map((h) => taskHeaderToField(String(h).trim()) || String(h).trim())
+    const preview = []
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseRow(lines[i])
+      const obj = {}
+      headers.forEach((field, j) => {
+        const val = cells[j]
+        if (field && val !== undefined && String(val).trim() !== '') obj[field] = String(val).trim()
+      })
+      if (obj.customerName && obj.dueDate) preview.push(obj)
+    }
+    return preview
+  }
+
+  const handleTaskExcelFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isCSV = /\.csv$/i.test(file.name) || file.type === 'text/csv'
+    if (!isCSV) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Use CSV file',
+        text: 'Please select a CSV file. In Excel: File → Save As → CSV (Comma delimited).',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result
+        if (typeof text !== 'string') { setImportExcelPreview([]); return }
+        setImportExcelPreview(parseTaskCSV(text))
+      } catch (err) {
+        console.error('Parse error:', err)
+        Swal.fire({ icon: 'error', title: 'Parse error', text: err.message || 'Could not read file', confirmButtonColor: '#e9931c' })
+        setImportExcelPreview([])
+      }
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  const handleImportTaskExcelSubmit = async () => {
+    if (!importExcelPreview.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No data',
+        text: 'No valid rows. Use headers: customerName, dueDate. Optional: type, description, priority, customerEmail, notes.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelLoading(true)
+    try {
+      const result = await importFollowUps(importExcelPreview)
+      if (result.success) {
+        const { createdCount = 0, skippedCount = 0 } = result.data || {}
+        setShowImportExcelModal(false)
+        setImportExcelFile(null)
+        setImportExcelPreview([])
+        loadTasks()
+        Swal.fire({
+          icon: 'success',
+          title: 'Import complete',
+          html: `<p>Imported <strong>${createdCount}</strong> task(s).</p>${skippedCount > 0 ? `<p>Skipped: ${skippedCount} row(s).</p>` : ''}`,
+          confirmButtonColor: '#e9931c',
+        })
+      } else {
+        Swal.fire({ icon: 'error', title: 'Import failed', text: result.message || 'Failed to import tasks', confirmButtonColor: '#e9931c' })
+      }
+    } catch (err) {
+      console.error('Import error:', err)
+      Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Error importing tasks', confirmButtonColor: '#e9931c' })
+    } finally {
+      setImportExcelLoading(false)
+    }
+  }
+
   const [formData, setFormData] = useState({
     customer: '',
     customerName: '',
@@ -1075,6 +1192,14 @@ const Tasks = () => {
           >
             <FaSyncAlt className="w-4 h-4" />
             <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => setShowImportExcelModal(true)}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium text-white bg-green-600 hover:bg-green-700 transition-all flex-1 sm:flex-initial justify-center"
+          >
+            <FaFileExcel className="w-4 h-4" />
+            <span className="hidden sm:inline">Import Excel</span>
+            <span className="sm:hidden">Import</span>
           </button>
           <button
             onClick={() => setShowCreateForm(true)}
@@ -2119,6 +2244,81 @@ const Tasks = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import Tasks from Excel / CSV Modal */}
+      {showImportExcelModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Import Tasks from Excel / CSV</h3>
+              <button
+                type="button"
+                onClick={() => { setShowImportExcelModal(false); setImportExcelFile(null); setImportExcelPreview([]) }}
+                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-600">Upload a CSV from your device. Tasks will be assigned to you. First row = headers: <strong>customerName</strong>, <strong>dueDate</strong>. Optional: type, description, priority, customerEmail, notes.</p>
+              <label className="block">
+                <span className="sr-only">Choose file</span>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleTaskExcelFileSelect}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#e9931c] file:text-white file:font-medium hover:file:bg-[#d8820a]"
+                />
+              </label>
+              {importExcelFile && <p className="text-sm text-gray-600">File: <strong>{importExcelFile.name}</strong></p>}
+              {importExcelPreview.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Preview: {importExcelPreview.length} row(s) to import</p>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 sticky top-0">
+                        <tr>
+                          <th className="text-left p-2">Customer</th>
+                          <th className="text-left p-2">Due Date</th>
+                          <th className="text-left p-2">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importExcelPreview.slice(0, 10).map((row, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="p-2">{row.customerName || '—'}</td>
+                            <td className="p-2">{row.dueDate || '—'}</td>
+                            <td className="p-2">{row.type || 'Call'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importExcelPreview.length > 10 && <p className="p-2 text-gray-500 text-sm">... and {importExcelPreview.length - 10} more</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => { setShowImportExcelModal(false); setImportExcelFile(null); setImportExcelPreview([]) }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportTaskExcelSubmit}
+                disabled={importExcelLoading || importExcelPreview.length === 0}
+                className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {importExcelLoading ? 'Importing...' : `Import ${importExcelPreview.length > 0 ? `(${importExcelPreview.length})` : ''}`}
+              </button>
+            </div>
           </div>
         </div>
       )}

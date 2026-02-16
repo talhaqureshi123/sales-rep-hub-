@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { getProducts, createProduct, updateProduct, deleteProduct } from '../../services/adminservices/productService'
-import { FaSearch, FaFilter, FaCheckSquare, FaQrcode, FaDownload, FaTrash, FaChevronDown, FaBarcode, FaEdit } from 'react-icons/fa'
+import { getProducts, createProduct, updateProduct, deleteProduct, importProducts } from '../../services/adminservices/productService'
+import { FaSearch, FaFilter, FaCheckSquare, FaQrcode, FaDownload, FaTrash, FaChevronDown, FaBarcode, FaEdit, FaFileExcel, FaTimes } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const ProductCatalog = () => {
@@ -14,6 +14,10 @@ const ProductCatalog = () => {
   const [selectedProducts, setSelectedProducts] = useState([])
   const [openDownloadDropdown, setOpenDownloadDropdown] = useState(null) // Track which product's dropdown is open
   const [editingProduct, setEditingProduct] = useState(null) // Track which product is being edited
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false)
+  const [importExcelFile, setImportExcelFile] = useState(null)
+  const [importExcelPreview, setImportExcelPreview] = useState([])
+  const [importExcelLoading, setImportExcelLoading] = useState(false)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -506,6 +510,131 @@ const ProductCatalog = () => {
     }
   }
 
+  const productHeaderToField = (header) => {
+    if (!header || typeof header !== 'string') return null
+    const key = header.trim().toLowerCase().replace(/\s+/g, ' ')
+    const map = {
+      name: 'name', productname: 'name', product: 'name',
+      productcode: 'productCode', 'product code': 'productCode', product_code: 'productCode',
+      price: 'price',
+      category: 'category',
+      description: 'description',
+      stock: 'stock',
+      isactive: 'isActive', active: 'isActive', is_active: 'isActive',
+      image: 'image', imageurl: 'imageUrl', 'image url': 'imageUrl',
+      keyfeatures: 'keyFeatures', 'key features': 'keyFeatures',
+    }
+    return map[key] || null
+  }
+
+  const parseCSV = (text) => {
+    const lines = text.split(/\r?\n/).filter((line) => line.trim())
+    if (!lines.length) return []
+    const parseRow = (line) => {
+      const out = []
+      let cur = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i]
+        if (c === '"') inQuotes = !inQuotes
+        else if ((c === ',' && !inQuotes) || (c === '\t' && !inQuotes)) {
+          out.push(cur.trim())
+          cur = ''
+        } else cur += c
+      }
+      out.push(cur.trim())
+      return out
+    }
+    const headerRow = parseRow(lines[0])
+    const headers = headerRow.map((h) => productHeaderToField(String(h).trim()) || String(h).trim())
+    const preview = []
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseRow(lines[i])
+      const obj = {}
+      headers.forEach((field, j) => {
+        const val = cells[j]
+        if (field && val !== undefined && String(val).trim() !== '') {
+          const trimmed = String(val).trim()
+          if (field === 'price' && !isNaN(Number(trimmed))) obj[field] = Number(trimmed)
+          else if (field === 'stock' && !isNaN(Number(trimmed))) obj[field] = Math.max(0, Number(trimmed))
+          else if (field === 'isActive') obj[field] = !['0', 'false', 'no', 'inactive'].includes(trimmed.toLowerCase())
+          else obj[field] = trimmed
+        }
+      })
+      if (obj.name && obj.productCode) preview.push(obj)
+    }
+    return preview
+  }
+
+  const handleExcelFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isCSV = /\.csv$/i.test(file.name) || file.type === 'text/csv'
+    if (!isCSV) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Use CSV file',
+        text: 'Please select a CSV file. In Excel: File → Save As → CSV (Comma delimited).',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result
+        if (typeof text !== 'string') {
+          setImportExcelPreview([])
+          return
+        }
+        const preview = parseCSV(text)
+        setImportExcelPreview(preview)
+      } catch (err) {
+        console.error('Parse error:', err)
+        Swal.fire({ icon: 'error', title: 'Parse error', text: err.message || 'Could not read file', confirmButtonColor: '#e9931c' })
+        setImportExcelPreview([])
+      }
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  const handleImportExcelSubmit = async () => {
+    if (!importExcelPreview.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No data',
+        text: 'No valid rows. Use headers: name, productCode, price, category (and optional: description, stock, isActive, image, keyFeatures).',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelLoading(true)
+    try {
+      const result = await importProducts(importExcelPreview)
+      if (result.success) {
+        const { createdCount = 0, skippedCount = 0 } = result.data || {}
+        setShowImportExcelModal(false)
+        setImportExcelFile(null)
+        setImportExcelPreview([])
+        loadProducts()
+        Swal.fire({
+          icon: 'success',
+          title: 'Import complete',
+          html: `<p>Imported <strong>${createdCount}</strong> product(s).</p>${skippedCount > 0 ? `<p>Skipped: ${skippedCount} row(s).</p>` : ''}`,
+          confirmButtonColor: '#e9931c',
+        })
+      } else {
+        Swal.fire({ icon: 'error', title: 'Import failed', text: result.message || 'Failed to import products', confirmButtonColor: '#e9931c' })
+      }
+    } catch (err) {
+      console.error('Import error:', err)
+      Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Error importing products', confirmButtonColor: '#e9931c' })
+    } finally {
+      setImportExcelLoading(false)
+    }
+  }
+
   return (
     <div className="w-full">
       {/* Header */}
@@ -585,6 +714,13 @@ const ProductCatalog = () => {
             <span>Select</span>
           </button>
           <button
+            onClick={() => setShowImportExcelModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+          >
+            <FaFileExcel className="w-4 h-4" />
+            <span>Import Excel</span>
+          </button>
+          <button
             onClick={() => setShowAddForm(true)}
             className="flex items-center gap-2 px-5 py-2 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors"
           >
@@ -593,6 +729,81 @@ const ProductCatalog = () => {
           </button>
         </div>
       </div>
+
+      {/* Import Excel Modal */}
+      {showImportExcelModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Import Products from Excel / CSV</h3>
+              <button
+                type="button"
+                onClick={() => { setShowImportExcelModal(false); setImportExcelFile(null); setImportExcelPreview([]) }}
+                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-600">Upload a CSV file from your device. First row = headers: <strong>name</strong>, <strong>productCode</strong>, <strong>price</strong>, <strong>category</strong>. Optional: description, stock, isActive, image, keyFeatures.</p>
+              <label className="block">
+                <span className="sr-only">Choose file</span>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleExcelFileSelect}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#e9931c] file:text-white file:font-medium hover:file:bg-[#d8820a]"
+                />
+              </label>
+              {importExcelFile && <p className="text-sm text-gray-600">File: <strong>{importExcelFile.name}</strong></p>}
+              {importExcelPreview.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Preview: {importExcelPreview.length} row(s) to import</p>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 sticky top-0">
+                        <tr>
+                          <th className="text-left p-2">Name</th>
+                          <th className="text-left p-2">Code</th>
+                          <th className="text-right p-2">Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importExcelPreview.slice(0, 10).map((row, i) => (
+                          <tr key={i} className="border-t border-gray-100">
+                            <td className="p-2">{row.name || '—'}</td>
+                            <td className="p-2">{row.productCode || '—'}</td>
+                            <td className="p-2 text-right">{row.price != null ? Number(row.price).toFixed(2) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importExcelPreview.length > 10 && <p className="p-2 text-gray-500 text-sm">... and {importExcelPreview.length - 10} more</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => { setShowImportExcelModal(false); setImportExcelFile(null); setImportExcelPreview([]) }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportExcelSubmit}
+                disabled={importExcelLoading || importExcelPreview.length === 0}
+                className="px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {importExcelLoading ? 'Importing...' : `Import ${importExcelPreview.length > 0 ? `(${importExcelPreview.length})` : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Product Modal */}
       {showAddForm && (

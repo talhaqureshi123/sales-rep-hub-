@@ -8,6 +8,7 @@ const {
   deleteProduct,
   downloadQRCode,
   downloadBarcode,
+  importProducts,
 } = require('../controllers/productController');
 const { protect, authorize } = require('../../middleware/auth');
 
@@ -16,6 +17,7 @@ router.use(protect);
 router.use(authorize('admin'));
 
 router.route('/').get(getProducts).post(createProduct);
+router.post('/import', importProducts);
 router.route('/:id').get(getProduct).put(updateProduct).delete(deleteProduct);
 router.route('/:id/qr-code').get(downloadQRCode);
 router.route('/:id/barcode').get(downloadBarcode);

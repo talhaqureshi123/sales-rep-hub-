@@ -256,9 +256,108 @@ const updateMyFollowUp = async (req, res) => {
   }
 };
 
+// @desc    Import tasks from Excel/CSV (bulk – all assigned to logged-in salesman)
+// @route   POST /api/salesman/follow-ups/import
+// @access  Private/Salesman
+const importMyFollowUps = async (req, res) => {
+  try {
+    const { tasks: rawTasks } = req.body;
+    if (!Array.isArray(rawTasks) || rawTasks.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a non-empty array of tasks",
+      });
+    }
+
+    const validTypes = ["Call", "Visit", "Email", "Meeting", "WhatsApp", "Other", "Quote Follow-up", "Sample Feedback", "Order Check"];
+    const validPriorities = ["Low", "Medium", "High", "Urgent"];
+    const created = [];
+    const skipped = [];
+    const salesmanId = req.user._id;
+
+    for (let i = 0; i < rawTasks.length; i++) {
+      const row = rawTasks[i];
+      const customerName = row.customerName != null ? String(row.customerName).trim() : (row.customer_name != null ? String(row.customer_name).trim() : null);
+      if (!customerName) {
+        skipped.push({ row: i + 1, reason: "Missing customer name" });
+        continue;
+      }
+
+      const typeRaw = (row.type || row.taskType || "").trim();
+      const type = validTypes.includes(typeRaw) ? typeRaw : "Call";
+      const dueDateRaw = row.dueDate || row.due_date || row.date;
+      const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+      if (!dueDate || isNaN(dueDate.getTime())) {
+        skipped.push({ row: i + 1, reason: "Missing or invalid due date" });
+        continue;
+      }
+
+      const priority = validPriorities.includes((row.priority || "").trim()) ? (row.priority || "").trim() : "Medium";
+      const description = row.description ? String(row.description).trim() : `Follow-up: ${customerName}`;
+      const notes = row.notes ? String(row.notes).trim() : undefined;
+      const customerEmail = row.customerEmail || row.customer_email ? String(row.customerEmail || row.customer_email).trim() : undefined;
+      const customerPhone = row.customerPhone || row.customer_phone ? String(row.customerPhone || row.customer_phone).trim() : undefined;
+
+      try {
+        const startOfMinute = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), dueDate.getHours(), dueDate.getMinutes(), 0, 0);
+        const endOfMinute = new Date(startOfMinute.getTime() + 60000);
+        const taskConflict = await FollowUp.findOne({
+          salesman: salesmanId,
+          status: { $ne: "Completed" },
+          dueDate: { $gte: startOfMinute, $lt: endOfMinute },
+        });
+        if (taskConflict) {
+          skipped.push({ row: i + 1, reason: "A task already exists at this time" });
+          continue;
+        }
+        const visitConflict = await VisitTarget.findOne({
+          salesman: salesmanId,
+          status: { $in: ["Pending", "In Progress"] },
+          visitDate: { $gte: startOfMinute, $lt: endOfMinute },
+        });
+        if (visitConflict) {
+          skipped.push({ row: i + 1, reason: "A visit is already scheduled at this time" });
+          continue;
+        }
+
+        const followUp = await FollowUp.create({
+          salesman: salesmanId,
+          customerName,
+          customerEmail,
+          customerPhone,
+          type,
+          priority,
+          scheduledDate: dueDate,
+          dueDate,
+          description,
+          notes,
+          createdBy: req.user._id,
+          approvalStatus: "Approved",
+          source: "app",
+        });
+        created.push({ _id: followUp._id, followUpNumber: followUp.followUpNumber, customerName: followUp.customerName });
+      } catch (err) {
+        skipped.push({ row: i + 1, reason: err.message || "Validation error" });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Imported ${created.length} task(s)`,
+      data: { created, skipped, createdCount: created.length, skippedCount: skipped.length },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error importing tasks",
+    });
+  }
+};
+
 module.exports = {
   getMyFollowUps,
   getMyFollowUp,
   createMyFollowUp,
   updateMyFollowUp,
+  importMyFollowUps,
 };

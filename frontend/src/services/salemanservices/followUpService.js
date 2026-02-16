@@ -70,6 +70,29 @@ export const getMyFollowUp = async (followUpId) => {
   }
 }
 
+// Import tasks from Excel/CSV (bulk – all assigned to logged-in salesman)
+export const importFollowUps = async (tasks) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+    const response = await fetch(`${API_BASE_URL}/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ tasks }),
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error importing tasks:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Create follow-up (salesman creates their own task)
 export const createFollowUp = async (followUpData) => {
   try {

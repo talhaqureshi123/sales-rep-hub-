@@ -7,7 +7,7 @@ const { sendQuotationEmail } = require('../../utils/emailService');
 // @access  Private/Admin
 const getQuotations = async (req, res) => {
   try {
-    const { salesman, status, search, startDate, endDate } = req.query;
+    const { salesman, status, search, startDate, endDate, myQuotesOnly } = req.query;
     const filter = {};
 
     if (salesman) {
@@ -32,10 +32,16 @@ const getQuotations = async (req, res) => {
         filter.createdAt.$lte = new Date(endDate);
       }
     }
+    
+    // Filter by current user if myQuotesOnly is true
+    if (myQuotesOnly === 'true' && req.user && req.user._id) {
+      filter.createdByUser = req.user._id;
+    }
 
     const quotations = await Quotation.find(filter)
       .populate('salesman', 'name email')
       .populate('items.product', 'name productCode price')
+      .populate('createdByUser', 'name email')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -58,7 +64,8 @@ const getQuotation = async (req, res) => {
   try {
     const quotation = await Quotation.findById(req.params.id)
       .populate('salesman', 'name email phone')
-      .populate('items.product', 'name productCode price description');
+      .populate('items.product', 'name productCode price description')
+      .populate('createdByUser', 'name email');
 
     if (!quotation) {
       return res.status(404).json({
@@ -174,11 +181,13 @@ const createQuotation = async (req, res) => {
       notes,
       status: status || 'Draft',
       createdBy: 'admin',
+      createdByUser: req.user._id,
     });
 
     const populatedQuotation = await Quotation.findById(quotation._id)
       .populate('salesman', 'name email')
-      .populate('items.product', 'name productCode price');
+      .populate('items.product', 'name productCode price')
+      .populate('createdByUser', 'name email');
 
     res.status(201).json({
       success: true,
@@ -272,7 +281,8 @@ const updateQuotation = async (req, res) => {
 
     const populatedQuotation = await Quotation.findById(quotation._id)
       .populate('salesman', 'name email')
-      .populate('items.product', 'name productCode price');
+      .populate('items.product', 'name productCode price')
+      .populate('createdByUser', 'name email');
 
     res.status(200).json({
       success: true,

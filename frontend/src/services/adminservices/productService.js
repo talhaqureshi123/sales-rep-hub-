@@ -31,6 +31,29 @@ export const getProducts = async () => {
   }
 }
 
+// Import products from Excel/CSV (bulk)
+export const importProducts = async (products) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+    const response = await fetch(`${API_BASE_URL}/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ products }),
+    })
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error importing products:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Create product
 export const createProduct = async (productData) => {
   try {

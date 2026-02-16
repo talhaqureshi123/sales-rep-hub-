@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { getAdminDashboard } from '../../services/adminservices/dashboardService'
-import { 
-  FaCalendarAlt, 
-  FaChartLine, 
-  FaBell, 
+import {
+  FaCalendarAlt,
+  FaChartLine,
+  FaBell,
   FaMapMarkerAlt,
   FaFileInvoice,
   FaCheckCircle,
@@ -123,7 +123,7 @@ const AdminDashboardPage = () => {
   }
 
   const handleViewCustomers = () => {
-    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'customer-management' }))
+    window.dispatchEvent(new CustomEvent('navigateToTab', { detail: { tab: 'customer-management', filter: 'myCustomers' } }))
   }
 
   const handleViewVisits = () => {
@@ -211,10 +211,10 @@ const AdminDashboardPage = () => {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="visits" 
-                stroke="#e9931c" 
+              <Line
+                type="monotone"
+                dataKey="visits"
+                stroke="#e9931c"
                 strokeWidth={2}
                 name="Visits"
               />
@@ -264,18 +264,17 @@ const AdminDashboardPage = () => {
                     <p className="font-semibold text-gray-800">{schedule.name}</p>
                     <p className="text-sm text-gray-600">{schedule.address || schedule.city || 'Location'}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        schedule.priority === 'High' ? 'bg-red-100 text-red-700' :
-                        schedule.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${schedule.priority === 'High' ? 'bg-red-100 text-red-700' :
+                          schedule.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
+                        }`}>
                         {schedule.priority}
                       </span>
                       {schedule.visitDate && (
                         <span className="text-xs text-gray-500">
-                          {new Date(schedule.visitDate).toLocaleTimeString('en-US', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
+                          {new Date(schedule.visitDate).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit'
                           })}
                         </span>
                       )}
@@ -457,11 +456,10 @@ const AdminDashboardPage = () => {
                     <p className="text-sm font-medium text-gray-800 truncate">{visit.name || 'Visit'}</p>
                     <p className="text-xs text-gray-500 truncate">{visit.address || visit.city || 'Location'}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                        visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                          visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700'
+                        }`}>
                         {visit.status || 'Pending'}
                       </span>
                       {visit.visitDate && (
@@ -504,11 +502,10 @@ const AdminDashboardPage = () => {
                       Target: £{Number(target.targetAmount || 0).toFixed(2)}
                     </p>
                     {target.status && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${
-                        target.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                        target.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${target.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                          target.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-yellow-100 text-yellow-700'
+                        }`}>
                         {target.status}
                       </span>
                     )}

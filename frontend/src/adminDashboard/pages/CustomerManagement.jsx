@@ -80,19 +80,23 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
     }
   }, [initialFilter, onFilterConsumed])
 
-  // Load customers on mount; if opening from dashboard "My Customers", filter effect will load with correct filter
+  // Load customers on mount; when opening from dashboard "My Customers", load with myCustomersOnly so only my customers show
   useEffect(() => {
     const role = localStorage.getItem('userRole')
     setUserRole(role)
     let cancelled = false
     const run = async () => {
-      if (initialFilter === 'myCustomers') {
-        if (!cancelled) loadSalesmen().catch(() => {})
-        return
-      }
       setLoading(true)
       try {
-        await loadCustomers()
+        if (initialFilter === 'myCustomers') {
+          const params = { listView: true, limit: 1000, myCustomersOnly: true }
+          const result = await getCustomers(params)
+          if (!cancelled && result.success && result.data) {
+            setCustomers(result.data)
+          } else if (!cancelled) setCustomers([])
+        } else {
+          await loadCustomers()
+        }
         if (!cancelled) loadSalesmen().catch(() => {})
       } finally {
         if (!cancelled) setLoading(false)
@@ -100,7 +104,7 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
     }
     run()
     return () => { cancelled = true }
-  }, [])
+  }, [initialFilter])
 
   // Reload when filters change (skip first run to avoid double fetch on mount)
   useEffect(() => {

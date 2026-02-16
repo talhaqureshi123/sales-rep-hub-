@@ -10,6 +10,7 @@ const {
   rejectFollowUp,
   pushToHubSpot,
   getFollowUpStats,
+  importFollowUps,
 } = require('../controllers/followUpController');
 const { protect, authorize } = require('../../middleware/auth');
 
@@ -19,6 +20,7 @@ router.use(authorize('admin'));
 
 router.get('/stats', getFollowUpStats);
 router.route('/').get(getFollowUps).post(createFollowUp);
+router.post('/import', importFollowUps);
 router.route('/:id').get(getFollowUp).put(updateFollowUp).delete(deleteFollowUp);
 router.put('/:id/approve', approveFollowUp);
 router.put('/:id/reject', rejectFollowUp);

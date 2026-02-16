@@ -102,6 +102,10 @@ const quotationSchema = new mongoose.Schema({
     enum: ['admin', 'salesman'],
     default: 'salesman',
   },
+  createdByUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   notes: {
     type: String,
     trim: true,
