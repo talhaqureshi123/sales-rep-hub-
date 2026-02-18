@@ -20,7 +20,7 @@ export const getMyCustomers = async (params = {}) => {
     if (params.status) queryParams.append('status', params.status)
     if (params.search) queryParams.append('search', params.search)
 
-    const url = queryParams.toString() 
+    const url = queryParams.toString()
       ? `${API_BASE_URL}?${queryParams.toString()}`
       : API_BASE_URL
 
@@ -92,10 +92,36 @@ export const createCustomer = async (customerData) => {
   }
 }
 
+// Import customers (bulk – from Excel)
+export const importCustomers = async (customers) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ customers }),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error importing customers:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 export default {
   getMyCustomers,
   getCustomer,
   createCustomer,
+  importCustomers,
 }
 
 

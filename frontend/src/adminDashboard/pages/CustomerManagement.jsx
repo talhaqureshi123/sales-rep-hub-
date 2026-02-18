@@ -2338,6 +2338,7 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

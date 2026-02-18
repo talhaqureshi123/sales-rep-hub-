@@ -34,7 +34,7 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
   ]
 
   return (
-    <div className="h-screen w-20 md:w-72 bg-gray-50 flex flex-col shadow-lg border-r border-gray-200 flex-shrink-0 m-0 transition-all duration-300">
+    <div className="h-[100dvh] w-20 md:w-72 bg-gray-50 flex flex-col shadow-lg border-r border-gray-200 flex-shrink-0 m-0 transition-all duration-300">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
@@ -60,8 +60,8 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 transition-all duration-200 rounded-md mb-2 group relative ${isActive
-                  ? 'bg-[#e9931c] text-white'
-                  : 'text-gray-700 hover:bg-orange-50 hover:text-[#e9931c]'
+                ? 'bg-[#e9931c] text-white'
+                : 'text-gray-700 hover:bg-orange-50 hover:text-[#e9931c]'
                 }`}
               title={tab.label}
             >
@@ -69,8 +69,8 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
                 <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-white' : 'text-gray-700 group-hover:text-[#e9931c]'}`} />
                 {tab.badge !== undefined && tab.badge > 0 && (
                   <span className={`absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${isActive
-                      ? 'bg-white text-[#e9931c]'
-                      : 'bg-red-500 text-white'
+                    ? 'bg-white text-[#e9931c]'
+                    : 'bg-red-500 text-white'
                     }`}>
                     {tab.badge > 99 ? '99+' : tab.badge}
                   </span>
@@ -83,7 +83,7 @@ const SalesmanSidebar = ({ activeTab, setActiveTab, onLogout }) => {
       </div>
 
       {/* Logout Button at Bottom */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-200 pb-[env(safe-area-inset-bottom,16px)]">
         <button
           onClick={onLogout}
           className="w-full px-2 md:px-4 py-3 flex items-center justify-center md:justify-start gap-2 md:gap-3 text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200 group"

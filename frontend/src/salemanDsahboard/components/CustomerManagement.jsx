@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getMyCustomers, createCustomer } from '../../services/salemanservices/customerService'
-import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner } from 'react-icons/fa'
+import { getMyCustomers, createCustomer, importCustomers } from '../../services/salemanservices/customerService'
+import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner, FaFileExcel, FaCheckCircle, FaTimes } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
@@ -10,6 +10,166 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [userRole, setUserRole] = useState(null) // Current user role
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false)
+  const [importExcelFile, setImportExcelFile] = useState(null)
+  const [importExcelPreview, setImportExcelPreview] = useState([])
+  const [importExcelLoading, setImportExcelLoading] = useState(false)
+
+  // Map Excel header (any case, with spaces) to customer field name
+  const excelHeaderToField = (header) => {
+    if (!header || typeof header !== 'string') return null
+    const key = header.trim().toLowerCase().replace(/\s+/g, ' ')
+    const map = {
+      'first name': 'firstName',
+      'firstname': 'firstName',
+      'name': 'firstName',
+      'contact person': 'contactPerson',
+      'contactperson': 'contactPerson',
+      'company': 'company',
+      'email': 'email',
+      'phone': 'phone',
+      'address': 'address',
+      'city': 'city',
+      'state': 'state',
+      'pincode': 'postcode',
+      'postcode': 'postcode',
+      'pin code': 'postcode',
+      'post code': 'postcode',
+      'status': 'status',
+      'notes': 'notes',
+      'order potential': 'orderPotential',
+      'orderpotential': 'orderPotential',
+      'monthly spend': 'monthlySpend',
+      'monthlyspend': 'monthlySpend',
+      'competitor info': 'competitorInfo',
+      'competitorinfo': 'competitorInfo',
+    }
+    return map[key] || (key.replace(/\s+/g, '') ? key.replace(/\s+/g, '') : null)
+  }
+
+  // Parse CSV text (first row = headers) into array of objects
+  const parseCSV = (text) => {
+    const lines = text.split(/\r?\n/).filter((line) => line.trim())
+    if (!lines.length) return []
+    const parseRow = (line) => {
+      const out = []
+      let cur = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i]
+        if (c === '"') {
+          inQuotes = !inQuotes
+        } else if ((c === ',' && !inQuotes) || (c === '\t' && !inQuotes)) {
+          out.push(cur.trim())
+          cur = ''
+        } else {
+          cur += c
+        }
+      }
+      out.push(cur.trim())
+      return out
+    }
+    const headerRow = parseRow(lines[0])
+    const headers = headerRow.map((h) => excelHeaderToField(String(h).trim()) || String(h).trim())
+    const preview = []
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseRow(lines[i])
+      const obj = {}
+      headers.forEach((field, j) => {
+        const val = cells[j]
+        if (field && val !== undefined && String(val).trim() !== '') {
+          const trimmed = String(val).trim()
+          obj[field] = field === 'monthlySpend' && !isNaN(Number(trimmed)) ? Number(trimmed) : trimmed
+        }
+      })
+      if (obj.firstName || obj.name) {
+        if (!obj.name && obj.firstName) obj.name = obj.firstName
+        if (!obj.firstName && obj.name) obj.firstName = obj.name
+        preview.push(obj)
+      }
+    }
+    return preview
+  }
+
+  const handleExcelFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isCSV = /\.csv$/i.test(file.name) || file.type === 'text/csv'
+    if (!isCSV) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Use CSV file',
+        text: 'Please select a CSV file. In Excel: File → Save As → CSV (Comma delimited).',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result
+        const preview = parseCSV(String(text))
+        setImportExcelPreview(preview)
+      } catch (err) {
+        console.error('Parse error:', err)
+        Swal.fire({
+          icon: 'error',
+          title: 'Parse error',
+          text: err.message || 'Could not read file',
+          confirmButtonColor: '#e9931c',
+        })
+        setImportExcelPreview([])
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const handleImportExcelSubmit = async () => {
+    if (!importExcelPreview.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No data',
+        text: 'No valid rows to import. Ensure the first row has headers (e.g. First Name, Email, Phone) and at least one data row.',
+        confirmButtonColor: '#e9931c',
+      })
+      return
+    }
+    setImportExcelLoading(true)
+    try {
+      const result = await importCustomers(importExcelPreview)
+      if (result.success) {
+        const { createdCount = 0, skippedCount = 0 } = result.data || {}
+        setShowImportExcelModal(false)
+        setImportExcelFile(null)
+        setImportExcelPreview([])
+        loadCustomers()
+        Swal.fire({
+          icon: 'success',
+          title: 'Import complete',
+          html: `<p>Imported <strong>${createdCount}</strong> customer(s).</p>${skippedCount > 0 ? `<p>Skipped: ${skippedCount} row(s).</p>` : ''}`,
+          confirmButtonColor: '#e9931c',
+        })
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Import failed',
+          text: result.message || 'Failed to import customers',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (err) {
+      console.error('Import error:', err)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: err.message || 'Error importing customers',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setImportExcelLoading(false)
+    }
+  }
 
   const [geocodingAddress, setGeocodingAddress] = useState(false)
   const [formData, setFormData] = useState({
@@ -319,16 +479,118 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
             <option value="Inactive">Inactive</option>
           </select>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="px-4 sm:px-6 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors text-sm sm:text-base font-semibold flex items-center justify-center gap-2"
-        >
-          <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span className="whitespace-nowrap">Add Customer</span>
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setShowImportExcelModal(true)}
+            className="flex-1 px-4 sm:px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base font-semibold flex items-center justify-center gap-2"
+          >
+            <FaFileExcel className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="whitespace-nowrap">Import Excel</span>
+          </button>
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="flex-1 px-4 sm:px-6 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors text-sm sm:text-base font-semibold flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="whitespace-nowrap">Add Customer</span>
+          </button>
+        </div>
       </div>
+
+      {/* Import from Excel Modal */}
+      {showImportExcelModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-start sm:items-center justify-center z-[100] p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-xl shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <FaFileExcel className="w-6 h-6 text-green-600" />
+                Import customers from Excel
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportExcelModal(false)
+                  setImportExcelFile(null)
+                  setImportExcelPreview([])
+                }}
+                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg"
+                aria-label="Close"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-600">
+                Upload a <strong>CSV</strong> file. First row = headers. In Excel: File → Save As → CSV. Supported columns: <strong>First Name</strong>, Contact Person, Company, Email, Phone, Address, City, State, Pincode/Postcode, Status, Notes, Order Potential, Monthly Spend.
+              </p>
+              <label className="block">
+                <span className="sr-only">Choose file</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleExcelFileSelect}
+                  className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#e9931c] file:text-white file:font-semibold hover:file:bg-[#d8820a]"
+                />
+              </label>
+              {importExcelFile && (
+                <p className="text-sm text-gray-700">
+                  File: <strong>{importExcelFile.name}</strong>
+                </p>
+              )}
+              {importExcelPreview.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-sm font-semibold text-gray-800 mb-2">
+                    Preview: {importExcelPreview.length} row(s) to import
+                  </p>
+                  <div className="max-h-40 overflow-y-auto text-xs text-gray-600">
+                    {importExcelPreview.slice(0, 5).map((row, i) => (
+                      <div key={i} className="py-1 border-b border-gray-100 last:border-0">
+                        {row.firstName || row.name} {row.email ? `(${row.email})` : ''}
+                      </div>
+                    ))}
+                    {importExcelPreview.length > 5 && (
+                      <p className="py-1 text-gray-500">... and {importExcelPreview.length - 5} more</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 justify-end p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportExcelModal(false)
+                  setImportExcelFile(null)
+                  setImportExcelPreview([])
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportExcelSubmit}
+                disabled={importExcelLoading || importExcelPreview.length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {importExcelLoading ? (
+                  <>
+                    <FaSpinner className="w-4 h-4 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <FaCheckCircle className="w-4 h-4" />
+                    Import {importExcelPreview.length > 0 ? `(${importExcelPreview.length})` : ''}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Customer Modal */}
       {showAddForm && (
@@ -699,8 +961,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     <h3 className="text-base font-semibold text-gray-900 mb-1">{customer.name}</h3>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${customer.status === 'Active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-gray-100 text-gray-800'
                         }`}>
                         {customer.status}
                       </span>
@@ -746,8 +1008,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                       if (!getWhatsAppHref(customer.phone)) e.preventDefault()
                     }}
                     className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${getWhatsAppHref(customer.phone)
-                        ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                      ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                      : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                       }`}
                     title="Send WhatsApp"
                   >
@@ -762,8 +1024,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                       if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
                     }}
                     className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${getEmailHref(customer.email, customer.name)
-                        ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                      : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                       }`}
                     title="Send Email"
                   >
@@ -806,8 +1068,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                               if (!getWhatsAppHref(customer.phone)) e.preventDefault()
                             }}
                             className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${getWhatsAppHref(customer.phone)
-                                ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                                : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                              ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                               }`}
                             title="Send WhatsApp"
                           >
@@ -822,8 +1084,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                               if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
                             }}
                             className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${getEmailHref(customer.email, customer.name)
-                                ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                                : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                              ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                               }`}
                             title="Send Email"
                           >
@@ -846,8 +1108,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${customer.status === 'Active'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
                             }`}>
                             {customer.status}
                           </span>

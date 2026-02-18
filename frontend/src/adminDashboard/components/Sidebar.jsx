@@ -48,10 +48,10 @@ const Sidebar = ({ activeSection, setActiveSection, onLogout }) => {
   }
 
   return (
-    <div className="h-screen w-20 bg-gray-800 flex flex-col items-center py-6 shadow-lg">
+    <div className="h-[100dvh] w-20 bg-gray-800 flex flex-col items-center py-6 shadow-lg flex-shrink-0">
       {/* Logo */}
       <div className="mb-8">
-        <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{backgroundColor: '#e9931c'}}>
+        <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#e9931c' }}>
           <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -64,11 +64,10 @@ const Sidebar = ({ activeSection, setActiveSection, onLogout }) => {
           <button
             key={item.id}
             onClick={() => setActiveSection(item.id)}
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeSection === item.id
-                ? 'text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
+            className={`p-3 rounded-lg transition-all duration-200 ${activeSection === item.id
+              ? 'text-white'
+              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
             style={
               activeSection === item.id
                 ? { backgroundColor: '#e9931c' }
@@ -82,8 +81,8 @@ const Sidebar = ({ activeSection, setActiveSection, onLogout }) => {
       </div>
 
       {/* Logout Button */}
-      <div className="mt-auto">
-        <button 
+      <div className="mt-auto pb-[env(safe-area-inset-bottom,16px)] mb-4">
+        <button
           onClick={onLogout}
           className="p-3 rounded-lg text-gray-400 hover:text-white hover:bg-red-600 transition-all duration-200"
           title="Logout"

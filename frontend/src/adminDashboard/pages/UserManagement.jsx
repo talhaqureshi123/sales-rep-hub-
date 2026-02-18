@@ -65,7 +65,7 @@ const UserManagement = () => {
             try {
               await navigator.clipboard.writeText(setupLink)
               Swal.fire({ icon: 'info', title: 'Copied!', text: 'Link copied to clipboard. Paste and send to the salesman.', confirmButtonColor: '#e9931c', timer: 2000, timerProgressBar: true })
-            } catch (_) {}
+            } catch (_) { }
           }
         } else {
           await Swal.fire({
@@ -219,6 +219,7 @@ const UserManagement = () => {
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

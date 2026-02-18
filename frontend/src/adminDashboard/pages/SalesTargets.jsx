@@ -128,7 +128,7 @@ const SalesTargets = () => {
       ...formData,
       [name]: value,
     }
-    
+
     // Period = 30 din month, 7 din week, 90 din quarter – end date auto from start
     if (name === 'period' && value) {
       if (updatedFormData.startDate) {
@@ -142,7 +142,7 @@ const SalesTargets = () => {
     if (name === 'startDate' && value && formData.period) {
       updatedFormData.endDate = calculateEndDateFromStart(value, formData.period) || updatedFormData.endDate
     }
-    
+
     setFormData(updatedFormData)
   }
 
@@ -484,8 +484,8 @@ const SalesTargets = () => {
                   key={status}
                   onClick={() => setFilters({ ...filters, status })}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filters.status === status
-                      ? 'bg-[#e9931c] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   {status}
@@ -517,8 +517,8 @@ const SalesTargets = () => {
                   key={period}
                   onClick={() => setFilters({ ...filters, period })}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filters.period === period
-                      ? 'bg-[#e9931c] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   {period}
@@ -680,115 +680,115 @@ const SalesTargets = () => {
             </div>
             <form onSubmit={handleCreateTarget} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sales Rep <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="salesman"
-                  value={formData.salesman}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select rep</option>
-                  {salesmen.map((salesman) => (
-                    <option key={salesman._id} value={salesman._id}>
-                      {salesman.name || salesman.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="targetName"
-                  value={formData.targetName}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g., Q1 2025 Orders Target"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                />
-              </div>
-
-              {/* Target Type is always Orders - hidden field */}
-              <input type="hidden" name="targetType" value="Orders" />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Amount (£) <span className="text-gray-400 text-xs">(optional)</span>
-                </label>
-                <input
-                  type="number"
-                  name="targetAmount"
-                  value={formData.targetAmount}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  placeholder="e.g. 5000"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                />
-                <p className="text-xs text-gray-500 mt-1">Target sales amount in £ – will show Target / Amount / Remaining</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Period <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="period"
-                  value={formData.period}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select period</option>
-                  {periodOptions.filter(p => p !== 'All').map((period) => (
-                    <option key={period} value={period}>{period}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Week = 7 days, Month = 30 days, Quarter = 90 days, Year = 365 days</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Date <span className="text-red-500">*</span>
+                    Sales Rep <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    <FaCalendarAlt className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="date"
-                      name="startDate"
-                      value={formData.startDate}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    />
-                  </div>
+                  <select
+                    name="salesman"
+                    value={formData.salesman}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  >
+                    <option value="">Select rep</option>
+                    {salesmen.map((salesman) => (
+                      <option key={salesman._id} value={salesman._id}>
+                        {salesman.name || salesman.email}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Date <span className="text-red-500">*</span>
+                    Target Name <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    <FaCalendarAlt className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="date"
-                      name="endDate"
-                      value={formData.endDate}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    />
+                  <input
+                    type="text"
+                    name="targetName"
+                    value={formData.targetName}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="e.g., Q1 2025 Orders Target"
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  />
+                </div>
+
+                {/* Target Type is always Orders - hidden field */}
+                <input type="hidden" name="targetType" value="Orders" />
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Target Amount (£) <span className="text-gray-400 text-xs">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="targetAmount"
+                    value={formData.targetAmount}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 5000"
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Target sales amount in £ – will show Target / Amount / Remaining</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Period <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="period"
+                    value={formData.period}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  >
+                    <option value="">Select period</option>
+                    {periodOptions.filter(p => p !== 'All').map((period) => (
+                      <option key={period} value={period}>{period}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Week = 7 days, Month = 30 days, Quarter = 90 days, Year = 365 days</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <FaCalendarAlt className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="date"
+                        name="startDate"
+                        value={formData.startDate}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <FaCalendarAlt className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="date"
+                        name="endDate"
+                        value={formData.endDate}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full pl-8 pr-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
               </div>
               <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
@@ -836,81 +836,81 @@ const SalesTargets = () => {
             </div>
             <form onSubmit={handleUpdateTarget} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {/* Same form fields as create modal */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sales Rep *</label>
-                <select
-                  name="salesman"
-                  value={formData.salesman}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select rep</option>
-                  {salesmen.map((salesman) => (
-                    <option key={salesman._id} value={salesman._id}>
-                      {salesman.name || salesman.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Target Name *</label>
-                <input
-                  type="text"
-                  name="targetName"
-                  value={formData.targetName}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                />
-              </div>
-
-              {/* Target Type is always Orders - hidden field */}
-              <input type="hidden" name="targetType" value="Orders" />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Period *</label>
-                <select
-                  name="period"
-                  value={formData.period}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select period</option>
-                  {periodOptions.filter(p => p !== 'All').map((period) => (
-                    <option key={period} value={period}>{period}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Week = 7 days, Month = 30 days, Quarter = 90 days, Year = 365 days</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+                {/* Same form fields as create modal */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Sales Rep *</label>
+                  <select
+                    name="salesman"
+                    value={formData.salesman}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  >
+                    <option value="">Select rep</option>
+                    {salesmen.map((salesman) => (
+                      <option key={salesman._id} value={salesman._id}>
+                        {salesman.name || salesman.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Target Name *</label>
                   <input
-                    type="date"
-                    name="startDate"
-                    value={formData.startDate}
+                    type="text"
+                    name="targetName"
+                    value={formData.targetName}
                     onChange={handleInputChange}
                     required
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                   />
                 </div>
+
+                {/* Target Type is always Orders - hidden field */}
+                <input type="hidden" name="targetType" value="Orders" />
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
-                  <input
-                    type="date"
-                    name="endDate"
-                    value={formData.endDate}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Period *</label>
+                  <select
+                    name="period"
+                    value={formData.period}
                     onChange={handleInputChange}
                     required
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  />
+                  >
+                    <option value="">Select period</option>
+                    {periodOptions.filter(p => p !== 'All').map((period) => (
+                      <option key={period} value={period}>{period}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Week = 7 days, Month = 30 days, Quarter = 90 days, Year = 365 days</p>
                 </div>
-              </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                    <input
+                      type="date"
+                      name="startDate"
+                      value={formData.startDate}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
+                    <input
+                      type="date"
+                      name="endDate"
+                      value={formData.endDate}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    />
+                  </div>
+                </div>
 
               </div>
               <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
@@ -936,6 +936,7 @@ const SalesTargets = () => {
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

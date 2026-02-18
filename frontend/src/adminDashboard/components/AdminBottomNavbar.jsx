@@ -34,7 +34,7 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 lg:hidden pb-[env(safe-area-inset-bottom)]">
       <div
-        className="flex items-center h-14 min-h-[56px] sm:h-16 sm:min-h-[64px] overflow-x-auto overflow-y-hidden pl-2 pr-2"
+        className="flex items-center justify-between w-full h-14 min-h-[56px] sm:h-16 sm:min-h-[64px] overflow-x-auto overflow-y-hidden px-1"
         style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         role="tablist"
         aria-label="Bottom navigation"
@@ -47,8 +47,8 @@ const AdminBottomNavbar = ({ activeTab, setActiveTab }) => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex flex-col items-center justify-center min-w-[56px] sm:min-w-[68px] h-full px-1 sm:px-2 transition-colors flex-shrink-0 touch-manipulation ${isActive
-                  ? 'text-[#e9931c]'
-                  : 'text-gray-600'
+                ? 'text-[#e9931c]'
+                : 'text-gray-600'
                 }`}
               title={tab.label}
               role="tab"

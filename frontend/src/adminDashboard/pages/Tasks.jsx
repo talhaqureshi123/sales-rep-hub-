@@ -3939,7 +3939,7 @@ const Tasks = () => {
                 {selectedTask.status !== 'Completed' && (
                   <button
                     onClick={() => handleCompleteTask(selectedTask._id)}
-                    className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors text-sm md:text-base"
+                    className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors text-sm md:text-base whitespace-nowrap"
                     style={{
                       backgroundColor: appTheme.primary.main,
                       color: appTheme.text.white
@@ -3954,7 +3954,7 @@ const Tasks = () => {
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'live-tracking' }))
                   }}
-                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 text-sm md:text-base"
+                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 text-sm md:text-base whitespace-nowrap"
                   style={{
                     backgroundColor: appTheme.primary.main,
                     color: appTheme.text.white
@@ -3967,20 +3967,10 @@ const Tasks = () => {
                 </button>
                 <button
                   onClick={() => selectedTask && handleDeleteTask(selectedTask._id)}
-                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 bg-red-600 text-white hover:bg-red-700 text-sm md:text-base"
+                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 bg-red-600 text-white hover:bg-red-700 text-sm md:text-base whitespace-nowrap"
                 >
                   <FaTrash className="w-4 h-4" />
                   <span className="hidden md:inline">Delete Task</span><span className="md:hidden">Delete</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowTaskDetail(false)
-                    // Don't reset selectedTask - keep it for when modal reopens
-                    // setSelectedTask(null)
-                  }}
-                  className="text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
-                >
-                  <FaTimes className="w-5 h-5" />
                 </button>
               </div>
             </div>
