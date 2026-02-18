@@ -307,7 +307,8 @@ const importMyFollowUps = async (req, res) => {
           dueDate: { $gte: startOfMinute, $lt: endOfMinute },
         });
         if (taskConflict) {
-          skipped.push({ row: i + 1, reason: "A task already exists at this time" });
+          const isExactDuplicate = taskConflict.customerName === customerName && taskConflict.type === type && taskConflict.description === description;
+          skipped.push({ row: i + 1, reason: isExactDuplicate ? "Exact same task already exists" : "A task already exists at this time" });
           continue;
         }
         const visitConflict = await VisitTarget.findOne({

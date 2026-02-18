@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { 
-  FaCheckCircle, 
-  FaClock, 
-  FaExclamationTriangle, 
-  FaPlus, 
-  FaSearch, 
+import {
+  FaCheckCircle,
+  FaClock,
+  FaExclamationTriangle,
+  FaPlus,
+  FaSearch,
   FaSpinner,
   FaCalendarAlt,
   FaUser,
@@ -69,7 +69,7 @@ const parseNotesToActivities = (notesStr) => {
   if (!notesStr || typeof notesStr !== 'string') return []
   const notesLines = notesStr.split('\n').filter(line => line.trim())
   const parsed = []
-  const regex = /\[(\d{1,2}\/\d{1,2}\/\d{4}),\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(\w+):\s*(.+)/ 
+  const regex = /\[(\d{1,2}\/\d{1,2}\/\d{4}),\s*(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(\w+):\s*(.+)/
   notesLines.forEach(line => {
     const match = line.match(regex)
     if (!match) return
@@ -208,7 +208,7 @@ const Tasks = () => {
   const [noteInput, setNoteInput] = useState('') // Input for quick note typing
   const noteInputRef = useRef(null) // Ref for note input field
   const [activitiesSearch, setActivitiesSearch] = useState('') // Search filter for activities
-  
+
   const [formData, setFormData] = useState({
     salesman: '',
     customer: '',
@@ -352,7 +352,7 @@ const Tasks = () => {
 
   const filtered = useMemo(() => {
     let list = [...tasks] // Create a copy to avoid mutating original
-    
+
     // My creation only: show only tasks created by current admin
     if (activeFilters.myCreationOnly) {
       const currentUserId = localStorage.getItem('userId')
@@ -372,7 +372,7 @@ const Tasks = () => {
         if (value === null || value === undefined) return ''
         return String(value).toLowerCase()
       }
-      
+
       list = list.filter((t) => {
         return (
           safeSearch(t.description).includes(s) ||
@@ -406,7 +406,7 @@ const Tasks = () => {
         )
       })
     }
-    
+
     // Filter by source/status tabs (only if no search is active, or apply after search)
     if (activeTab === 'AppCreated') {
       // Tasks created in app by admin or salesman (not imported from HubSpot)
@@ -414,19 +414,19 @@ const Tasks = () => {
         const createdBy = t.createdBy?._id || t.createdBy
         const createdByRole = t.createdBy?.role
         const hasHubSpotId = t.hubspotTaskId && t.hubspotTaskId !== '' && t.hubspotTaskId !== null
-        
+
         const description = (t.description || '').toLowerCase()
         const customerName = (t.customerName || '').toLowerCase()
-        
-        const matchesImportPattern = description.includes('hubspot task') || 
-                                     description.match(/^hubspot task \d+$/) ||
-                                     customerName === 'hubspot contact'
-        
+
+        const matchesImportPattern = description.includes('hubspot task') ||
+          description.match(/^hubspot task \d+$/) ||
+          customerName === 'hubspot contact'
+
         const isImported = hasHubSpotId && matchesImportPattern
-        
-        return createdBy && 
-               (createdByRole === 'admin' || createdByRole === 'salesman' || !createdByRole) &&
-               !isImported
+
+        return createdBy &&
+          (createdByRole === 'admin' || createdByRole === 'salesman' || !createdByRole) &&
+          !isImported
       })
     } else if (activeTab === 'HubSpotImported') {
       list = list.filter((t) => t.source === 'hubspot')
@@ -449,7 +449,7 @@ const Tasks = () => {
     {
       const uniqueTasks = []
       const seenCustomers = new Set()
-      
+
       list.forEach(task => {
         // Visit requests: har ek alag row (dedupe mat karo)
         if (task.isVisitTarget || task.visitTargetId) {
@@ -458,19 +458,19 @@ const Tasks = () => {
         }
         // Create a unique key for this task based on customer
         const customerId = task.customer ? (typeof task.customer === 'object' ? task.customer._id : task.customer) : null
-        const taskEmail = task.customerEmail || 
-                         (task.customer && typeof task.customer === 'object' ? task.customer.email : '') || 
-                         task.associatedContactEmail
-        const taskName = task.customerName || 
-                        (task.customer && typeof task.customer === 'object' ? (task.customer.name || task.customer.firstName) : '') || 
-                        task.associatedContactName
-        
+        const taskEmail = task.customerEmail ||
+          (task.customer && typeof task.customer === 'object' ? task.customer.email : '') ||
+          task.associatedContactEmail
+        const taskName = task.customerName ||
+          (task.customer && typeof task.customer === 'object' ? (task.customer.name || task.customer.firstName) : '') ||
+          task.associatedContactName
+
         // Create unique identifier
-        const uniqueKey = customerId ? `customer_${customerId}` : 
-                         taskEmail ? `email_${taskEmail.toLowerCase().trim()}` :
-                         taskName ? `name_${taskName.toLowerCase().trim()}` :
-                         `task_${task._id}`
-        
+        const uniqueKey = customerId ? `customer_${customerId}` :
+          taskEmail ? `email_${taskEmail.toLowerCase().trim()}` :
+            taskName ? `name_${taskName.toLowerCase().trim()}` :
+              `task_${task._id}`
+
         // Only add if we haven't seen this customer before
         // Keep the most recent task (by dueDate or createdAt)
         if (!seenCustomers.has(uniqueKey)) {
@@ -480,21 +480,21 @@ const Tasks = () => {
           // If we've seen this customer, check if current task is more recent
           const existingIndex = uniqueTasks.findIndex(t => {
             const tCustomerId = t.customer ? (typeof t.customer === 'object' ? t.customer._id : t.customer) : null
-            const tEmail = t.customerEmail || 
-                          (t.customer && typeof t.customer === 'object' ? t.customer.email : '') || 
-                          t.associatedContactEmail
-            const tName = t.customerName || 
-                          (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') || 
-                          t.associatedContactName
-            
-            const tUniqueKey = tCustomerId ? `customer_${tCustomerId}` : 
-                              tEmail ? `email_${tEmail.toLowerCase().trim()}` :
-                              tName ? `name_${tName.toLowerCase().trim()}` :
-                              `task_${t._id}`
-            
+            const tEmail = t.customerEmail ||
+              (t.customer && typeof t.customer === 'object' ? t.customer.email : '') ||
+              t.associatedContactEmail
+            const tName = t.customerName ||
+              (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') ||
+              t.associatedContactName
+
+            const tUniqueKey = tCustomerId ? `customer_${tCustomerId}` :
+              tEmail ? `email_${tEmail.toLowerCase().trim()}` :
+                tName ? `name_${tName.toLowerCase().trim()}` :
+                  `task_${t._id}`
+
             return tUniqueKey === uniqueKey
           })
-          
+
           if (existingIndex !== -1) {
             const existingTask = uniqueTasks[existingIndex]
             const taskDate = new Date(task.dueDate || task.createdAt || 0).getTime()
@@ -505,7 +505,7 @@ const Tasks = () => {
           }
         }
       })
-      
+
       list = uniqueTasks
     }
 
@@ -522,15 +522,15 @@ const Tasks = () => {
         // Prioritize HubSpot type (hs_task_type) over mapped type (type)
         const taskType = (t.hs_task_type || t.type || '').toString().trim()
         if (!taskType) return false
-        
+
         // Check if the task type matches any of the selected filters (case-insensitive)
         return activeFilters.taskType.some(filterType => {
           const filterLower = filterType.toLowerCase().trim()
           const taskTypeLower = taskType.toLowerCase().trim()
-          
+
           // Direct match (case-insensitive)
           if (taskTypeLower === filterLower) return true
-          
+
           // Handle HubSpot type mappings and variations
           if (filterLower === 'call') {
             return taskTypeLower === 'call' || taskTypeLower === 'todo' || taskTypeLower.includes('call')
@@ -553,7 +553,7 @@ const Tasks = () => {
           if (filterLower === 'todo') {
             return taskTypeLower === 'todo' || taskTypeLower === 'call' || taskTypeLower.includes('todo')
           }
-          
+
           return false
         })
       })
@@ -564,9 +564,9 @@ const Tasks = () => {
         return activeFilters.priority.some(filterPriority => {
           const filterLower = filterPriority.toLowerCase()
           const taskPriorityLower = taskPriority.toLowerCase()
-          return taskPriorityLower === filterLower || 
-                 (filterPriority === 'High' && (taskPriorityLower === 'high' || taskPriorityLower === 'urgent')) ||
-                 (filterPriority === 'Urgent' && taskPriorityLower === 'urgent')
+          return taskPriorityLower === filterLower ||
+            (filterPriority === 'High' && (taskPriorityLower === 'high' || taskPriorityLower === 'urgent')) ||
+            (filterPriority === 'Urgent' && taskPriorityLower === 'urgent')
         })
       })
     }
@@ -575,24 +575,24 @@ const Tasks = () => {
         // Check salesman ID
         const salesmanId = t.salesman?._id?.toString() || t.salesman?.toString()
         if (activeFilters.salesman.includes(salesmanId)) return true
-        
+
         // Also check HubSpot owner name and email for imported tasks
         const hubspotOwnerName = (t.hubspot_owner_name || '').toLowerCase().trim()
         const hubspotOwnerEmail = (t.hubspot_owner_email || '').toLowerCase().trim()
-        
+
         // Check if any selected salesman matches HubSpot owner
         return activeFilters.salesman.some(selectedId => {
           const selectedSalesman = salesmen.find(s => (s._id || s.id).toString() === selectedId)
           if (!selectedSalesman) return false
-          
+
           const salesmanName = (selectedSalesman.name || '').toLowerCase().trim()
           const salesmanEmail = (selectedSalesman.email || '').toLowerCase().trim()
-          
+
           // Match by name or email
           return (hubspotOwnerName && salesmanName && hubspotOwnerName === salesmanName) ||
-                 (hubspotOwnerEmail && salesmanEmail && hubspotOwnerEmail === salesmanEmail) ||
-                 (hubspotOwnerName && salesmanEmail && hubspotOwnerName.includes(salesmanEmail.split('@')[0])) ||
-                 (hubspotOwnerEmail && salesmanName && hubspotOwnerEmail.includes(salesmanName.toLowerCase().replace(/\s+/g, '.')))
+            (hubspotOwnerEmail && salesmanEmail && hubspotOwnerEmail === salesmanEmail) ||
+            (hubspotOwnerName && salesmanEmail && hubspotOwnerName.includes(salesmanEmail.split('@')[0])) ||
+            (hubspotOwnerEmail && salesmanName && hubspotOwnerEmail.includes(salesmanName.toLowerCase().replace(/\s+/g, '.')))
         })
       })
     }
@@ -603,12 +603,12 @@ const Tasks = () => {
       tomorrow.setDate(tomorrow.getDate() + 1)
       const nextWeek = new Date(today)
       nextWeek.setDate(nextWeek.getDate() + 7)
-      
+
       list = list.filter(t => {
         if (!t.dueDate) return false
         const dueDate = new Date(t.dueDate)
         dueDate.setHours(0, 0, 0, 0)
-        
+
         switch (activeFilters.dueDateRange) {
           case 'today':
             return dueDate.getTime() === today.getTime()
@@ -633,7 +633,7 @@ const Tasks = () => {
         if (!t.dueDate) return false
         const dueDate = new Date(t.dueDate)
         const hours = dueDate.getHours()
-        
+
         switch (activeFilters.timeRange) {
           case 'morning':
             // 6:00 AM - 12:00 PM (6-11)
@@ -670,8 +670,8 @@ const Tasks = () => {
         if (cancelled) return
         setLoading(false)
         // Load dropdowns in background – don't block the list
-        loadSalesmen().catch(() => {})
-        loadCustomers().catch(() => {})
+        loadSalesmen().catch(() => { })
+        loadCustomers().catch(() => { })
       } catch (e) {
         if (!cancelled) setLoading(false)
       }
@@ -823,7 +823,7 @@ const Tasks = () => {
       // Load all customers from database (both app-created and HubSpot-imported)
       const res = await getCustomers()
       const allCustomers = res.success ? (res.data || []) : []
-      
+
       // Show both app-created and HubSpot-imported customers in dropdown
       // Mark customers and ensure name field exists for display
       const markedCustomers = allCustomers.map(c => ({
@@ -832,7 +832,7 @@ const Tasks = () => {
         // Ensure name field exists for display
         name: c.name || c.firstName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email || 'Customer'
       }))
-      
+
       setCustomers(markedCustomers)
     } catch (e) {
       console.error(e)
@@ -971,7 +971,7 @@ const Tasks = () => {
       // Sample Track: Create samples first, then create follow-up task
       let createdSamplesCount = 0
       const createdSampleIds = []
-      
+
       if (formData.type === 'Sample Track') {
         const custName = (formData.customerName || '').trim()
         if (!custName) {
@@ -1051,8 +1051,8 @@ const Tasks = () => {
         associatedContactEmail: formData.associatedContactEmail || undefined,
         associatedCompanyName: formData.associatedCompanyName || undefined,
         associatedCompanyDomain: formData.associatedCompanyDomain || undefined,
-        type: formData.type === 'Follow-up' 
-          ? (formData.followUpType || 'Call') 
+        type: formData.type === 'Follow-up'
+          ? (formData.followUpType || 'Call')
           : mapTaskType(formData.type),
         priority: formData.priority,
         scheduledDate: dueDateTime,
@@ -1069,20 +1069,20 @@ const Tasks = () => {
       if (res.success) {
         // Wait a bit for async HubSpot sync to complete
         await new Promise(resolve => setTimeout(resolve, 2000))
-        
+
         // Reload task to check if HubSpot sync was successful
         const updatedRes = await getFollowUp(res.data._id)
-        const approvalMessage = approvalStatus === 'Approved' 
-          ? 'Task has been created and is visible in tasks list.' 
+        const approvalMessage = approvalStatus === 'Approved'
+          ? 'Task has been created and is visible in tasks list.'
           : 'Task will appear in tasks list.'
-        
+
         const sampleMessage = formData.type === 'Sample Track' && createdSamplesCount > 0
           ? (createdSamplesCount === 1 ? ' 1 sample created.' : ` ${createdSamplesCount} samples created.`)
           : ''
         const successMessage = updatedRes.success && updatedRes.data.hubspotTaskId
           ? `Task created successfully and posted to HubSpot!${sampleMessage} ${approvalMessage}`
           : `Task created successfully!${sampleMessage} You can push it to HubSpot manually if needed. ${approvalMessage}`
-        
+
         Swal.fire({
           icon: 'success',
           title: 'Task Created!',
@@ -1170,7 +1170,7 @@ const Tasks = () => {
         // Find current task index in filtered list
         const index = filtered.findIndex(t => t._id === task._id)
         setCurrentTaskIndex(index >= 0 ? index : 0)
-        
+
         // Parse activities from notes (Meeting gets link + meetLink for Join Google Meet)
         if (res.data.notes) {
           try {
@@ -1183,7 +1183,7 @@ const Tasks = () => {
           setTaskActivities([])
         }
         // Related tasks will be loaded below, don't reset here
-        
+
         // Load customer details if customer ID exists
         // For HubSpot tasks, customer data might be in task itself
         if (res.data.source === 'hubspot') {
@@ -1193,17 +1193,17 @@ const Tasks = () => {
             const desc = res.data.description
             // Try to extract name from patterns like "Follow up with [Name]", "Call [Name]", etc.
             const nameMatch = desc.match(/(?:follow up|call|email|meeting|visit|task).*?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
-                            desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
-                            desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
+              desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+              desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
             if (nameMatch && nameMatch[1]) {
               extractedName = nameMatch[1].trim()
             }
           }
-          
+
           // HubSpot tasks - create customer details from task data
           const customerName = res.data.customerName || res.data.associatedContactName || extractedName || ''
           const customerEmail = res.data.customerEmail || res.data.associatedContactEmail || ''
-          
+
           if (customerEmail || customerName) {
             setTaskCustomerDetails({
               name: customerName,
@@ -1219,7 +1219,7 @@ const Tasks = () => {
           } else {
             setTaskCustomerDetails(null)
           }
-          
+
           // Fetch HubSpot deals for this contact
           if (customerEmail) {
             try {
@@ -1282,23 +1282,23 @@ const Tasks = () => {
             setTaskCustomerDetails(null)
           }
         }
-        
+
         // Load quotations for this customer
         // For HubSpot tasks, use task's email/name directly
-        const taskEmail = res.data.customerEmail || 
-                         res.data.associatedContactEmail ||
-                         (res.data.customer && typeof res.data.customer === 'object' ? res.data.customer.email : '') ||
-                         (res.data.source === 'hubspot' ? res.data.customerEmail : '')
-        const taskName = res.data.customerName || 
-                        res.data.associatedContactName ||
-                        (res.data.customer && typeof res.data.customer === 'object' ? (res.data.customer.name || res.data.customer.firstName) : '') ||
-                        (res.data.source === 'hubspot' ? res.data.customerName : '')
-        
+        const taskEmail = res.data.customerEmail ||
+          res.data.associatedContactEmail ||
+          (res.data.customer && typeof res.data.customer === 'object' ? res.data.customer.email : '') ||
+          (res.data.source === 'hubspot' ? res.data.customerEmail : '')
+        const taskName = res.data.customerName ||
+          res.data.associatedContactName ||
+          (res.data.customer && typeof res.data.customer === 'object' ? (res.data.customer.name || res.data.customer.firstName) : '') ||
+          (res.data.source === 'hubspot' ? res.data.customerName : '')
+
         if (taskEmail || taskName) {
           try {
             const searchQuery = taskEmail || taskName
-            const quotationsRes = await getQuotations({ 
-              search: searchQuery 
+            const quotationsRes = await getQuotations({
+              search: searchQuery
             })
             if (quotationsRes.success && quotationsRes.data) {
               // Filter quotations that match customer email or name
@@ -1319,11 +1319,11 @@ const Tasks = () => {
         } else {
           setTaskQuotations([])
         }
-        
+
         // Load sales targets for this customer/salesman
         try {
-          const salesmanId = res.data.salesman && typeof res.data.salesman === 'object' 
-            ? res.data.salesman._id 
+          const salesmanId = res.data.salesman && typeof res.data.salesman === 'object'
+            ? res.data.salesman._id
             : res.data.salesman
           const targetsRes = await getSalesTargets({
             salesman: salesmanId || '',
@@ -1338,16 +1338,16 @@ const Tasks = () => {
           console.error('Error loading sales targets:', e)
           setSalesTargets([])
         }
-        
+
         // Load related tasks for same email/user
         try {
-          const taskEmail = res.data.customerEmail || 
-                           (res.data.customer && typeof res.data.customer === 'object' ? res.data.customer.email : '') ||
-                           res.data.associatedContactEmail
-          const taskName = res.data.customerName || 
-                         (res.data.customer && typeof res.data.customer === 'object' ? (res.data.customer.name || res.data.customer.firstName) : '') ||
-                         res.data.associatedContactName
-          
+          const taskEmail = res.data.customerEmail ||
+            (res.data.customer && typeof res.data.customer === 'object' ? res.data.customer.email : '') ||
+            res.data.associatedContactEmail
+          const taskName = res.data.customerName ||
+            (res.data.customer && typeof res.data.customer === 'object' ? (res.data.customer.name || res.data.customer.firstName) : '') ||
+            res.data.associatedContactName
+
           if (taskEmail || taskName || res.data.customer) {
             const allTasksRes = await getFollowUps({})
             if (allTasksRes.success && allTasksRes.data) {
@@ -1355,7 +1355,7 @@ const Tasks = () => {
               const matchingTasks = allTasksRes.data.filter(t => {
                 // Skip current task
                 if (t._id === res.data._id) return false
-                
+
                 // Priority 1: Match by customer ID (most reliable)
                 if (res.data.customer && t.customer) {
                   const currentCustomerId = typeof res.data.customer === 'object' ? res.data.customer._id : res.data.customer
@@ -1364,30 +1364,30 @@ const Tasks = () => {
                     return true
                   }
                 }
-                
+
                 // Priority 2: Match by email (exact match only)
                 if (taskEmail) {
-                  const tEmail = t.customerEmail || 
-                                (t.customer && typeof t.customer === 'object' ? t.customer.email : '') ||
-                                t.associatedContactEmail
+                  const tEmail = t.customerEmail ||
+                    (t.customer && typeof t.customer === 'object' ? t.customer.email : '') ||
+                    t.associatedContactEmail
                   if (tEmail && taskEmail.toLowerCase().trim() === tEmail.toLowerCase().trim()) {
                     return true
                   }
                 }
-                
+
                 // Priority 3: Match by name (exact match only, not partial)
                 if (taskName) {
-                  const tName = t.customerName || 
-                               (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') ||
-                               t.associatedContactName
+                  const tName = t.customerName ||
+                    (t.customer && typeof t.customer === 'object' ? (t.customer.name || t.customer.firstName) : '') ||
+                    t.associatedContactName
                   if (tName && taskName.toLowerCase().trim() === tName.toLowerCase().trim()) {
                     return true
                   }
                 }
-                
+
                 return false
               })
-              
+
               // Show ALL tasks for this customer (no duplicate removal in activities)
               // Sort by dueDate or createdAt (newest first)
               matchingTasks.sort((a, b) => {
@@ -1395,7 +1395,7 @@ const Tasks = () => {
                 const dateB = new Date(b.dueDate || b.createdAt || 0)
                 return dateB.getTime() - dateA.getTime() // Newest first
               })
-              
+
               setRelatedTasks(matchingTasks)
             } else {
               setRelatedTasks([])
@@ -1484,7 +1484,7 @@ const Tasks = () => {
         await loadTasks()
         // Check if this is the last task
         const isLastTask = currentTaskIndex === filtered.length - 1
-        
+
         // Show success message with high z-index to appear on top
         await Swal.fire({
           icon: 'success',
@@ -1505,10 +1505,10 @@ const Tasks = () => {
             }
           }
         })
-        
+
         if (isLastTask) {
           // Close modal if it's the last task
-        setShowTaskDetail(false)
+          setShowTaskDetail(false)
           // Don't reset state - keep it for when modal reopens
           // setSelectedTask(null)
           // setTaskCustomerDetails(null)
@@ -1622,12 +1622,12 @@ const Tasks = () => {
     })
 
     if (!confirmResult.isConfirmed) return
-    
+
     try {
       // Check if this is a visit target
       const task = tasks.find(t => t._id === taskId)
       const isVisitTarget = task?.isVisitTarget || task?.visitTargetId
-      
+
       let res
       if (isVisitTarget) {
         // Approve visit target
@@ -1637,7 +1637,7 @@ const Tasks = () => {
         // Approve regular task
         res = await approveFollowUp(taskId)
       }
-      
+
       if (res.success) {
         if (isVisitTarget) {
           Swal.fire({
@@ -1649,7 +1649,7 @@ const Tasks = () => {
         } else {
           // Wait a bit for async HubSpot sync
           await new Promise(resolve => setTimeout(resolve, 2000))
-          
+
           // Reload to check HubSpot sync status
           const updatedRes = await getFollowUp(taskId)
           if (updatedRes.success && updatedRes.data.hubspotTaskId) {
@@ -1822,17 +1822,17 @@ const Tasks = () => {
       cancelButtonText: 'Cancel'
     })
     if (!isConfirmed) return
-    
+
     try {
       // Check if this is a visit target
       const task = tasks.find(t => t._id === taskId)
       const isVisitTarget = task?.isVisitTarget || task?.visitTargetId
-      
+
       let res
       if (isVisitTarget) {
         // Reject visit target
         const visitTargetId = task.visitTargetId || taskId
-        res = await updateVisitTarget(visitTargetId, { 
+        res = await updateVisitTarget(visitTargetId, {
           approvalStatus: 'Rejected',
           rejectionReason: reason || ''
         })
@@ -1840,7 +1840,7 @@ const Tasks = () => {
         // Reject regular task
         res = await rejectFollowUp(taskId, reason || '')
       }
-      
+
       if (res.success) {
         Swal.fire({
           icon: 'success',
@@ -1882,7 +1882,7 @@ const Tasks = () => {
       cancelButtonText: 'Cancel'
     })
     if (!result.isConfirmed) return
-    
+
     setPushingToHubSpot(true)
     try {
       const res = await pushToHubSpot(taskId)
@@ -2055,8 +2055,8 @@ const Tasks = () => {
   }
 
   const handleSelectRow = (id) => {
-    setSelectedRows(prev => 
-      prev.includes(id) 
+    setSelectedRows(prev =>
+      prev.includes(id)
         ? prev.filter(rowId => rowId !== id)
         : [...prev, id]
     )
@@ -2064,7 +2064,7 @@ const Tasks = () => {
 
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null
-    return sortOrder === 'asc' 
+    return sortOrder === 'asc'
       ? <FaChevronUp className="w-3 h-3 ml-1" />
       : <FaChevronDown className="w-3 h-3 ml-1" />
   }
@@ -2072,29 +2072,29 @@ const Tasks = () => {
   // Sort filtered tasks - Today's tasks first by default
   const sortedTasks = useMemo(() => {
     let sorted = [...filtered]
-    
+
     // Check if we're sorting by dueDate (default) and no custom sort is applied
     const isDefaultDueDateSort = sortField === 'dueDate' && sortOrder === 'asc'
-    
+
     if (isDefaultDueDateSort) {
       // Separate today's tasks from others
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
-      
+
       const todayTasks = []
       const otherTasks = []
-      
+
       sorted.forEach(task => {
         if (!task.dueDate) {
           otherTasks.push(task)
           return
         }
-        
+
         const dueDate = new Date(task.dueDate)
         dueDate.setHours(0, 0, 0, 0)
-        
+
         // Check if task is due today
         if (dueDate.getTime() === today.getTime()) {
           todayTasks.push(task)
@@ -2102,7 +2102,7 @@ const Tasks = () => {
           otherTasks.push(task)
         }
       })
-      
+
       // Sort today's tasks by time (if available) or keep original order
       todayTasks.sort((a, b) => {
         if (a.dueTime && b.dueTime) {
@@ -2110,18 +2110,18 @@ const Tasks = () => {
         }
         return 0
       })
-      
+
       // Sort other tasks by date (ascending - oldest first)
       otherTasks.sort((a, b) => {
         const aDate = new Date(a.dueDate || 0).getTime()
         const bDate = new Date(b.dueDate || 0).getTime()
         return aDate - bDate
       })
-      
+
       // Return today's tasks first, then others
       return [...todayTasks, ...otherTasks]
     }
-    
+
     // For other sort fields, use normal sorting
     sorted.sort((a, b) => {
       let aVal, bVal
@@ -2249,9 +2249,9 @@ const Tasks = () => {
     })
   }
 
-  const hasActiveFilters = activeFilters.taskType.length > 0 || 
-    activeFilters.priority.length > 0 || 
-    activeFilters.salesman.length > 0 || 
+  const hasActiveFilters = activeFilters.taskType.length > 0 ||
+    activeFilters.priority.length > 0 ||
+    activeFilters.salesman.length > 0 ||
     activeFilters.dueDateRange !== null ||
     activeFilters.timeRange !== null ||
     activeFilters.myCreationOnly ||
@@ -2272,7 +2272,7 @@ const Tasks = () => {
             onClick={handleImportFromHubSpot}
             disabled={importing}
             className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-3 rounded-lg text-sm sm:text-base font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50"
-            style={{ 
+            style={{
               backgroundColor: appTheme.status.info.main,
               color: appTheme.text.white
             }}
@@ -2292,7 +2292,7 @@ const Tasks = () => {
           <button
             onClick={() => setShowCreateForm(true)}
             className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-lg text-sm sm:text-base font-semibold transition-all shadow-md hover:shadow-lg active:scale-95"
-            style={{ 
+            style={{
               backgroundColor: appTheme.primary.main,
               color: appTheme.text.white
             }}
@@ -2318,11 +2318,10 @@ const Tasks = () => {
                 setActiveTab(tab.id)
                 setCurrentPage(1)
               }}
-              className={`flex-shrink-0 px-3 py-2 sm:px-4 rounded-t-lg text-xs sm:text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-[#e9931c] text-white border-b-2 border-[#e9931c] -mb-0.5'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-b-2 border-transparent'
-              }`}
+              className={`flex-shrink-0 px-3 py-2 sm:px-4 rounded-t-lg text-xs sm:text-sm font-medium transition-colors ${isActive
+                ? 'bg-[#e9931c] text-white border-b-2 border-[#e9931c] -mb-0.5'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-b-2 border-transparent'
+                }`}
             >
               {tab.label}
               {count !== undefined && (
@@ -2521,7 +2520,7 @@ const Tasks = () => {
                     { value: 'tomorrow', label: 'Tomorrow' },
                     { value: 'thisWeek', label: 'This week' },
                     { value: 'overdue', label: 'Overdue' }
-                  ].filter(option => 
+                  ].filter(option =>
                     !filterSearch.dueDate || option.label.toLowerCase().includes(filterSearch.dueDate.toLowerCase())
                   ).map(option => (
                     <button
@@ -2531,7 +2530,7 @@ const Tasks = () => {
                         setShowDueDateDropdown(false)
                       }}
                       className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${activeFilters.dueDateRange === option.value ? 'bg-gray-100 text-gray-800' : ''
-                      }`}
+                        }`}
                     >
                       {option.label}
                     </button>
@@ -2577,7 +2576,7 @@ const Tasks = () => {
                   </div>
                 </div>
                 <div className="py-1">
-                  {PRIORITIES.filter(priority => 
+                  {PRIORITIES.filter(priority =>
                     !filterSearch.priority || priority.toLowerCase().includes(filterSearch.priority.toLowerCase())
                   ).map(priority => (
                     <label key={priority} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
@@ -2680,7 +2679,7 @@ const Tasks = () => {
                     { value: 'afternoon', label: 'Afternoon (12 PM - 6 PM)' },
                     { value: 'evening', label: 'Evening (6 PM - 12 AM)' },
                     { value: 'night', label: 'Night (12 AM - 6 AM)' }
-                  ].filter(option => 
+                  ].filter(option =>
                     !filterSearch.time || option.label.toLowerCase().includes(filterSearch.time.toLowerCase())
                   ).map(option => (
                     <button
@@ -2690,7 +2689,7 @@ const Tasks = () => {
                         setShowTimeDropdown(false)
                       }}
                       className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${activeFilters.timeRange === option.value ? 'bg-gray-100 text-gray-800' : ''
-                      }`}
+                        }`}
                     >
                       {option.label}
                     </button>
@@ -2705,34 +2704,34 @@ const Tasks = () => {
             <FaFilter className="w-3 h-3" />
             <span>Advanced filters</span>
           </button>
-      </div>
+        </div>
 
-      {/* Search Bar */}
+        {/* Search Bar */}
         <div className="mt-3 flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-gray-500 focus-within:border-gray-500 transition-all">
             <FaSearch style={{ color: '#9ca3af', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }} className="flex-shrink-0" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks by title, contact, company, type, status, priority, notes..."
-            className="flex-1 bg-transparent outline-none text-sm"
+              className="flex-1 bg-transparent outline-none text-sm"
               style={{ color: '#1f2937', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-          />
-          {search && search.trim() && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setSearch('')
-              }}
-              className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-all"
-              title="Clear search"
-              type="button"
-            >
-              <FaTimes className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+            />
+            {search && search.trim() && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSearch('')
+                }}
+                className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-all"
+                title="Clear search"
+                type="button"
+              >
+                <FaTimes className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
             Save view
           </button>
@@ -2775,7 +2774,7 @@ const Tasks = () => {
                       style={{ accentColor: appTheme.primary.main }}
                     />
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('status')}
@@ -2785,7 +2784,7 @@ const Tasks = () => {
                       <SortIcon field="status" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[200px]"
                     style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('description')}
@@ -2795,7 +2794,7 @@ const Tasks = () => {
                       <SortIcon field="description" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[150px]"
                     style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('customerName')}
@@ -2808,7 +2807,7 @@ const Tasks = () => {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[150px]" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     ASSOCIATED COMPANY
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap min-w-[150px]"
                     style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('salesman')}
@@ -2824,7 +2823,7 @@ const Tasks = () => {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap min-w-[120px]" style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
                     LAST ENGAGEMENT
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('type')}
@@ -2834,7 +2833,7 @@ const Tasks = () => {
                       <SortIcon field="type" />
                     </div>
                   </th>
-                  <th 
+                  <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: '#6b7280', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     onClick={() => handleSort('dueDate')}
@@ -2851,11 +2850,11 @@ const Tasks = () => {
               </thead>
               <tbody className="bg-white divide-y" style={{ borderColor: appTheme.border.light }}>
                 {paginatedTasks.map((task) => {
-              const statusStyle = getStatusColor(task.status)
-              const StatusIcon = statusStyle.icon
-              return (
+                  const statusStyle = getStatusColor(task.status)
+                  const StatusIcon = statusStyle.icon
+                  return (
                     <tr
-                  key={task._id}
+                      key={task._id}
                       className="hover:bg-gray-50 transition-colors border-b border-gray-100"
                       style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                     >
@@ -2874,17 +2873,17 @@ const Tasks = () => {
                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif', color: '#1f2937' }}>
                             {task.status || '—'}
                           </span>
-                        {/* Show HubSpot badge if task is pushed to HubSpot */}
-                        {task.hubspotTaskId && (
-                            <span 
+                          {/* Show HubSpot badge if task is pushed to HubSpot */}
+                          {task.hubspotTaskId && (
+                            <span
                               className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 transition-all hover:opacity-80 cursor-default"
                               style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
                               title="Posted to HubSpot"
                             >
                               ✓ HubSpot
-                          </span>
-                        )}
-                      </div>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="min-w-[200px]">
@@ -2894,14 +2893,14 @@ const Tasks = () => {
                               handleTaskClick(task)
                             }}
                             className="text-left text-sm font-medium hover:underline transition-colors cursor-pointer"
-                            style={{ 
+                            style={{
                               fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
                               color: '#1f2937'
                             }}
                           >
-                        {task.description || `Follow up with ${task.customerName}`}
+                            {task.description || `Follow up with ${task.customerName}`}
                           </button>
-                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-[150px]">
@@ -2919,7 +2918,7 @@ const Tasks = () => {
                             if (!associatedContactName && !associatedContactEmail) {
                               return <span className="text-sm text-gray-400">—</span>;
                             }
-                            
+
                             return (
                               <>
                                 <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
@@ -2953,7 +2952,7 @@ const Tasks = () => {
                             if (!companyName || !companyName.trim()) {
                               return <span className="text-sm text-gray-400" title="No company associated">—</span>;
                             }
-                            
+
                             return (
                               <>
                                 <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
@@ -2977,12 +2976,12 @@ const Tasks = () => {
                             const hubspotOwnerName = (task.hubspot_owner_name || '').trim();
                             const salesmanName = (task.salesman?.name || '').trim();
                             const salesmanEmail = (task.salesman?.email || '').trim();
-                            
+
                             // Use HubSpot owner name if available, otherwise use salesman name, then email
                             let displayName = hubspotOwnerName || salesmanName || salesmanEmail || 'No Owner';
                             const displayEmail = task.hubspot_owner_email || salesmanEmail || '';
                             const createdByName = task.createdBy?.name || task.createdBy?.email || '';
-                            
+
                             return (
                               <>
                                 {displayName && displayName !== 'No Owner' && (
@@ -3065,7 +3064,7 @@ const Tasks = () => {
                             <span className="text-xs" style={{ color: '#9ca3af' }}>
                               {new Date(task.dueDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
                             </span>
-                </div>
+                          </div>
                         ) : (
                           <span className="text-sm text-gray-400">—</span>
                         )}
@@ -3083,22 +3082,21 @@ const Tasks = () => {
                                 e.stopPropagation()
                                 handlePushToHubSpot(task._id)
                               }}
-                                disabled={pushingToHubSpot || (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${
-                                  (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null)
-                                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed opacity-50'
-                                    : 'text-white hover:opacity-90 disabled:opacity-50'
+                              disabled={pushingToHubSpot || (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null)}
+                              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all ${(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null)
+                                ? 'bg-gray-300 text-gray-600 cursor-not-allowed opacity-50'
+                                : 'text-white hover:opacity-90 disabled:opacity-50'
                                 }`}
-                                style={!(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? { backgroundColor: appTheme.status.info.main } : {}}
-                                title={(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? "Already Pushed to HubSpot" : "Push to HubSpot"}
+                              style={!(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? { backgroundColor: appTheme.status.info.main } : {}}
+                              title={(task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? "Already Pushed to HubSpot" : "Push to HubSpot"}
                             >
                               {pushingToHubSpot ? (
                                 <FaSpinner className="animate-spin" />
-                                ) : (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? (
-                                  <>
-                                    <FaCheckCircle />
-                                    Pushed
-                                  </>
+                              ) : (task.hubspotTaskId && task.hubspotTaskId !== '' && task.hubspotTaskId !== null) ? (
+                                <>
+                                  <FaCheckCircle />
+                                  Pushed
+                                </>
                               ) : (
                                 <>
                                   <FaCloudUploadAlt />
@@ -3109,7 +3107,7 @@ const Tasks = () => {
                           )}
                           {/* Show Imported badge for HubSpot imported tasks */}
                           {task.source === 'hubspot' && (
-                            <span 
+                            <span
                               className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800"
                               title="Imported from HubSpot"
                             >
@@ -3118,7 +3116,7 @@ const Tasks = () => {
                           )}
                           {/* Show Started badge if task is started */}
                           {task.startedAt && (
-                            <span 
+                            <span
                               className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800"
                               title={`Started at ${new Date(task.startedAt).toLocaleString()}`}
                             >
@@ -3184,9 +3182,9 @@ const Tasks = () => {
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
                     className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${currentPage === pageNum
-                        ? 'text-white'
-                        : 'border border-gray-300 hover:bg-gray-50'
-                    }`}
+                      ? 'text-white'
+                      : 'border border-gray-300 hover:bg-gray-50'
+                      }`}
                     style={currentPage === pageNum ? {
                       backgroundColor: appTheme.primary.main
                     } : {}}
@@ -3242,418 +3240,374 @@ const Tasks = () => {
             </div>
             <form onSubmit={handleCreateTask} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
-              {/* Salesman Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Assign to Salesman <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  value={formData.salesman}
-                  onChange={(e) => setFormData({ ...formData, salesman: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                >
-                  <option value="">Select a salesman...</option>
-                  {salesmen.map((salesman) => (
-                    <option key={salesman._id || salesman.id} value={salesman._id || salesman.id}>
-                      {salesman.name || salesman.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Customer Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer (Optional)
-                </label>
-                <select
-                  value={formData.customer}
-                  onChange={(e) => handleCustomerSelect(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                >
-                  <option value="">Select a customer...</option>
-                  {/* Show both App-created and HubSpot-imported customers */}
-                  {customers.length > 0 && (
-                    <>
-                      {customers.filter(c => c.source !== 'hubspot' && !c.isHubSpot).length > 0 && (
-                        <optgroup label="App Customers">
-                          {customers.filter(c => c.source !== 'hubspot' && !c.isHubSpot).map((customer) => (
-                            <option key={customer._id} value={customer._id}>
-                              {customer.name || customer.firstName} {customer.email ? `(${customer.email})` : ''}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {customers.filter(c => c.source === 'hubspot' || c.isHubSpot).length > 0 && (
-                        <optgroup label="HubSpot Customers">
-                          {customers.filter(c => c.source === 'hubspot' || c.isHubSpot).map((customer) => (
-                            <option key={customer._id} value={customer._id}>
-                              {customer.name || customer.firstName} {customer.email ? `(${customer.email})` : ''}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* Customer Name */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.customerName}
-                  onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Enter customer name"
-                />
-              </div>
-
-              {/* Customer Email */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.customerEmail}
-                  onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Enter customer email"
-                />
-              </div>
-
-              {/* Customer Phone */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Customer Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.customerPhone}
-                  onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Enter customer phone"
-                />
-              </div>
-
-              {/* Last Contact & Last Engagement (auto-filled from selected customer, sent with task) */}
-              {formData.customer && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Last Contact
-                    </label>
-                    <div
-                      className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm"
-                      style={{ borderColor: appTheme.border.medium, color: appTheme.text.secondary }}
-                      title="From customer; will be saved with task"
-                    >
-                      {(() => {
-                        const sel = customers.find(c => c._id === formData.customer)
-                        const lastContact = sel?.lastContact
-                        return lastContact
-                          ? new Date(lastContact).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '—'
-                      })()}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Last Engagement
-                    </label>
-                    <div
-                      className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm"
-                      style={{ borderColor: appTheme.border.medium, color: appTheme.text.secondary }}
-                      title="From customer; will be saved with task"
-                    >
-                      {(() => {
-                        const sel = customers.find(c => c._id === formData.customer)
-                        const lastEngagement = sel?.lastEngagement
-                        return lastEngagement
-                          ? new Date(lastEngagement).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '—'
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Associated Contact (Optional) */}
-              <div className="border-t pt-4 mt-4" style={{ borderColor: appTheme.border.light }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: appTheme.text.primary }}>
-                  Associated Contact (Optional)
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Contact Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.associatedContactName}
-                      onChange={(e) => setFormData({ ...formData, associatedContactName: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{ 
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter contact name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Contact Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.associatedContactEmail}
-                      onChange={(e) => setFormData({ ...formData, associatedContactEmail: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{ 
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter contact email"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Associated Company (Optional) */}
-              <div className="border-t pt-4 mt-4" style={{ borderColor: appTheme.border.light }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: appTheme.text.primary }}>
-                  Associated Company (Optional)
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Company Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.associatedCompanyName}
-                      onChange={(e) => setFormData({ ...formData, associatedCompanyName: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{ 
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter company name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Company Domain
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.associatedCompanyDomain}
-                      onChange={(e) => setFormData({ ...formData, associatedCompanyDomain: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{ 
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="e.g., example.com"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Type and Priority */}
-              <div className="grid grid-cols-2 gap-4">
+                {/* Salesman Selection */}
                 <div>
                   <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Task Type <span className="text-red-500">*</span>
+                    Assign to Salesman <span className="text-red-500">*</span>
                   </label>
                   <select
                     required
-                    value={formData.type}
-                    onChange={(e) => {
-                      const newType = e.target.value
-                      setFormData({ 
-                        ...formData, 
-                        type: newType,
-                        followUpType: newType === 'Follow-up' ? (formData.followUpType || 'Call') : '',
-                        relatedSample: newType === 'Sample Track' ? formData.relatedSample : ''
-                      })
-                    }}
+                    value={formData.salesman}
+                    onChange={(e) => setFormData({ ...formData, salesman: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
                   >
-                    {TASK_TYPES.map((type) => (
-                      <option key={type} value={type}>{type}</option>
+                    <option value="">Select a salesman...</option>
+                    {salesmen.map((salesman) => (
+                      <option key={salesman._id || salesman.id} value={salesman._id || salesman.id}>
+                        {salesman.name || salesman.email}
+                      </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Customer Selection */}
                 <div>
                   <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Priority <span className="text-red-500">*</span>
+                    Customer (Optional)
                   </label>
                   <select
-                    required
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    value={formData.customer}
+                    onChange={(e) => handleCustomerSelect(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
                   >
-                    {PRIORITIES.map((priority) => (
-                      <option key={priority} value={priority}>{priority}</option>
-                    ))}
+                    <option value="">Select a customer...</option>
+                    {/* Show both App-created and HubSpot-imported customers */}
+                    {customers.length > 0 && (
+                      <>
+                        {customers.filter(c => c.source !== 'hubspot' && !c.isHubSpot).length > 0 && (
+                          <optgroup label="App Customers">
+                            {customers.filter(c => c.source !== 'hubspot' && !c.isHubSpot).map((customer) => (
+                              <option key={customer._id} value={customer._id}>
+                                {customer.name || customer.firstName} {customer.email ? `(${customer.email})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {customers.filter(c => c.source === 'hubspot' || c.isHubSpot).length > 0 && (
+                          <optgroup label="HubSpot Customers">
+                            {customers.filter(c => c.source === 'hubspot' || c.isHubSpot).map((customer) => (
+                              <option key={customer._id} value={customer._id}>
+                                {customer.name || customer.firstName} {customer.email ? `(${customer.email})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    )}
                   </select>
                 </div>
-              </div>
 
-              {/* Follow-up Type - Show only when Follow-up is selected */}
-              {formData.type === 'Follow-up' && (
+                {/* Customer Name */}
                 <div>
                   <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Follow-up Type <span className="text-red-500">*</span>
+                    Customer Name <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <input
+                    type="text"
                     required
-                    value={formData.followUpType}
-                    onChange={(e) => setFormData({ ...formData, followUpType: e.target.value })}
+                    value={formData.customerName}
+                    onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
-                  >
-                    <option value="">Select follow-up type</option>
-                    <option value="Call">Call</option>
-                    <option value="Email">Email</option>
-                    <option value="Meeting">Meeting</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="Visit">Visit</option>
-                    <option value="Other">Other</option>
-                  </select>
+                    placeholder="Enter customer name"
+                  />
                 </div>
-              )}
 
-              {/* Sample Tracker – Add Item Section – Show only when Sample Track is selected */}
-              {formData.type === 'Sample Track' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Customer Email */}
+                <div>
+                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                    Customer Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.customerEmail}
+                    onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                    style={{
+                      borderColor: appTheme.border.medium,
+                      focusRingColor: appTheme.primary.main
+                    }}
+                    placeholder="Enter customer email"
+                  />
+                </div>
+
+                {/* Customer Phone */}
+                <div>
+                  <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                    Customer Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.customerPhone}
+                    onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                    style={{
+                      borderColor: appTheme.border.medium,
+                      focusRingColor: appTheme.primary.main
+                    }}
+                    placeholder="Enter customer phone"
+                  />
+                </div>
+
+                {/* Last Contact & Last Engagement (auto-filled from selected customer, sent with task) */}
+                {formData.customer && (
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Visit Date <span className="text-red-500">*</span>
+                        Last Contact
                       </label>
-                      <input
-                        type="date"
-                        required
-                        value={sampleVisitDate}
-                        onChange={(e) => setSampleVisitDate(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                        style={{
-                          borderColor: appTheme.border.medium,
-                          focusRingColor: appTheme.primary.main
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Expected Date
-                      </label>
-                      <input
-                        type="date"
-                        value={sampleExpectedDate}
-                        onChange={(e) => setSampleExpectedDate(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                        style={{
-                          borderColor: appTheme.border.medium,
-                          focusRingColor: appTheme.primary.main
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Add Items Section */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Add Item (one or more products) <span className="text-red-500">*</span>
-                    </label>
-                    <div
-                      className="flex gap-2 mb-2"
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return
-                        e.preventDefault()
-                        if (!addItemProduct) return
-                        const p = products.find(pr => pr._id === addItemProduct)
-                        if (!p) return
-                        const qty = Math.max(1, parseInt(addItemQty, 10) || 1)
-                        if (selectedItems.some(item => item.productId === p._id)) {
-                          Swal.fire({ icon: 'info', title: 'Already added', text: 'This product is already in the list.', confirmButtonColor: '#e9931c' })
-                          return
-                        }
-                        setSelectedItems(prev => [...prev, { productId: p._id, productName: p.name || '', productCode: p.productCode || '', quantity: qty }])
-                        setAddItemProduct('')
-                        setAddItemQty(1)
-                      }}
-                    >
-                      <select
-                        value={addItemProduct}
-                        onChange={(e) => setAddItemProduct(e.target.value)}
-                        className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                        style={{
-                          borderColor: appTheme.border.medium,
-                          focusRingColor: appTheme.primary.main
-                        }}
+                      <div
+                        className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm"
+                        style={{ borderColor: appTheme.border.medium, color: appTheme.text.secondary }}
+                        title="From customer; will be saved with task"
                       >
-                        <option value="">Select product...</option>
-                        {products.map((product) => (
-                          <option key={product._id} value={product._id}>
-                            {product.name} {product.productCode ? `(${product.productCode})` : ''}
-                          </option>
-                        ))}
-                      </select>
+                        {(() => {
+                          const sel = customers.find(c => c._id === formData.customer)
+                          const lastContact = sel?.lastContact
+                          return lastContact
+                            ? new Date(lastContact).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'
+                        })()}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Last Engagement
+                      </label>
+                      <div
+                        className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-sm"
+                        style={{ borderColor: appTheme.border.medium, color: appTheme.text.secondary }}
+                        title="From customer; will be saved with task"
+                      >
+                        {(() => {
+                          const sel = customers.find(c => c._id === formData.customer)
+                          const lastEngagement = sel?.lastEngagement
+                          return lastEngagement
+                            ? new Date(lastEngagement).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Associated Contact (Optional) */}
+                <div className="border-t pt-4 mt-4" style={{ borderColor: appTheme.border.light }}>
+                  <h3 className="text-sm font-semibold mb-3" style={{ color: appTheme.text.primary }}>
+                    Associated Contact (Optional)
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Contact Name
+                      </label>
                       <input
-                        type="number"
-                        min="1"
-                        value={addItemQty}
-                        onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-20 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        type="text"
+                        value={formData.associatedContactName}
+                        onChange={(e) => setFormData({ ...formData, associatedContactName: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
                         style={{
                           borderColor: appTheme.border.medium,
                           focusRingColor: appTheme.primary.main
                         }}
-                        placeholder="Qty"
+                        placeholder="Enter contact name"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Contact Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.associatedContactEmail}
+                        onChange={(e) => setFormData({ ...formData, associatedContactEmail: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Enter contact email"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Associated Company (Optional) */}
+                <div className="border-t pt-4 mt-4" style={{ borderColor: appTheme.border.light }}>
+                  <h3 className="text-sm font-semibold mb-3" style={{ color: appTheme.text.primary }}>
+                    Associated Company (Optional)
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Company Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.associatedCompanyName}
+                        onChange={(e) => setFormData({ ...formData, associatedCompanyName: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Enter company name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Company Domain
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.associatedCompanyDomain}
+                        onChange={(e) => setFormData({ ...formData, associatedCompanyDomain: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="e.g., example.com"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Type and Priority */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Task Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.type}
+                      onChange={(e) => {
+                        const newType = e.target.value
+                        setFormData({
+                          ...formData,
+                          type: newType,
+                          followUpType: newType === 'Follow-up' ? (formData.followUpType || 'Call') : '',
+                          relatedSample: newType === 'Sample Track' ? formData.relatedSample : ''
+                        })
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    >
+                      {TASK_TYPES.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Priority <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.priority}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    >
+                      {PRIORITIES.map((priority) => (
+                        <option key={priority} value={priority}>{priority}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Follow-up Type - Show only when Follow-up is selected */}
+                {formData.type === 'Follow-up' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Follow-up Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.followUpType}
+                      onChange={(e) => setFormData({ ...formData, followUpType: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    >
+                      <option value="">Select follow-up type</option>
+                      <option value="Call">Call</option>
+                      <option value="Email">Email</option>
+                      <option value="Meeting">Meeting</option>
+                      <option value="WhatsApp">WhatsApp</option>
+                      <option value="Visit">Visit</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Sample Tracker – Add Item Section – Show only when Sample Track is selected */}
+                {formData.type === 'Sample Track' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Visit Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={sampleVisitDate}
+                          onChange={(e) => setSampleVisitDate(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Expected Date
+                        </label>
+                        <input
+                          type="date"
+                          value={sampleExpectedDate}
+                          onChange={(e) => setSampleExpectedDate(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Add Items Section */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Add Item (one or more products) <span className="text-red-500">*</span>
+                      </label>
+                      <div
+                        className="flex gap-2 mb-2"
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return
+                          e.preventDefault()
                           if (!addItemProduct) return
                           const p = products.find(pr => pr._id === addItemProduct)
                           if (!p) return
@@ -3666,120 +3620,164 @@ const Tasks = () => {
                           setAddItemProduct('')
                           setAddItemQty(1)
                         }}
-                        className="px-4 py-2 rounded-lg font-medium text-white transition-all"
-                        style={{ backgroundColor: appTheme.primary.main }}
-                        title="Add this product to the list"
                       >
-                        <FaPlus className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Hint when no items added */}
-                    {selectedItems.length === 0 && (
-                      <p className="mt-2 text-sm" style={{ color: appTheme.text.secondary }}>
-                        Select a product and quantity above, then click <strong>+</strong> or press <strong>Enter</strong> to add. Add at least one item to enable &quot;Create Task&quot;.
-                      </p>
-                    )}
-
-                    {/* Selected Items List */}
-                    {selectedItems.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                          Added items ({selectedItems.length}) — add more above if needed
-                        </p>
-                        {selectedItems.map((item, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: appTheme.border.medium }}>
-                            <div className="flex-1">
-                              <p className="font-medium" style={{ color: appTheme.text.primary }}>{item.productName}</p>
-                              <p className="text-sm" style={{ color: appTheme.text.secondary }}>
-                                {item.productCode && `Code: ${item.productCode} | `}Quantity: {item.quantity}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedItems(prev => prev.filter((_, i) => i !== index))}
-                              className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <FaTrash className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
+                        <select
+                          value={addItemProduct}
+                          onChange={(e) => setAddItemProduct(e.target.value)}
+                          className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                        >
+                          <option value="">Select product...</option>
+                          {products.map((product) => (
+                            <option key={product._id} value={product._id}>
+                              {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={addItemQty}
+                          onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-20 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                          placeholder="Qty"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!addItemProduct) return
+                            const p = products.find(pr => pr._id === addItemProduct)
+                            if (!p) return
+                            const qty = Math.max(1, parseInt(addItemQty, 10) || 1)
+                            if (selectedItems.some(item => item.productId === p._id)) {
+                              Swal.fire({ icon: 'info', title: 'Already added', text: 'This product is already in the list.', confirmButtonColor: '#e9931c' })
+                              return
+                            }
+                            setSelectedItems(prev => [...prev, { productId: p._id, productName: p.name || '', productCode: p.productCode || '', quantity: qty }])
+                            setAddItemProduct('')
+                            setAddItemQty(1)
+                          }}
+                          className="px-4 py-2 rounded-lg font-medium text-white transition-all"
+                          style={{ backgroundColor: appTheme.primary.main }}
+                          title="Add this product to the list"
+                        >
+                          <FaPlus className="w-4 h-4" />
+                        </button>
                       </div>
-                    )}
+
+                      {/* Hint when no items added */}
+                      {selectedItems.length === 0 && (
+                        <p className="mt-2 text-sm" style={{ color: appTheme.text.secondary }}>
+                          Select a product and quantity above, then click <strong>+</strong> or press <strong>Enter</strong> to add. Add at least one item to enable &quot;Create Task&quot;.
+                        </p>
+                      )}
+
+                      {/* Selected Items List */}
+                      {selectedItems.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Added items ({selectedItems.length}) — add more above if needed
+                          </p>
+                          {selectedItems.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: appTheme.border.medium }}>
+                              <div className="flex-1">
+                                <p className="font-medium" style={{ color: appTheme.text.primary }}>{item.productName}</p>
+                                <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+                                  {item.productCode && `Code: ${item.productCode} | `}Quantity: {item.quantity}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedItems(prev => prev.filter((_, i) => i !== index))}
+                                className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <FaTrash className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Due Date and Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Due Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.dueDate}
+                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                      Due Time
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.dueTime}
+                      onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                      style={{
+                        borderColor: appTheme.border.medium,
+                        focusRingColor: appTheme.primary.main
+                      }}
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* Due Date and Time */}
-              <div className="grid grid-cols-2 gap-4">
+                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Due Date <span className="text-red-500">*</span>
+                    Description
                   </label>
                   <input
-                    type="date"
-                    required
-                    value={formData.dueDate}
-                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    type="text"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
+                    placeholder="e.g., Follow up with sample tracker for salesman"
                   />
                 </div>
+
+                {/* Notes */}
                 <div>
                   <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                    Due Time
+                    Notes
                   </label>
-                  <input
-                    type="time"
-                    value={formData.dueTime}
-                    onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                    style={{ 
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={4}
+                    className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                    style={{
                       borderColor: appTheme.border.medium,
                       focusRingColor: appTheme.primary.main
                     }}
+                    placeholder="Add any additional notes..."
                   />
                 </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="e.g., Follow up with sample tracker for salesman"
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                  Notes
-                </label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={4}
-                  className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
-                  style={{ 
-                    borderColor: appTheme.border.medium,
-                    focusRingColor: appTheme.primary.main
-                  }}
-                  placeholder="Add any additional notes..."
-                />
-              </div>
 
               </div>
               {/* Form Actions – sticky footer so full form + buttons visible on mobile */}
@@ -3791,7 +3789,7 @@ const Tasks = () => {
                     resetForm()
                   }}
                   className="px-3 py-1.5 text-sm sm:px-5 sm:py-2.5 sm:text-base rounded-lg font-medium transition-colors min-h-[36px] sm:min-h-[44px]"
-                  style={{ 
+                  style={{
                     color: appTheme.text.secondary,
                     backgroundColor: appTheme.background.lightGray
                   }}
@@ -3900,7 +3898,7 @@ const Tasks = () => {
         <div className="fixed inset-0 z-50 bg-gray-50 overflow-hidden">
           <div className="h-full flex flex-col">
             {/* Header Bar */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <div className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 md:py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-4">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => {
@@ -3913,7 +3911,7 @@ const Tasks = () => {
                   <FaTimes className="w-5 h-5" />
                 </button>
                 <div>
-                  <h1 className="text-2xl font-semibold text-gray-900">
+                  <h1 className="text-base md:text-xl xl:text-2xl font-semibold text-gray-900 line-clamp-1">
                     {selectedTask.description || `Follow up with ${selectedTask.associatedContactName || selectedTask.customerName || 'Contact'}`}
                   </h1>
                   <div className="flex items-center gap-2 mt-1">
@@ -3934,15 +3932,15 @@ const Tasks = () => {
                     >
                       <FaChevronRight className="w-4 h-4" />
                     </button>
-              </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                 {selectedTask.status !== 'Completed' && (
                   <button
                     onClick={() => handleCompleteTask(selectedTask._id)}
-                    className="px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-colors"
-                    style={{ 
+                    className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors text-sm md:text-base"
+                    style={{
                       backgroundColor: appTheme.primary.main,
                       color: appTheme.text.white
                     }}
@@ -3956,8 +3954,8 @@ const Tasks = () => {
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent('navigateToTab', { detail: 'live-tracking' }))
                   }}
-                  className="px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2"
-                  style={{ 
+                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 text-sm md:text-base"
+                  style={{
                     backgroundColor: appTheme.primary.main,
                     color: appTheme.text.white
                   }}
@@ -3965,32 +3963,32 @@ const Tasks = () => {
                   onMouseLeave={(e) => e.target.style.backgroundColor = appTheme.primary.main}
                 >
                   <FaMapMarkerAlt className="w-4 h-4" />
-                  Live Tracking
+                  <span className="hidden md:inline">Live Tracking</span><span className="md:hidden">Track</span>
                 </button>
                 <button
                   onClick={() => selectedTask && handleDeleteTask(selectedTask._id)}
-                  className="px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 bg-red-600 text-white hover:bg-red-700"
+                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg font-medium hover:opacity-90 transition-colors flex items-center gap-2 bg-red-600 text-white hover:bg-red-700 text-sm md:text-base"
                 >
                   <FaTrash className="w-4 h-4" />
-                  Delete Task
+                  <span className="hidden md:inline">Delete Task</span><span className="md:hidden">Delete</span>
                 </button>
-              <button
-                onClick={() => {
-                  setShowTaskDetail(false)
+                <button
+                  onClick={() => {
+                    setShowTaskDetail(false)
                     // Don't reset selectedTask - keep it for when modal reopens
                     // setSelectedTask(null)
-                }}
+                  }}
                   className="text-gray-600 hover:bg-gray-100 rounded-full p-2 transition-colors"
-              >
+                >
                   <FaTimes className="w-5 h-5" />
-              </button>
-            </div>
+                </button>
+              </div>
             </div>
 
             {/* Main Content - Three Panel Layout */}
             <div className="flex-1 flex overflow-hidden">
               {/* Left Panel - Contact Information */}
-              <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+              <div className="hidden lg:block w-72 xl:w-80 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0">
                 {(() => {
                   // Prioritize customer's associated contact from customer creation
                   // For HubSpot tasks, check task data directly
@@ -4014,7 +4012,7 @@ const Tasks = () => {
                           <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
                             <span className="text-2xl font-semibold text-gray-600">
                               {(displayName || displayEmail || '?')[0].toUpperCase()}
-                    </span>
+                            </span>
                           </div>
                           <div className="flex-1">
                             <h2 className="text-lg font-semibold text-gray-900">{displayName || '—'}</h2>
@@ -4023,10 +4021,10 @@ const Tasks = () => {
                             )}
                           </div>
                         </div>
-                      
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                          <button 
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
                             onClick={() => {
                               setModalActiveTab('activities')
                               // Focus typing pad after a short delay to ensure tab is active
@@ -4038,10 +4036,10 @@ const Tasks = () => {
                             }}
                             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                           >
-                          <FaStickyNote className="w-4 h-4" />
-                          Note
-                        </button>
-                          <button 
+                            <FaStickyNote className="w-4 h-4" />
+                            Note
+                          </button>
+                          <button
                             onClick={async () => {
                               // Prioritize associated contact email from customer creation
                               // For HubSpot tasks, check task data directly
@@ -4054,14 +4052,14 @@ const Tasks = () => {
                                 '';
                               if (email) {
                                 window.location.href = `mailto:${email}`
-                                
+
                                 // Save email activity to backend so "Email sent" shows in activities
                                 try {
                                   if (selectedTask && selectedTask._id) {
                                     const currentNotes = selectedTask.notes || ''
                                     const activityNote = `[${formatActivityDateTime(new Date())}] Email: Sent to ${email}`
                                     const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                    
+
                                     if (selectedTask.isVisitTarget) {
                                       await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
                                       const updatedRes = await getVisitTarget(selectedTask._id)
@@ -4089,10 +4087,10 @@ const Tasks = () => {
                             }}
                             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                           >
-                          <FaEnvelope className="w-4 h-4" />
-                          Email
-                        </button>
-                          <button 
+                            <FaEnvelope className="w-4 h-4" />
+                            Email
+                          </button>
+                          <button
                             onClick={async () => {
                               // Prioritize phone from customer details
                               // For HubSpot tasks, check task data directly
@@ -4114,18 +4112,18 @@ const Tasks = () => {
                                 }).then(async (result) => {
                                   if (result.isConfirmed) {
                                     window.location.href = `tel:${phone}`
-                                    
+
                                     // Save call activity to backend
                                     try {
                                       if (selectedTask && selectedTask._id) {
                                         const currentNotes = selectedTask.notes || ''
                                         const activityNote = `[${formatActivityDateTime(new Date())}] Call: Called ${phone}`
                                         const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                        
+
                                         await updateFollowUp(selectedTask._id, {
                                           notes: updatedNotes
                                         })
-                                        
+
                                         // Add to activities
                                         const newActivity = {
                                           type: 'Call',
@@ -4134,7 +4132,7 @@ const Tasks = () => {
                                           createdAt: new Date().toISOString()
                                         }
                                         setTaskActivities([...taskActivities, newActivity])
-                                        
+
                                         // Reload task to get updated push status
                                         const updatedRes = await getFollowUp(selectedTask._id)
                                         if (updatedRes.success) {
@@ -4144,7 +4142,7 @@ const Tasks = () => {
                                           const updatedTask = { ...selectedTask, notes: updatedNotes }
                                           setSelectedTask(updatedTask)
                                         }
-                                        
+
                                         // Reload tasks list to update push button status
                                         await loadTasks()
                                       }
@@ -4155,18 +4153,18 @@ const Tasks = () => {
                                     // Open WhatsApp with phone number (remove any non-digit characters)
                                     const cleanPhone = phone.replace(/\D/g, '')
                                     window.open(`https://wa.me/${cleanPhone}`, '_blank')
-                                    
+
                                     // Save WhatsApp activity to backend
                                     try {
                                       if (selectedTask && selectedTask._id) {
                                         const currentNotes = selectedTask.notes || ''
                                         const activityNote = `[${formatActivityDateTime(new Date())}] WhatsApp: Messaged ${phone}`
                                         const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                        
+
                                         await updateFollowUp(selectedTask._id, {
                                           notes: updatedNotes
                                         })
-                                        
+
                                         // Add to activities
                                         const newActivity = {
                                           type: 'WhatsApp',
@@ -4175,7 +4173,7 @@ const Tasks = () => {
                                           createdAt: new Date().toISOString()
                                         }
                                         setTaskActivities([...taskActivities, newActivity])
-                                        
+
                                         // Reload task to get updated push status
                                         const updatedRes = await getFollowUp(selectedTask._id)
                                         if (updatedRes.success) {
@@ -4185,7 +4183,7 @@ const Tasks = () => {
                                           const updatedTask = { ...selectedTask, notes: updatedNotes }
                                           setSelectedTask(updatedTask)
                                         }
-                                        
+
                                         // Reload tasks list to update push button status
                                         await loadTasks()
                                       }
@@ -4205,52 +4203,52 @@ const Tasks = () => {
                             }}
                             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                           >
-                          <FaPhone className="w-4 h-4" />
-                          Call
-                        </button>
-                          <button 
+                            <FaPhone className="w-4 h-4" />
+                            Call
+                          </button>
+                          <button
                             onClick={() => {
                               setModalActiveTab('activities')
                               // Filter activities to show only tasks
                             }}
                             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                           >
-                          <FaCalendarAlt className="w-4 h-4" />
-                          Task
-                        </button>
-                          <button 
+                            <FaCalendarAlt className="w-4 h-4" />
+                            Task
+                          </button>
+                          <button
                             onClick={() => {
                               setShowMeetingModal(true)
                             }}
                             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                           >
-                          <FaCalendarAlt className="w-4 h-4" />
-                          Meeting
-                        </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-                          <FaEllipsisH className="w-4 h-4" />
-                        </button>
+                            <FaCalendarAlt className="w-4 h-4" />
+                            Meeting
+                          </button>
+                          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                            <FaEllipsisH className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* About this contact */}
-                    <div className="p-6 border-b border-gray-200">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-4">About this contact</h3>
-                      <div className="space-y-3">
-                        {displayEmail && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Email</p>
-                            <p className="text-sm text-gray-900">{displayEmail}</p>
-                          </div>
-                        )}
+                      {/* About this contact */}
+                      <div className="p-6 border-b border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">About this contact</h3>
+                        <div className="space-y-3">
+                          {displayEmail && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Email</p>
+                              <p className="text-sm text-gray-900">{displayEmail}</p>
+                            </div>
+                          )}
                           {(selectedTask.customerPhone || taskCustomerDetails?.phone || (selectedTask.source === 'hubspot' && selectedTask.customerPhone)) && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Phone Number</p>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Phone Number</p>
                               <p className="text-sm text-gray-900">
-                                {taskCustomerDetails?.phone || 
-                                 selectedTask.customerPhone || 
-                                 (selectedTask.source === 'hubspot' ? selectedTask.customerPhone : '') || 
-                                 '—'}
+                                {taskCustomerDetails?.phone ||
+                                  selectedTask.customerPhone ||
+                                  (selectedTask.source === 'hubspot' ? selectedTask.customerPhone : '') ||
+                                  '—'}
                               </p>
                             </div>
                           )}
@@ -4282,26 +4280,26 @@ const Tasks = () => {
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Pincode</p>
                               <p className="text-sm text-gray-900">{taskCustomerDetails?.postcode || taskCustomerDetails?.pincode || selectedTask.customer?.postcode || selectedTask.customer?.pincode || '—'}</p>
-                          </div>
-                        )}
+                            </div>
+                          )}
                           {(() => {
                             // Extract name from task description if it's a HubSpot task and name is not available
                             let customerName = taskCustomerDetails?.name || selectedTask.customerName || displayName || ''
-                            
+
                             // If name is missing or looks like a HubSpot Task ID, try to extract from description
                             if ((!customerName || customerName.includes('HubSpot Task')) && selectedTask.description) {
                               const desc = selectedTask.description
                               const nameMatch = desc.match(/(?:follow up|call|email|meeting|visit|task).*?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
-                                              desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
-                                              desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
+                                desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                                desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
                               if (nameMatch && nameMatch[1]) {
                                 customerName = nameMatch[1].trim()
                               }
                             }
-                            
+
                             // Don't show if it's still a HubSpot Task ID
                             if (!customerName || customerName.includes('HubSpot Task')) return null
-                            
+
                             return (
                               <div>
                                 <p className="text-xs text-gray-500 mb-1">Customer</p>
@@ -4325,21 +4323,21 @@ const Tasks = () => {
                               selectedTask.associatedContactEmail ||
                               (selectedTask.customer && typeof selectedTask.customer === 'object' ? selectedTask.customer.associatedContactEmail : '') ||
                               '';
-                            
+
                             // If name is missing or looks like a HubSpot Task ID, try to extract from description
                             if ((!associatedContactName || associatedContactName.includes('HubSpot Task')) && selectedTask.description) {
                               const desc = selectedTask.description
                               const nameMatch = desc.match(/(?:follow up|call|email|meeting|visit|task).*?with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
-                                              desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
-                                              desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
+                                desc.match(/(?:follow up|call|email|meeting|visit|task)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i) ||
+                                desc.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/)
                               if (nameMatch && nameMatch[1]) {
                                 associatedContactName = nameMatch[1].trim()
                               }
                             }
-                            
+
                             // Don't show if it's still a HubSpot Task ID or empty
                             if ((!associatedContactName || associatedContactName.includes('HubSpot Task')) && !associatedContactEmail) return null;
-                            
+
                             return (
                               <div>
                                 <p className="text-xs text-gray-500 mb-1">Associated Contact</p>
@@ -4350,79 +4348,79 @@ const Tasks = () => {
                               </div>
                             );
                           })()}
-                        {(() => {
-                          // Show assigned salesman - prioritize HubSpot owner name, then salesman name
-                          const hubspotOwnerName = (selectedTask.hubspot_owner_name || '').trim();
-                          const salesmanName = (selectedTask.salesman?.name || '').trim();
-                          const salesmanEmail = (selectedTask.salesman?.email || '').trim();
-                          const displayName = hubspotOwnerName || salesmanName || salesmanEmail || '';
-                          const displayEmail = selectedTask.hubspot_owner_email || salesmanEmail || '';
-                          
-                          if (!displayName) return null;
-                          
-                          return (
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">
+                          {(() => {
+                            // Show assigned salesman - prioritize HubSpot owner name, then salesman name
+                            const hubspotOwnerName = (selectedTask.hubspot_owner_name || '').trim();
+                            const salesmanName = (selectedTask.salesman?.name || '').trim();
+                            const salesmanEmail = (selectedTask.salesman?.email || '').trim();
+                            const displayName = hubspotOwnerName || salesmanName || salesmanEmail || '';
+                            const displayEmail = selectedTask.hubspot_owner_email || salesmanEmail || '';
+
+                            if (!displayName) return null;
+
+                            return (
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">
                                   {hubspotOwnerName ? 'HubSpot Owner' : 'Contact Owner'}
-                              </p>
-                              <p className="text-sm text-gray-900">
-                                {displayName}
-                                {displayEmail && displayEmail !== displayName && (
-                                  <span className="ml-2 text-xs text-gray-500">({displayEmail})</span>
-                                )}
-                              </p>
-                            </div>
-                          );
-                        })()}
+                                </p>
+                                <p className="text-sm text-gray-900">
+                                  {displayName}
+                                  {displayEmail && displayEmail !== displayName && (
+                                    <span className="ml-2 text-xs text-gray-500">({displayEmail})</span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          })()}
                           {(taskCustomerDetails?.lastContact || selectedTask.customer?.lastContact) && (
-                          <div>
+                            <div>
                               <p className="text-xs text-gray-500 mb-1">Last Contact</p>
-                            <p className="text-sm text-gray-900">
-                                {taskCustomerDetails?.lastContact 
+                              <p className="text-sm text-gray-900">
+                                {taskCustomerDetails?.lastContact
                                   ? new Date(taskCustomerDetails.lastContact).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })
+                                  : selectedTask.customer?.lastContact
+                                    ? new Date(selectedTask.customer.lastContact).toLocaleDateString('en-GB', {
                                       day: '2-digit',
                                       month: 'short',
                                       year: 'numeric'
                                     })
-                                  : selectedTask.customer?.lastContact
-                                    ? new Date(selectedTask.customer.lastContact).toLocaleDateString('en-GB', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric'
-                                      })
                                     : '—'}
-                            </p>
-                          </div>
-                        )}
+                              </p>
+                            </div>
+                          )}
                           {(taskCustomerDetails?.lastEngagement || selectedTask.customer?.lastEngagement) && (
-                          <div>
+                            <div>
                               <p className="text-xs text-gray-500 mb-1">Last Engagement</p>
                               <p className="text-sm text-gray-900">
                                 {taskCustomerDetails?.lastEngagement
                                   ? new Date(taskCustomerDetails.lastEngagement).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })
+                                  : selectedTask.customer?.lastEngagement
+                                    ? new Date(selectedTask.customer.lastEngagement).toLocaleDateString('en-GB', {
                                       day: '2-digit',
                                       month: 'short',
                                       year: 'numeric'
                                     })
-                                  : selectedTask.customer?.lastEngagement
-                                    ? new Date(selectedTask.customer.lastEngagement).toLocaleDateString('en-GB', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric'
-                                      })
                                     : '—'}
                               </p>
-                          </div>
-                        )}
+                            </div>
+                          )}
                           {(taskCustomerDetails?.status || selectedTask.customer?.status) && (
-                          <div>
+                            <div>
                               <p className="text-xs text-gray-500 mb-1">Lead Status</p>
                               <p className="text-sm text-gray-900">{taskCustomerDetails?.status || selectedTask.customer?.status || '—'}</p>
-                          </div>
-                        )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </>
+                    </>
                   ) : null;
                 })()}
               </div>
@@ -4435,20 +4433,38 @@ const Tasks = () => {
                     <button
                       onClick={() => setModalActiveTab('overview')}
                       className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'overview'
-                          ? 'border-gray-600 text-gray-800'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
+                        ? 'border-gray-600 text-gray-800'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
                     >
                       Overview
                     </button>
                     <button
                       onClick={() => setModalActiveTab('activities')}
                       className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'activities'
-                          ? 'border-gray-600 text-gray-800'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
+                        ? 'border-gray-600 text-gray-800'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
                     >
                       Activities
+                    </button>
+                    <button
+                      onClick={() => setModalActiveTab('contact')}
+                      className={`lg:hidden py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'contact'
+                        ? 'border-gray-600 text-gray-800'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                      Contact
+                    </button>
+                    <button
+                      onClick={() => setModalActiveTab('associations')}
+                      className={`lg:hidden py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'associations'
+                        ? 'border-gray-600 text-gray-800'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                      Associations
                     </button>
                   </div>
                 </div>
@@ -4473,13 +4489,13 @@ const Tasks = () => {
                             <p className="text-xs text-gray-500 mb-1">Priority</p>
                             <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
                               {selectedTask.priority || '—'}
-                </span>
+                            </span>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Status</p>
                             <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
                               {selectedTask.status || '—'}
-                </span>
+                            </span>
                           </div>
                           {selectedTask.hubspotTaskId && (
                             <div>
@@ -4500,7 +4516,7 @@ const Tasks = () => {
                             </div>
                           )}
                         </div>
-              </div>
+                      </div>
 
                       {/* Dates Section */}
                       <div className="bg-white rounded-lg p-4 border border-gray-200">
@@ -4511,14 +4527,14 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.scheduledDate
                                 ? `${new Date(selectedTask.scheduledDate).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.scheduledDate).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.scheduledDate).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
@@ -4527,14 +4543,14 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.dueDate
                                 ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
@@ -4559,14 +4575,14 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.createdAt
                                 ? `${new Date(selectedTask.createdAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.createdAt).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.createdAt).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
@@ -4575,19 +4591,19 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.updatedAt
                                 ? `${new Date(selectedTask.updatedAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.updatedAt).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.updatedAt).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
                         </div>
-              </div>
+                      </div>
 
                       {/* Description & Notes */}
                       {(selectedTask.description || selectedTask.notes) && (
@@ -4597,12 +4613,12 @@ const Tasks = () => {
                             <div className="mb-4">
                               <p className="text-xs text-gray-500 mb-1">Description</p>
                               <p className="text-sm text-gray-900">{selectedTask.description}</p>
-                  </div>
+                            </div>
                           )}
                           {selectedTask.notes && (() => {
                             const parsedActivities = parseNotesToActivities(selectedTask.notes)
                             return (
-                            <div>
+                              <div>
                                 <p className="text-xs text-gray-500 mb-3">Activity History</p>
                                 {parsedActivities.length > 0 ? (
                                   <div className="space-y-3">
@@ -4611,58 +4627,58 @@ const Tasks = () => {
                                       const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
                                       const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
                                       return (
-                                      <div 
-                                        key={idx}
-                                        className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                                activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
-                                                activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
-                                                activity.type === 'Email' ? 'bg-green-100 text-green-800' :
-                                                activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
-                                                activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
-                                                'bg-gray-100 text-gray-800'
-                                              }`}>
-                                                {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
-                                                {activity.type === 'Meeting' && <FaCalendarAlt className="w-3 h-3 mr-1" />}
-                                                {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
-                                                {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
-                                                {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
-                                                {activity.type}
-                                              </span>
-                                              <span className="text-xs text-gray-500">
-                                                {dateStr} {timeStr}
-                                              </span>
-                                            </div>
-                                            <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
-                                              {activity.content}
-                                            </p>
-                                            {activity.type === 'Meeting' && (
-                                              <div className="mt-2 flex flex-wrap gap-2">
-                                                {activity.meetLink && (
-                                                  <a href={activity.meetLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700">
-                                                    Join Google Meet
-                                                  </a>
-                                                )}
-                                                {activity.link && (
-                                                  <a href={activity.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                                    <FaCalendarAlt className="w-3 h-3" /> Open Calendar
-                                                  </a>
-                                                )}
+                                        <div
+                                          key={idx}
+                                          className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                                        >
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
+                                                  activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
+                                                    activity.type === 'Email' ? 'bg-green-100 text-green-800' :
+                                                      activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
+                                                        activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                                          'bg-gray-100 text-gray-800'
+                                                  }`}>
+                                                  {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
+                                                  {activity.type === 'Meeting' && <FaCalendarAlt className="w-3 h-3 mr-1" />}
+                                                  {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
+                                                  {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
+                                                  {activity.type === 'WhatsApp' && <FaPhone className="w-3 h-3 mr-1" />}
+                                                  {activity.type}
+                                                </span>
+                                                <span className="text-xs text-gray-500">
+                                                  {dateStr} {timeStr}
+                                                </span>
                                               </div>
-                                            )}
-                                            {activity.type !== 'Meeting' && activity.link && (
-                                              <a href={activity.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                                Open Link
-                                              </a>
-                                            )}
+                                              <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                                                {activity.content}
+                                              </p>
+                                              {activity.type === 'Meeting' && (
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                  {activity.meetLink && (
+                                                    <a href={activity.meetLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700">
+                                                      Join Google Meet
+                                                    </a>
+                                                  )}
+                                                  {activity.link && (
+                                                    <a href={activity.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                                      <FaCalendarAlt className="w-3 h-3" /> Open Calendar
+                                                    </a>
+                                                  )}
+                                                </div>
+                                              )}
+                                              {activity.type !== 'Meeting' && activity.link && (
+                                                <a href={activity.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                                  Open Link
+                                                </a>
+                                              )}
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    )})}
+                                      )
+                                    })}
                                   </div>
                                 ) : (
                                   <p className="text-sm text-gray-500 italic">No activities recorded yet</p>
@@ -4670,38 +4686,38 @@ const Tasks = () => {
                               </div>
                             )
                           })()}
-                </div>
-              )}
+                        </div>
+                      )}
 
                       {/* Related Items */}
                       {(selectedTask.relatedQuotation || selectedTask.relatedSample || selectedTask.relatedOrder || selectedTask.visitTarget) && (
                         <div className="bg-white rounded-lg p-4 border border-gray-200">
                           <h3 className="text-sm font-semibold text-gray-900 mb-4">Related Items</h3>
-                  <div className="space-y-2">
+                          <div className="space-y-2">
                             {selectedTask.relatedQuotation && (
-                    <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2">
                                 <FaFileAlt className="w-4 h-4 text-gray-400" />
                                 <span className="text-sm text-gray-900">
                                   Quotation: {selectedTask.relatedQuotation?.quotationNumber || selectedTask.relatedQuotation}
                                 </span>
-                    </div>
+                              </div>
                             )}
                             {selectedTask.relatedSample && (
-                      <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2">
                                 <FaFlask className="w-4 h-4 text-gray-400" />
                                 <span className="text-sm text-gray-900">
                                   Sample: {selectedTask.relatedSample?.sampleNumber || selectedTask.relatedSample}
                                 </span>
-                      </div>
-                    )}
+                              </div>
+                            )}
                             {selectedTask.relatedOrder && (
-                      <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2">
                                 <FaShoppingCart className="w-4 h-4 text-gray-400" />
                                 <span className="text-sm text-gray-900">
                                   Order: {selectedTask.relatedOrder?.soNumber || selectedTask.relatedOrder}
                                 </span>
-                      </div>
-                    )}
+                              </div>
+                            )}
                             {selectedTask.visitTarget && (
                               <div className="flex items-center gap-2">
                                 <FaMapMarkerAlt className="w-4 h-4 text-gray-400" />
@@ -4710,41 +4726,41 @@ const Tasks = () => {
                                 </span>
                               </div>
                             )}
-                  </div>
-                </div>
-              )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Data Highlights */}
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <h3 className="text-sm font-semibold text-gray-900 mb-4">Data highlights</h3>
                         <div className="grid grid-cols-3 gap-4">
-                <div>
+                          <div>
                             <p className="text-xs text-gray-500 mb-1">CREATE DATE</p>
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.createdAt
                                 ? new Date(selectedTask.createdAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  }) + ' GMT+5'
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                }) + ' GMT+5'
                                 : '—'}
-                  </p>
-                </div>
+                            </p>
+                          </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">LAST ACTIVITY DATE</p>
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.dueDate || selectedTask.updatedAt
                                 ? `${new Date(selectedTask.dueDate || selectedTask.updatedAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.dueDate || selectedTask.updatedAt).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })} GMT+5`
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.dueDate || selectedTask.updatedAt).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })} GMT+5`
                                 : '—'}
                             </p>
                           </div>
@@ -4775,9 +4791,9 @@ const Tasks = () => {
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                            <input 
-                              type="checkbox" 
-                              className="rounded border-gray-300" 
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300"
                               checked={selectedTask.status === 'Completed'}
                               readOnly
                             />
@@ -4788,46 +4804,46 @@ const Tasks = () => {
                                 </span>
                                 <span className="text-sm text-gray-500">›</span>
                                 <span className="text-sm text-gray-600">
-                                  {selectedTask.status === 'Completed' 
+                                  {selectedTask.status === 'Completed'
                                     ? `Completed ${selectedTask.completedDate ? new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      }) + ' GMT+5' : ''}`
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    }) + ' GMT+5' : ''}`
                                     : `Task assigned to ${selectedTask.salesman?.name || 'Salesman'}`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-xs px-2 py-1 rounded ${selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
                                   selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
-                                  selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                  'bg-blue-100 text-blue-700'
-                                }`}>
+                                    selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                      'bg-blue-100 text-blue-700'
+                                  }`}>
                                   {selectedTask.status === 'Overdue' ? 'Overdue' : selectedTask.status}
                                 </span>
                                 <span className="text-sm text-gray-600">
                                   {selectedTask.status === 'Completed' && selectedTask.completedDate
                                     ? `${new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })} ${new Date(selectedTask.completedDate).toLocaleTimeString('en-GB', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: false
+                                    })} GMT+5`
+                                    : selectedTask.dueDate
+                                      ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
                                         day: '2-digit',
                                         month: 'short',
                                         year: 'numeric'
-                                      })} ${new Date(selectedTask.completedDate).toLocaleTimeString('en-GB', {
+                                      })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
                                         hour: '2-digit',
                                         minute: '2-digit',
                                         hour12: false
                                       })} GMT+5`
-                                    : selectedTask.dueDate
-                                      ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
-                                          day: '2-digit',
-                                          month: 'short',
-                                          year: 'numeric'
-                                        })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: false
-                                        })} GMT+5`
                                       : '—'}
                                 </span>
                               </div>
@@ -4838,8 +4854,8 @@ const Tasks = () => {
                           </div>
                         </div>
                       </div>
-                </div>
-              )}
+                    </div>
+                  )}
 
                   {modalActiveTab === 'activities' && (
                     <>
@@ -4857,8 +4873,8 @@ const Tasks = () => {
                                 onChange={(e) => setActivitiesSearch(e.target.value)}
                                 className="pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
-                </div>
-                            <button 
+                            </div>
+                            <button
                               onClick={() => {
                                 // Focus typing pad
                                 setTimeout(() => {
@@ -4873,294 +4889,294 @@ const Tasks = () => {
                             </button>
                           </div>
                         </div>
-                        
+
                         {/* Typing Pad - Fixed at Top, No Scroll */}
                         <div className="pb-4 border-b border-gray-200">
-                        <div className="flex items-end gap-2">
-                          <div className="flex-1">
-                            <textarea
-                              ref={noteInputRef}
-                              value={noteInput}
-                              onChange={(e) => setNoteInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                  e.preventDefault()
-                                  if (noteInput.trim()) {
-                                    // Handle note save in separate async function
-                                    const handleSaveNote = async () => {
-                                      const noteContent = noteInput.trim()
-                                      const newActivity = {
-                                        type: 'Note',
-                                        content: noteContent,
-                                        date: new Date().toISOString(),
-                                        createdAt: new Date().toISOString()
-                                      }
-                                      const updatedActivities = [...taskActivities, newActivity]
-                                      setTaskActivities(updatedActivities)
-                                      setNoteInput('')
-                                      
-                                      // Save to backend
-                                      try {
-                                        if (selectedTask && selectedTask._id) {
-                                          const currentNotes = selectedTask.notes || ''
-                                          const activityNote = `[${formatActivityDateTime(new Date())}] Note: ${noteContent}`
-                                          const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                          
-                                          await updateFollowUp(selectedTask._id, {
-                                            notes: updatedNotes
-                                          })
-                                          
-                                          // Reload task to get updated push status and refresh activities
-                                          const updatedRes = await getFollowUp(selectedTask._id)
-                                          if (updatedRes.success) {
-                                            setSelectedTask(updatedRes.data)
-                                            setTaskActivities(parseNotesToActivities(updatedNotes))
-                                          } else {
-                                            // Fallback: Update selectedTask manually
-                                            const updatedTask = { ...selectedTask, notes: updatedNotes }
-                                            setSelectedTask(updatedTask)
-                                          }
-                                          
-                                          // Reload tasks list to update push button status
-                                          await loadTasks()
+                          <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <textarea
+                                ref={noteInputRef}
+                                value={noteInput}
+                                onChange={(e) => setNoteInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault()
+                                    if (noteInput.trim()) {
+                                      // Handle note save in separate async function
+                                      const handleSaveNote = async () => {
+                                        const noteContent = noteInput.trim()
+                                        const newActivity = {
+                                          type: 'Note',
+                                          content: noteContent,
+                                          date: new Date().toISOString(),
+                                          createdAt: new Date().toISOString()
                                         }
-                                      } catch (e) {
-                                        console.error('Error saving note:', e)
+                                        const updatedActivities = [...taskActivities, newActivity]
+                                        setTaskActivities(updatedActivities)
+                                        setNoteInput('')
+
+                                        // Save to backend
+                                        try {
+                                          if (selectedTask && selectedTask._id) {
+                                            const currentNotes = selectedTask.notes || ''
+                                            const activityNote = `[${formatActivityDateTime(new Date())}] Note: ${noteContent}`
+                                            const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                                            await updateFollowUp(selectedTask._id, {
+                                              notes: updatedNotes
+                                            })
+
+                                            // Reload task to get updated push status and refresh activities
+                                            const updatedRes = await getFollowUp(selectedTask._id)
+                                            if (updatedRes.success) {
+                                              setSelectedTask(updatedRes.data)
+                                              setTaskActivities(parseNotesToActivities(updatedNotes))
+                                            } else {
+                                              // Fallback: Update selectedTask manually
+                                              const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                              setSelectedTask(updatedTask)
+                                            }
+
+                                            // Reload tasks list to update push button status
+                                            await loadTasks()
+                                          }
+                                        } catch (e) {
+                                          console.error('Error saving note:', e)
+                                        }
+
+                                        Swal.fire({
+                                          icon: 'success',
+                                          title: 'Note Added!',
+                                          text: 'Note has been added successfully',
+                                          confirmButtonColor: '#1f2937',
+                                          timer: 1500,
+                                          timerProgressBar: true
+                                        })
                                       }
-                                      
-                                      Swal.fire({
-                                        icon: 'success',
-                                        title: 'Note Added!',
-                                        text: 'Note has been added successfully',
-                                        confirmButtonColor: '#1f2937',
-                                        timer: 1500,
-                                        timerProgressBar: true
-                                      })
+                                      handleSaveNote()
                                     }
-                                    handleSaveNote()
                                   }
+                                }}
+                                placeholder="Type a note and press Enter to add..."
+                                rows={3}
+                                className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 resize-none"
+                                style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+                              />
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (noteInput.trim()) {
+                                  // Add note to activities
+                                  const newActivity = {
+                                    type: 'Note',
+                                    content: noteInput.trim(),
+                                    date: new Date().toISOString(),
+                                    createdAt: new Date().toISOString()
+                                  }
+                                  const updatedActivities = [...taskActivities, newActivity]
+                                  setTaskActivities(updatedActivities)
+                                  const noteContent = noteInput.trim()
+                                  setNoteInput('')
+
+                                  // Save to backend
+                                  try {
+                                    if (selectedTask && selectedTask._id) {
+                                      const currentNotes = selectedTask.notes || ''
+                                      const activityNote = `[${formatActivityDateTime(new Date())}] Note: ${noteContent}`
+                                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                                      await updateFollowUp(selectedTask._id, {
+                                        notes: updatedNotes
+                                      })
+
+                                      // Reload task to get updated push status
+                                      const updatedRes = await getFollowUp(selectedTask._id)
+                                      if (updatedRes.success) {
+                                        setSelectedTask(updatedRes.data)
+                                      } else {
+                                        // Fallback: Update selectedTask manually
+                                        const updatedTask = { ...selectedTask, notes: updatedNotes }
+                                        setSelectedTask(updatedTask)
+                                      }
+
+                                      // Reload tasks list to update push button status
+                                      await loadTasks()
+                                    }
+                                  } catch (e) {
+                                    console.error('Error saving note:', e)
+                                    Swal.fire({
+                                      icon: 'error',
+                                      title: 'Error',
+                                      text: 'Failed to save note. Please try again.',
+                                      confirmButtonColor: '#e9931c'
+                                    })
+                                    return
+                                  }
+
+                                  Swal.fire({
+                                    icon: 'success',
+                                    title: 'Note Added!',
+                                    text: 'Note has been added successfully',
+                                    confirmButtonColor: '#1f2937',
+                                    timer: 1500,
+                                    timerProgressBar: true
+                                  })
                                 }
                               }}
-                              placeholder="Type a note and press Enter to add..."
-                              rows={3}
-                              className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 resize-none"
+                              disabled={!noteInput.trim()}
+                              className="px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                               style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-                            />
+                            >
+                              <FaStickyNote className="w-4 h-4" />
+                              <span className="text-sm font-medium">Add</span>
+                            </button>
                           </div>
-                          <button
-                            onClick={async () => {
-                              if (noteInput.trim()) {
-                                // Add note to activities
-                                const newActivity = {
-                                  type: 'Note',
-                                  content: noteInput.trim(),
-                                  date: new Date().toISOString(),
-                                  createdAt: new Date().toISOString()
-                                }
-                                const updatedActivities = [...taskActivities, newActivity]
-                                setTaskActivities(updatedActivities)
-                                const noteContent = noteInput.trim()
-                                setNoteInput('')
-                                
-                                // Save to backend
-                                try {
-                                  if (selectedTask && selectedTask._id) {
-                                    const currentNotes = selectedTask.notes || ''
-                                    const activityNote = `[${formatActivityDateTime(new Date())}] Note: ${noteContent}`
-                                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                    
-                                    await updateFollowUp(selectedTask._id, {
-                                      notes: updatedNotes
-                                    })
-                                    
-                                    // Reload task to get updated push status
-                                    const updatedRes = await getFollowUp(selectedTask._id)
-                                    if (updatedRes.success) {
-                                      setSelectedTask(updatedRes.data)
-                                    } else {
-                                      // Fallback: Update selectedTask manually
-                                      const updatedTask = { ...selectedTask, notes: updatedNotes }
-                                      setSelectedTask(updatedTask)
-                                    }
-                                    
-                                    // Reload tasks list to update push button status
-                                    await loadTasks()
-                                  }
-                                } catch (e) {
-                                  console.error('Error saving note:', e)
-                                  Swal.fire({
-                                    icon: 'error',
-                                    title: 'Error',
-                                    text: 'Failed to save note. Please try again.',
-                                    confirmButtonColor: '#e9931c'
-                                  })
-                                  return
-                                }
-                                
-                                Swal.fire({
-                                  icon: 'success',
-                                  title: 'Note Added!',
-                                  text: 'Note has been added successfully',
-                                  confirmButtonColor: '#1f2937',
-                                  timer: 1500,
-                                  timerProgressBar: true
-                                })
-                              }
-                            }}
-                            disabled={!noteInput.trim()}
-                            className="px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-                            style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
-                          >
-                            <FaStickyNote className="w-4 h-4" />
-                            <span className="text-sm font-medium">Add</span>
-                          </button>
+                          <p className="text-xs text-gray-500 mt-2">Press Enter to add note, or click Add button</p>
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">Press Enter to add note, or click Add button</p>
                       </div>
-                      </div>
-                      
+
                       {/* Activities List - Scrollable Only */}
                       <div className="flex-1 overflow-y-auto pr-2 pt-4 min-h-0">
                         <div className="space-y-4">
-                        {(() => {
-                          // Combine all activities into one array
-                          const allActivities = []
-                          
-                          // Add current task as activity
-                          if (selectedTask) {
-                            allActivities.push({
-                              type: 'Task',
-                              id: selectedTask._id,
-                              content: selectedTask.description || `Follow up with ${selectedTask.customerName || selectedTask.associatedContactName || 'Contact'}`,
-                              date: selectedTask.dueDate || selectedTask.createdAt || new Date(),
-                              task: selectedTask,
-                              isCurrentTask: true
-                            })
-                          }
-                          
-                          // Add related tasks as activities
-                          relatedTasks.forEach((relatedTask) => {
-                            allActivities.push({
-                              type: 'Task',
-                              id: relatedTask._id,
-                              content: relatedTask.description || relatedTask.hs_task_subject || `Follow up with ${relatedTask.customerName || relatedTask.associatedContactName || 'Contact'}`,
-                              date: relatedTask.dueDate || relatedTask.createdAt || new Date(),
-                              task: relatedTask,
-                              isRelatedTask: true
-                            })
-                          })
-                          
-                          // Add notes, meetings, calls, emails from taskActivities
-                          taskActivities.forEach((activity) => {
-                            allActivities.push({
-                              ...activity,
-                              date: activity.date || activity.createdAt || new Date()
-                            })
-                          })
-                          
-                          // Sort by date/time (newest first) - ensure proper date parsing
-                          allActivities.sort((a, b) => {
-                            let dateA = new Date(0)
-                            let dateB = new Date(0)
-                            
-                            // Parse dateA
-                            if (a.date) {
-                              dateA = new Date(a.date)
-                              if (isNaN(dateA.getTime())) {
-                                dateA = new Date(0)
-                              }
-                            } else if (a.createdAt) {
-                              dateA = new Date(a.createdAt)
-                              if (isNaN(dateA.getTime())) {
-                                dateA = new Date(0)
-                              }
+                          {(() => {
+                            // Combine all activities into one array
+                            const allActivities = []
+
+                            // Add current task as activity
+                            if (selectedTask) {
+                              allActivities.push({
+                                type: 'Task',
+                                id: selectedTask._id,
+                                content: selectedTask.description || `Follow up with ${selectedTask.customerName || selectedTask.associatedContactName || 'Contact'}`,
+                                date: selectedTask.dueDate || selectedTask.createdAt || new Date(),
+                                task: selectedTask,
+                                isCurrentTask: true
+                              })
                             }
-                            
-                            // Parse dateB
-                            if (b.date) {
-                              dateB = new Date(b.date)
-                              if (isNaN(dateB.getTime())) {
-                                dateB = new Date(0)
-                              }
-                            } else if (b.createdAt) {
-                              dateB = new Date(b.createdAt)
-                              if (isNaN(dateB.getTime())) {
-                                dateB = new Date(0)
-                              }
-                            }
-                            
-                            // Sort: newest first (larger timestamp first)
-                            return dateB.getTime() - dateA.getTime()
-                          })
-                          
-                          // Apply search filter if search term exists
-                          let filteredActivities = allActivities
-                          if (activitiesSearch.trim()) {
-                            const searchTerm = activitiesSearch.trim().toLowerCase()
-                            filteredActivities = allActivities.filter(activity => {
-                              // Search in content
-                              const content = (activity.content || activity.note || activity.description || '').toLowerCase()
-                              // Search in type
-                              const type = (activity.type || '').toLowerCase()
-                              // Search in task description if it's a task
-                              const taskDesc = activity.task ? (activity.task.description || activity.task.hs_task_subject || '').toLowerCase() : ''
-                              // Search in date
-                              const dateStr = activity.date ? new Date(activity.date).toLocaleString('en-GB').toLowerCase() : ''
-                              
-                              return content.includes(searchTerm) || 
-                                     type.includes(searchTerm) || 
-                                     taskDesc.includes(searchTerm) ||
-                                     dateStr.includes(searchTerm)
+
+                            // Add related tasks as activities
+                            relatedTasks.forEach((relatedTask) => {
+                              allActivities.push({
+                                type: 'Task',
+                                id: relatedTask._id,
+                                content: relatedTask.description || relatedTask.hs_task_subject || `Follow up with ${relatedTask.customerName || relatedTask.associatedContactName || 'Contact'}`,
+                                date: relatedTask.dueDate || relatedTask.createdAt || new Date(),
+                                task: relatedTask,
+                                isRelatedTask: true
+                              })
                             })
-                          }
-                          
-                          if (filteredActivities.length === 0) {
-                            return selectedTask ? (
-                              <div className="text-center py-8">
-                                <FaStickyNote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                <p className="text-gray-500 text-sm">
-                                  {activitiesSearch.trim() ? 'No activities found matching your search' : 'No activities yet'}
-                                </p>
-                                {!activitiesSearch.trim() && (
-                                  <button
-                                    onClick={() => {
-                                      if (noteInputRef.current) {
-                                        noteInputRef.current.focus()
-                                      }
-                                    }}
-                                    className="mt-3 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+
+                            // Add notes, meetings, calls, emails from taskActivities
+                            taskActivities.forEach((activity) => {
+                              allActivities.push({
+                                ...activity,
+                                date: activity.date || activity.createdAt || new Date()
+                              })
+                            })
+
+                            // Sort by date/time (newest first) - ensure proper date parsing
+                            allActivities.sort((a, b) => {
+                              let dateA = new Date(0)
+                              let dateB = new Date(0)
+
+                              // Parse dateA
+                              if (a.date) {
+                                dateA = new Date(a.date)
+                                if (isNaN(dateA.getTime())) {
+                                  dateA = new Date(0)
+                                }
+                              } else if (a.createdAt) {
+                                dateA = new Date(a.createdAt)
+                                if (isNaN(dateA.getTime())) {
+                                  dateA = new Date(0)
+                                }
+                              }
+
+                              // Parse dateB
+                              if (b.date) {
+                                dateB = new Date(b.date)
+                                if (isNaN(dateB.getTime())) {
+                                  dateB = new Date(0)
+                                }
+                              } else if (b.createdAt) {
+                                dateB = new Date(b.createdAt)
+                                if (isNaN(dateB.getTime())) {
+                                  dateB = new Date(0)
+                                }
+                              }
+
+                              // Sort: newest first (larger timestamp first)
+                              return dateB.getTime() - dateA.getTime()
+                            })
+
+                            // Apply search filter if search term exists
+                            let filteredActivities = allActivities
+                            if (activitiesSearch.trim()) {
+                              const searchTerm = activitiesSearch.trim().toLowerCase()
+                              filteredActivities = allActivities.filter(activity => {
+                                // Search in content
+                                const content = (activity.content || activity.note || activity.description || '').toLowerCase()
+                                // Search in type
+                                const type = (activity.type || '').toLowerCase()
+                                // Search in task description if it's a task
+                                const taskDesc = activity.task ? (activity.task.description || activity.task.hs_task_subject || '').toLowerCase() : ''
+                                // Search in date
+                                const dateStr = activity.date ? new Date(activity.date).toLocaleString('en-GB').toLowerCase() : ''
+
+                                return content.includes(searchTerm) ||
+                                  type.includes(searchTerm) ||
+                                  taskDesc.includes(searchTerm) ||
+                                  dateStr.includes(searchTerm)
+                              })
+                            }
+
+                            if (filteredActivities.length === 0) {
+                              return selectedTask ? (
+                                <div className="text-center py-8">
+                                  <FaStickyNote className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                  <p className="text-gray-500 text-sm">
+                                    {activitiesSearch.trim() ? 'No activities found matching your search' : 'No activities yet'}
+                                  </p>
+                                  {!activitiesSearch.trim() && (
+                                    <button
+                                      onClick={() => {
+                                        if (noteInputRef.current) {
+                                          noteInputRef.current.focus()
+                                        }
+                                      }}
+                                      className="mt-3 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                                    >
+                                      Add your first note
+                                    </button>
+                                  )}
+                                </div>
+                              ) : null
+                            }
+
+                            return filteredActivities.map((activity, index) => {
+                              // Render Task type
+                              if (activity.type === 'Task') {
+                                const task = activity.task || selectedTask
+                                return (
+                                  <div
+                                    key={activity.id || `task-${index}`}
+                                    className={`flex items-start gap-3 ${activity.isRelatedTask ? 'cursor-pointer' : ''}`}
+                                    onClick={activity.isRelatedTask ? async () => {
+                                      await handleTaskClick(task)
+                                    } : undefined}
                                   >
-                                    Add your first note
-                                  </button>
-                                )}
-                              </div>
-                            ) : null
-                          }
-                          
-                          return filteredActivities.map((activity, index) => {
-                            // Render Task type
-                            if (activity.type === 'Task') {
-                              const task = activity.task || selectedTask
-                              return (
-                                <div 
-                                  key={activity.id || `task-${index}`} 
-                                  className={`flex items-start gap-3 ${activity.isRelatedTask ? 'cursor-pointer' : ''}`}
-                                  onClick={activity.isRelatedTask ? async () => {
-                                    await handleTaskClick(task)
-                                  } : undefined}
-                                >
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                    <FaBriefcase className="w-4 h-4 text-gray-600" />
-                    </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className={`bg-gray-100 rounded-lg p-3 ${activity.isRelatedTask ? 'hover:bg-gray-200 transition-colors' : ''}`}>
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-medium text-gray-700">
-                                          {task?.type || task?.hs_task_type || 'Task'}
-                                        </span>
-                                        <span className="text-xs text-gray-500">
-                                          {activity.date
-                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <FaBriefcase className="w-4 h-4 text-gray-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`bg-gray-100 rounded-lg p-3 ${activity.isRelatedTask ? 'hover:bg-gray-200 transition-colors' : ''}`}>
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-xs font-medium text-gray-700">
+                                            {task?.type || task?.hs_task_type || 'Task'}
+                                          </span>
+                                          <span className="text-xs text-gray-500">
+                                            {activity.date
+                                              ? `${new Date(activity.date).toLocaleDateString('en-GB', {
                                                 day: '2-digit',
                                                 month: 'short'
                                               })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
@@ -5168,43 +5184,43 @@ const Tasks = () => {
                                                 minute: '2-digit',
                                                 hour12: false
                                               })}`
-                                            : '—'}
-                                        </span>
+                                              : '—'}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-900 mb-1">{activity.content}</p>
+                                        {activity.isRelatedTask && task && (
+                                          <div className="flex items-center gap-2 mt-2">
+                                            {task.status && (
+                                              <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
+                                                {task.status}
+                                              </span>
+                                            )}
+                                            {task.priority && (
+                                              <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
+                                                {task.priority}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
-                                      <p className="text-sm text-gray-900 mb-1">{activity.content}</p>
-                                      {activity.isRelatedTask && task && (
-                                        <div className="flex items-center gap-2 mt-2">
-                                          {task.status && (
-                                            <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
-                                              {task.status}
-                                            </span>
-                                          )}
-                                          {task.priority && (
-                                            <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800">
-                                              {task.priority}
-                                            </span>
-                  )}
-                </div>
-                                      )}
                                     </div>
                                   </div>
-                                </div>
-                              )
-                            }
-                            
-                            // Render Note type
-                            if (activity.type === 'Note') {
-                              return (
-                                <div key={`note-${index}`} className="flex items-start gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                    <FaStickyNote className="w-4 h-4 text-gray-600" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors cursor-pointer"
-                                      onClick={() => {
-                                        Swal.fire({
-                                          title: 'Note',
-                                          html: `
+                                )
+                              }
+
+                              // Render Note type
+                              if (activity.type === 'Note') {
+                                return (
+                                  <div key={`note-${index}`} className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <FaStickyNote className="w-4 h-4 text-gray-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors cursor-pointer"
+                                        onClick={() => {
+                                          Swal.fire({
+                                            title: 'Note',
+                                            html: `
                                             <div class="text-left">
                                               <p class="text-sm text-gray-600 mb-2">
                                                 <strong>Date:</strong> ${activity.date ? new Date(activity.date).toLocaleString('en-GB') : 'N/A'}
@@ -5212,15 +5228,15 @@ const Tasks = () => {
                                               <p class="text-sm text-gray-900">${activity.content || activity.note || '—'}</p>
                                             </div>
                                           `,
-                                          confirmButtonColor: '#e9931c'
-                                        })
-                                      }}
-                                    >
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-medium text-gray-700">Note</span>
-                                        <span className="text-xs text-gray-500">
-                                          {activity.date
-                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                            confirmButtonColor: '#e9931c'
+                                          })
+                                        }}
+                                      >
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-xs font-medium text-gray-700">Note</span>
+                                          <span className="text-xs text-gray-500">
+                                            {activity.date
+                                              ? `${new Date(activity.date).toLocaleDateString('en-GB', {
                                                 day: '2-digit',
                                                 month: 'short'
                                               })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
@@ -5228,100 +5244,34 @@ const Tasks = () => {
                                                 minute: '2-digit',
                                                 hour12: false
                                               })}`
-                                            : new Date().toLocaleTimeString('en-GB', {
+                                              : new Date().toLocaleTimeString('en-GB', {
                                                 hour: '2-digit',
                                                 minute: '2-digit',
                                                 hour12: false
                                               })}
-                                        </span>
-                                      </div>
-                                      <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{activity.content || activity.note || '—'}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              )
-                            }
-                            
-                            // Render Meeting type
-                            if (activity.type === 'Meeting') {
-                              return (
-                                <div key={`meeting-${index}`} className="flex items-start gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                                    <FaCalendarAlt className="w-4 h-4 text-purple-600" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-medium text-gray-700">Meeting</span>
-                                        <span className="text-xs text-gray-500">
-                                          {activity.date
-                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
-                                                day: '2-digit',
-                                                month: 'short'
-                                              })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                hour12: false
-                                              })}`
-                                            : new Date().toLocaleTimeString('en-GB', {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                hour12: false
-                                              })}
-                                        </span>
-                                      </div>
-                                      <p className="text-sm text-gray-900 mb-2">{activity.content || 'Meeting'}</p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {activity.meetLink && (
-                                          <a
-                                            href={activity.meetLink}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            Join Google Meet
-                                          </a>
-                                        )}
-                                        {activity.link && (
-                                          <a
-                                            href={activity.link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-200 text-gray-800 text-xs font-medium hover:bg-gray-300 transition-colors"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            Open Google Calendar
-                                          </a>
-                                        )}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{activity.content || activity.note || '—'}</p>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              )
-                            }
-                            
-                            // Render Email, Call, WhatsApp types
-                            if (activity.type === 'Email' || activity.type === 'Call' || activity.type === 'WhatsApp') {
-                              const iconMap = {
-                                Email: FaEnvelope,
-                                Call: FaPhone,
-                                WhatsApp: FaPhone
+                                )
                               }
-                              const Icon = iconMap[activity.type] || FaStickyNote
-                              
-                              return (
-                                <div key={`${activity.type}-${index}`} className="flex items-start gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                    <Icon className="w-4 h-4 text-gray-600" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="bg-gray-100 rounded-lg p-3">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-medium text-gray-700">{activity.type}</span>
-                                        <span className="text-xs text-gray-500">
-                                          {activity.date
-                                            ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+
+                              // Render Meeting type
+                              if (activity.type === 'Meeting') {
+                                return (
+                                  <div key={`meeting-${index}`} className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                                      <FaCalendarAlt className="w-4 h-4 text-purple-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="bg-gray-100 rounded-lg p-3 hover:bg-gray-200 transition-colors">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-xs font-medium text-gray-700">Meeting</span>
+                                          <span className="text-xs text-gray-500">
+                                            {activity.date
+                                              ? `${new Date(activity.date).toLocaleDateString('en-GB', {
                                                 day: '2-digit',
                                                 month: 'short'
                                               })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
@@ -5329,33 +5279,160 @@ const Tasks = () => {
                                                 minute: '2-digit',
                                                 hour12: false
                                               })}`
-                                            : new Date().toLocaleTimeString('en-GB', {
+                                              : new Date().toLocaleTimeString('en-GB', {
                                                 hour: '2-digit',
                                                 minute: '2-digit',
                                                 hour12: false
                                               })}
-                                        </span>
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-900 mb-2">{activity.content || 'Meeting'}</p>
+                                        <div className="flex flex-wrap gap-2">
+                                          {activity.meetLink && (
+                                            <a
+                                              href={activity.meetLink}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              Join Google Meet
+                                            </a>
+                                          )}
+                                          {activity.link && (
+                                            <a
+                                              href={activity.link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-200 text-gray-800 text-xs font-medium hover:bg-gray-300 transition-colors"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              Open Google Calendar
+                                            </a>
+                                          )}
+                                        </div>
                                       </div>
-                                      <p className="text-sm text-gray-900">{activity.content || activity.type}</p>
                                     </div>
                                   </div>
-                                </div>
-                              )
-                            }
-                            
-                            return null
-                          })
-                        })()}
+                                )
+                              }
+
+                              // Render Email, Call, WhatsApp types
+                              if (activity.type === 'Email' || activity.type === 'Call' || activity.type === 'WhatsApp') {
+                                const iconMap = {
+                                  Email: FaEnvelope,
+                                  Call: FaPhone,
+                                  WhatsApp: FaPhone
+                                }
+                                const Icon = iconMap[activity.type] || FaStickyNote
+
+                                return (
+                                  <div key={`${activity.type}-${index}`} className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                      <Icon className="w-4 h-4 text-gray-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="bg-gray-100 rounded-lg p-3">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-xs font-medium text-gray-700">{activity.type}</span>
+                                          <span className="text-xs text-gray-500">
+                                            {activity.date
+                                              ? `${new Date(activity.date).toLocaleDateString('en-GB', {
+                                                day: '2-digit',
+                                                month: 'short'
+                                              })} ${new Date(activity.date).toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}`
+                                              : new Date().toLocaleTimeString('en-GB', {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                hour12: false
+                                              })}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-900">{activity.content || activity.type}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              }
+
+                              return null
+                            })
+                          })()}
                         </div>
                       </div>
                     </>
                   )}
 
+                  {/* Mobile Mobile Only - Contact Info Tab Content */}
+                  {modalActiveTab === 'contact' && (
+                    <div className="lg:hidden space-y-6">
+                      {/* This is the same content from Left Panel but shown as a tab on mobile */}
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">Contact Information</h3>
+                        {/* Reusing the logic from the left panel rendering... */}
+                        {(() => {
+                          const contact = selectedTask.associatedContact || selectedTask.customer
+                          const name = contact?.name || contact?.firstName || selectedTask.associatedContactName || selectedTask.customerName || 'Contact'
+                          const email = contact?.email || selectedTask.associatedContactEmail || selectedTask.customerEmail
+                          const phone = contact?.phone || selectedTask.associatedContactPhone || selectedTask.customerPhone
+                          return (
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-gray-600">
+                                  {name[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">{name}</p>
+                                  <p className="text-sm text-gray-500">{email || 'No email'}</p>
+                                </div>
+                              </div>
+                              <div className="pt-4 border-t border-gray-100 space-y-3">
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wider">Phone</p>
+                                  <p className="text-sm font-medium">{phone || '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wider">Company</p>
+                                  <p className="text-sm font-medium">{contact?.company || '—'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mobile Only - Associations Tab Content */}
+                  {modalActiveTab === 'associations' && (
+                    <div className="lg:hidden space-y-6">
+                      {/* Associated Companies */}
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">Associations</h3>
+                        <p className="text-sm text-gray-500 mb-2 font-medium">Companies</p>
+                        {selectedTask.customer?.company ? (
+                          <div className="p-3 bg-gray-50 rounded border border-gray-100 mb-4 font-medium text-sm">
+                            {selectedTask.customer.company}
+                          </div>
+                        ) : <p className="text-xs text-gray-400 mb-4">No companies associated</p>}
+
+                        <p className="text-sm text-gray-500 mb-2 font-medium">Deals</p>
+                        <p className="text-xs text-gray-400 mb-4">No deals associated</p>
+
+                        <p className="text-sm text-gray-500 mb-2 font-medium">Tickets</p>
+                        <p className="text-xs text-gray-400">No tickets associated</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Right Panel - Associated Companies */}
-              <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto">
+              <div className="hidden lg:block w-72 xl:w-80 bg-white border-l border-gray-200 overflow-y-auto flex-shrink-0">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">
@@ -5383,7 +5460,7 @@ const Tasks = () => {
                     if (!companyName || !companyName.trim()) {
                       return <p className="text-sm text-gray-500">No companies associated</p>;
                     }
-                    
+
                     return (
                       <div className="space-y-4">
                         <div className="p-4 border border-gray-200 rounded-lg">
@@ -5404,16 +5481,16 @@ const Tasks = () => {
                           </div>
                           <div className="space-y-2 text-sm">
                             {companyDomain && (
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Company Domain Name</p>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Company Domain Name</p>
                                 <p className="text-gray-900">{companyDomain}</p>
-                            </div>
+                              </div>
                             )}
                             {companyPhone && (
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Phone Number</p>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">Phone Number</p>
                                 <p className="text-gray-900">{companyPhone}</p>
-                            </div>
+                              </div>
                             )}
                           </div>
                           <button className="mt-3 text-xs text-gray-700 hover:underline">
@@ -5433,8 +5510,8 @@ const Tasks = () => {
                       <div className="space-y-3">
                         {/* HubSpot Deals */}
                         {hubspotDeals.map((deal) => (
-                          <div 
-                            key={deal.id || deal.dealId} 
+                          <div
+                            key={deal.id || deal.dealId}
                             className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer bg-blue-50"
                             onClick={() => {
                               Swal.fire({
@@ -5491,8 +5568,8 @@ const Tasks = () => {
                         ))}
                         {/* Local Quotations */}
                         {taskQuotations.map((quotation) => (
-                          <div 
-                            key={quotation._id || quotation.id} 
+                          <div
+                            key={quotation._id || quotation.id}
                             className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                             onClick={async () => {
                               try {
@@ -5502,14 +5579,14 @@ const Tasks = () => {
                                   const quote = res.data
                                   const itemsHtml = quote.items && quote.items.length > 0
                                     ? quote.items.map((item, idx) => {
-                                        const itemQuantity = item.quantity || 1
-                                        const itemPrice = item.price || item.unitPrice || 0
-                                        const itemTotal = item.total || item.lineTotal || (itemQuantity * itemPrice)
-                                        const itemTotalFormatted = Number(itemTotal || 0).toFixed(2)
-                                        const itemPriceFormatted = Number(itemPrice || 0).toFixed(2)
-                                        const discountHtml = item.discount ? `<p class="text-gray-500">Discount: £${Number(item.discount || 0).toFixed(2)}</p>` : ''
-                                        
-                                        return `
+                                      const itemQuantity = item.quantity || 1
+                                      const itemPrice = item.price || item.unitPrice || 0
+                                      const itemTotal = item.total || item.lineTotal || (itemQuantity * itemPrice)
+                                      const itemTotalFormatted = Number(itemTotal || 0).toFixed(2)
+                                      const itemPriceFormatted = Number(itemPrice || 0).toFixed(2)
+                                      const discountHtml = item.discount ? `<p class="text-gray-500">Discount: £${Number(item.discount || 0).toFixed(2)}</p>` : ''
+
+                                      return `
                                           <div class="text-xs text-gray-600 border-b border-gray-100 pb-2">
                                             <div class="flex justify-between items-start">
                                               <div class="flex-1">
@@ -5521,9 +5598,9 @@ const Tasks = () => {
                                             </div>
                                           </div>
                                         `
-                                      }).join('')
+                                    }).join('')
                                     : '<p class="text-xs text-gray-500 mt-2">No items</p>'
-                                  
+
                                   const itemsSectionHtml = quote.items && quote.items.length > 0
                                     ? `
                                       <div class="mt-3 border-t border-gray-200 pt-3">
@@ -5534,7 +5611,7 @@ const Tasks = () => {
                                       </div>
                                     `
                                     : itemsHtml
-                                  
+
                                   Swal.fire({
                                     title: quote.quotationNumber || `Quote #${quotationId?.slice(-6)}`,
                                     html: `
@@ -5570,20 +5647,20 @@ const Tasks = () => {
                                             <div class="flex justify-between">
                                               <span class="text-gray-600">Valid Until:</span>
                                               <span class="text-gray-900">${new Date(quote.validUntil).toLocaleDateString('en-GB', {
-                                                day: '2-digit',
-                                                month: 'short',
-                                                year: 'numeric'
-                                              })}</span>
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })}</span>
                                             </div>
                                           ` : ''}
                                           ${quote.createdAt ? `
                                             <div class="flex justify-between">
                                               <span class="text-gray-600">Created:</span>
                                               <span class="text-gray-900">${new Date(quote.createdAt).toLocaleDateString('en-GB', {
-                                                day: '2-digit',
-                                                month: 'short',
-                                                year: 'numeric'
-                                              })}</span>
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })}</span>
                                             </div>
                                           ` : ''}
                                         </div>
@@ -5667,7 +5744,7 @@ const Tasks = () => {
                         ))}
                       </div>
                     ) : (
-                    <p className="text-sm text-gray-500">No deals associated</p>
+                      <p className="text-sm text-gray-500">No deals associated</p>
                     )}
                   </div>
 
@@ -5677,18 +5754,17 @@ const Tasks = () => {
                     {salesTargets.length > 0 ? (
                       <div className="space-y-3">
                         {salesTargets.map((target) => (
-                          <div 
-                            key={target._id || target.id} 
+                          <div
+                            key={target._id || target.id}
                             className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                           >
                             <div className="flex items-center justify-between mb-2">
                               <p className="text-sm font-medium text-gray-900">{target.targetName || 'Target'}</p>
-                              <span className={`text-xs px-2 py-1 rounded ${
-                                target.status === 'Active' ? 'bg-green-100 text-green-800' :
+                              <span className={`text-xs px-2 py-1 rounded ${target.status === 'Active' ? 'bg-green-100 text-green-800' :
                                 target.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
-                                target.status === 'Failed' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
+                                  target.status === 'Failed' ? 'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                }`}>
                                 {target.status || 'Active'}
                               </span>
                             </div>
@@ -5708,8 +5784,8 @@ const Tasks = () => {
                               {target.progressPercentage && (
                                 <div className="mt-2">
                                   <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                    <div 
-                                      className="bg-[#e9931c] h-1.5 rounded-full" 
+                                    <div
+                                      className="bg-[#e9931c] h-1.5 rounded-full"
                                       style={{ width: `${Math.min(parseFloat(target.progressPercentage), 100)}%` }}
                                     ></div>
                                   </div>
@@ -5750,133 +5826,133 @@ const Tasks = () => {
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const formData = new FormData(e.target)
-                const noteContent = formData.get('noteContent')
-                const noteDate = formData.get('noteDate')
-                const noteTime = formData.get('noteTime')
-                
-                if (!noteContent) {
-                  Swal.fire({
-                    icon: 'warning',
-                    title: 'Note Required',
-                    text: 'Please enter a note',
-                    confirmButtonColor: '#e9931c'
-                  })
-                  return
-                }
-                
-                const noteDateTime = noteDate && noteTime 
-                  ? new Date(`${noteDate}T${noteTime}`)
-                  : new Date()
-                
-                // Add note to activities
-                const newActivity = {
-                  type: 'Note',
-                  content: noteContent,
-                  date: noteDateTime.toISOString(),
-                  createdAt: new Date().toISOString()
-                }
-                const updatedActivities = [...taskActivities, newActivity]
-                setTaskActivities(updatedActivities)
-                setShowNoteModal(false)
-                
-                // Save to backend
-                try {
-                  if (selectedTask && selectedTask._id) {
-                    const currentNotes = selectedTask.notes || ''
-                    const activityNote = `[${formatActivityDateTime(noteDateTime)}] Note: ${noteContent}`
-                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  const formData = new FormData(e.target)
+                  const noteContent = formData.get('noteContent')
+                  const noteDate = formData.get('noteDate')
+                  const noteTime = formData.get('noteTime')
 
-                    if (selectedTask.isVisitTarget) {
-                      await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
-                      const updatedRes = await getVisitTarget(selectedTask._id)
-                      if (updatedRes.success && updatedRes.data) {
-                        const vt = updatedRes.data
-                        setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
-                      }
-                    } else {
-                      await updateFollowUp(selectedTask._id, { notes: updatedNotes })
-                      const updatedRes = await getFollowUp(selectedTask._id)
-                      if (updatedRes.success) {
-                        setSelectedTask(updatedRes.data)
-                      } else {
-                        setSelectedTask(prev => ({ ...prev, notes: updatedNotes }))
-                      }
-                      setTaskActivities(parseNotesToActivities(updatedNotes))
-                    }
-                    
-                    await loadTasks()
+                  if (!noteContent) {
+                    Swal.fire({
+                      icon: 'warning',
+                      title: 'Note Required',
+                      text: 'Please enter a note',
+                      confirmButtonColor: '#e9931c'
+                    })
+                    return
                   }
-                } catch (e) {
-                  console.error('Error saving note:', e)
+
+                  const noteDateTime = noteDate && noteTime
+                    ? new Date(`${noteDate}T${noteTime}`)
+                    : new Date()
+
+                  // Add note to activities
+                  const newActivity = {
+                    type: 'Note',
+                    content: noteContent,
+                    date: noteDateTime.toISOString(),
+                    createdAt: new Date().toISOString()
+                  }
+                  const updatedActivities = [...taskActivities, newActivity]
+                  setTaskActivities(updatedActivities)
+                  setShowNoteModal(false)
+
+                  // Save to backend
+                  try {
+                    if (selectedTask && selectedTask._id) {
+                      const currentNotes = selectedTask.notes || ''
+                      const activityNote = `[${formatActivityDateTime(noteDateTime)}] Note: ${noteContent}`
+                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                      if (selectedTask.isVisitTarget) {
+                        await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
+                        const updatedRes = await getVisitTarget(selectedTask._id)
+                        if (updatedRes.success && updatedRes.data) {
+                          const vt = updatedRes.data
+                          setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
+                        }
+                      } else {
+                        await updateFollowUp(selectedTask._id, { notes: updatedNotes })
+                        const updatedRes = await getFollowUp(selectedTask._id)
+                        if (updatedRes.success) {
+                          setSelectedTask(updatedRes.data)
+                        } else {
+                          setSelectedTask(prev => ({ ...prev, notes: updatedNotes }))
+                        }
+                        setTaskActivities(parseNotesToActivities(updatedNotes))
+                      }
+
+                      await loadTasks()
+                    }
+                  } catch (e) {
+                    console.error('Error saving note:', e)
+                    Swal.fire({
+                      icon: 'error',
+                      title: 'Error',
+                      text: 'Failed to save note. Please try again.',
+                      confirmButtonColor: '#e9931c'
+                    })
+                    return
+                  }
+
                   Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'Failed to save note. Please try again.',
-                    confirmButtonColor: '#e9931c'
+                    icon: 'success',
+                    title: 'Note Created!',
+                    text: 'Note has been added successfully',
+                    confirmButtonColor: '#e9931c',
+                    timer: 2000,
+                    timerProgressBar: true
                   })
-                  return
-                }
-                
-                Swal.fire({
-                  icon: 'success',
-                  title: 'Note Created!',
-                  text: 'Note has been added successfully',
-                  confirmButtonColor: '#e9931c',
-                  timer: 2000,
-                  timerProgressBar: true
-                })
-              }}
-            >
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-                  <input
-                    type="date"
-                    name="noteDate"
-                    defaultValue={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                }}
+              >
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                    <input
+                      type="date"
+                      name="noteDate"
+                      defaultValue={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                    <input
+                      type="time"
+                      name="noteTime"
+                      defaultValue={new Date().toTimeString().slice(0, 5)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
+                    <textarea
+                      name="noteContent"
+                      rows={5}
+                      placeholder="Enter your note here..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                    >
+                      Save Note
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowNoteModal(false)}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
-                  <input
-                    type="time"
-                    name="noteTime"
-                    defaultValue={new Date().toTimeString().slice(0, 5)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
-                  <textarea
-                    name="noteContent"
-                    rows={5}
-                    placeholder="Enter your note here..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
-                  >
-                    Save Note
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowNoteModal(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </form>
+              </form>
             </div>
           </div>
         </div>
@@ -5991,11 +6067,10 @@ const Tasks = () => {
                 <button
                   onClick={handleConfirmStartTask}
                   disabled={!meterPicture}
-                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium ${
-                    meterPicture
-                      ? 'hover:opacity-90'
-                      : 'opacity-50 cursor-not-allowed'
-                  }`}
+                  className={`flex-1 px-4 py-2 rounded-lg text-white font-medium ${meterPicture
+                    ? 'hover:opacity-90'
+                    : 'opacity-50 cursor-not-allowed'
+                    }`}
                   style={meterPicture ? { backgroundColor: appTheme.status.success.main } : { backgroundColor: '#9ca3af' }}
                 >
                   Start Task
@@ -6019,220 +6094,221 @@ const Tasks = () => {
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const formData = new FormData(e.target)
-                const meetingTitle = formData.get('meetingTitle')
-                const meetingDate = formData.get('meetingDate')
-                const meetingTime = formData.get('meetingTime')
-                const meetingDuration = formData.get('meetingDuration') || '60'
-                
-                if (!meetingTitle || !meetingDate || !meetingTime) {
-                  Swal.fire({
-                    icon: 'warning',
-                    title: 'Fields Required',
-                    text: 'Please fill in all required fields',
-                    confirmButtonColor: '#e9931c'
-                  })
-                  return
-                }
-                
-                const meetingDateTime = new Date(`${meetingDate}T${meetingTime}`)
-                const endDateTime = new Date(meetingDateTime.getTime() + parseInt(meetingDuration) * 60000)
-                
-                // Create Google Calendar link (add Meet when creating event in Calendar)
-                const meetingWith = selectedTask.customerName || selectedTask.associatedContactName || 'Contact'
-                const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meetingTitle)}&dates=${meetingDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(`Meeting with ${meetingWith}`)}`
-                const googleMeetLink = 'https://meet.google.com/new'
-                
-                // Open Google Calendar in new tab
-                const calendarAnchor = document.createElement('a')
-                calendarAnchor.href = googleCalendarLink
-                calendarAnchor.target = '_blank'
-                calendarAnchor.rel = 'noopener noreferrer'
-                document.body.appendChild(calendarAnchor)
-                calendarAnchor.click()
-                document.body.removeChild(calendarAnchor)
-                
-                // Add meeting to activities (with meetLink so "Join Google Meet" works)
-                const newActivity = {
-                  type: 'Meeting',
-                  content: meetingTitle,
-                  date: meetingDateTime.toISOString(),
-                  link: googleCalendarLink,
-                  meetLink: googleMeetLink,
-                  createdAt: new Date().toISOString()
-                }
-                const updatedActivities = [...taskActivities, newActivity]
-                setTaskActivities(updatedActivities)
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  const formData = new FormData(e.target)
+                  const meetingTitle = formData.get('meetingTitle')
+                  const meetingDate = formData.get('meetingDate')
+                  const meetingTime = formData.get('meetingTime')
+                  const meetingDuration = formData.get('meetingDuration') || '60'
 
-                // Save to backend and create Meeting task (meeting bane – sirf show nahi, actual task create)
-                try {
-                  if (selectedTask && selectedTask._id) {
-                    const currentNotes = selectedTask.notes || ''
-                    const activityNote = `[${formatActivityDateTime(meetingDateTime)}] Meeting: ${meetingTitle} - ${googleCalendarLink} | Google Meet: ${googleMeetLink}`
-                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+                  if (!meetingTitle || !meetingDate || !meetingTime) {
+                    Swal.fire({
+                      icon: 'warning',
+                      title: 'Fields Required',
+                      text: 'Please fill in all required fields',
+                      confirmButtonColor: '#e9931c'
+                    })
+                    return
+                  }
 
-                    if (selectedTask.isVisitTarget) {
-                      await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
-                      const updatedRes = await getVisitTarget(selectedTask._id)
-                      if (updatedRes.success && updatedRes.data) {
-                        const vt = updatedRes.data
-                        setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
+                  const meetingDateTime = new Date(`${meetingDate}T${meetingTime}`)
+                  const endDateTime = new Date(meetingDateTime.getTime() + parseInt(meetingDuration) * 60000)
+
+                  // Create Google Calendar link (add Meet when creating event in Calendar)
+                  const meetingWith = selectedTask.customerName || selectedTask.associatedContactName || 'Contact'
+                  const googleCalendarLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meetingTitle)}&dates=${meetingDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDateTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z&details=${encodeURIComponent(`Meeting with ${meetingWith}`)}`
+                  const googleMeetLink = 'https://meet.google.com/new'
+
+                  // Open Google Calendar in new tab
+                  const calendarAnchor = document.createElement('a')
+                  calendarAnchor.href = googleCalendarLink
+                  calendarAnchor.target = '_blank'
+                  calendarAnchor.rel = 'noopener noreferrer'
+                  document.body.appendChild(calendarAnchor)
+                  calendarAnchor.click()
+                  document.body.removeChild(calendarAnchor)
+
+                  // Add meeting to activities (with meetLink so "Join Google Meet" works)
+                  const newActivity = {
+                    type: 'Meeting',
+                    content: meetingTitle,
+                    date: meetingDateTime.toISOString(),
+                    link: googleCalendarLink,
+                    meetLink: googleMeetLink,
+                    createdAt: new Date().toISOString()
+                  }
+                  const updatedActivities = [...taskActivities, newActivity]
+                  setTaskActivities(updatedActivities)
+
+                  // Save to backend and create Meeting task (meeting bane – sirf show nahi, actual task create)
+                  try {
+                    if (selectedTask && selectedTask._id) {
+                      const currentNotes = selectedTask.notes || ''
+                      const activityNote = `[${formatActivityDateTime(meetingDateTime)}] Meeting: ${meetingTitle} - ${googleCalendarLink} | Google Meet: ${googleMeetLink}`
+                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                      if (selectedTask.isVisitTarget) {
+                        await updateVisitTarget(selectedTask._id, { notes: updatedNotes })
+                        const updatedRes = await getVisitTarget(selectedTask._id)
+                        if (updatedRes.success && updatedRes.data) {
+                          const vt = updatedRes.data
+                          setSelectedTask(prev => ({ ...prev, notes: updatedNotes, ...vt }))
+                        }
+                        setTaskActivities(parseNotesToActivities(updatedNotes))
+                      } else {
+                        await updateFollowUp(selectedTask._id, { notes: updatedNotes })
+                        const updatedRes = await getFollowUp(selectedTask._id)
+                        if (updatedRes.success) setSelectedTask(updatedRes.data)
+                        // Parse from the notes we just saved so meeting shows immediately in activities
+                        setTaskActivities(parseNotesToActivities(updatedNotes))
                       }
-                      setTaskActivities(parseNotesToActivities(updatedNotes))
-                    } else {
-                      await updateFollowUp(selectedTask._id, { notes: updatedNotes })
-                      const updatedRes = await getFollowUp(selectedTask._id)
-                      if (updatedRes.success) setSelectedTask(updatedRes.data)
-                      // Parse from the notes we just saved so meeting shows immediately in activities
-                      setTaskActivities(parseNotesToActivities(updatedNotes))
-                    }
 
-                    // Create new Meeting follow-up task (meeting follow – task list mein aaye, Google Meet link ke sath)
-                    let meetingTaskCreated = false
-                    const salesmanRef = selectedTask.salesman
-                    const salesmanId = salesmanRef != null ? (salesmanRef._id ?? salesmanRef) : null
-                    const salesmanIdStr = salesmanId != null ? String(salesmanId) : ''
-                    const customerRef = selectedTask.customer?._id ?? selectedTask.customer
-                    const customerIdStr = customerRef != null ? String(customerRef) : undefined
-                    if (salesmanIdStr) {
-                      try {
-                        const createRes = await createFollowUp({
-                          salesman: salesmanIdStr,
-                          customer: customerIdStr,
-                          customerName: (selectedTask.customerName || selectedTask.name || 'Contact').trim() || 'Contact',
-                          customerEmail: (selectedTask.customerEmail || '').trim() || undefined,
-                          customerPhone: (selectedTask.customerPhone || '').trim() || undefined,
-                          type: 'Meeting',
-                          priority: 'Medium',
-                          scheduledDate: meetingDateTime.toISOString(),
-                          dueDate: meetingDateTime.toISOString(),
-                          description: (meetingTitle || 'Meeting').trim(),
-                          notes: `Meeting: ${googleCalendarLink} | Google Meet: ${googleMeetLink}`
-                        })
-                        if (createRes && createRes.success) {
-                          meetingTaskCreated = true
-                        } else {
-                          console.error('Meeting task create failed:', createRes?.message, createRes)
+                      // Create new Meeting follow-up task (meeting follow – task list mein aaye, Google Meet link ke sath)
+                      let meetingTaskCreated = false
+                      const salesmanRef = selectedTask.salesman
+                      const salesmanId = salesmanRef != null ? (salesmanRef._id ?? salesmanRef) : null
+                      const salesmanIdStr = salesmanId != null ? String(salesmanId) : ''
+                      const customerRef = selectedTask.customer?._id ?? selectedTask.customer
+                      const customerIdStr = customerRef != null ? String(customerRef) : undefined
+                      if (salesmanIdStr) {
+                        try {
+                          const createRes = await createFollowUp({
+                            salesman: salesmanIdStr,
+                            customer: customerIdStr,
+                            customerName: (selectedTask.customerName || selectedTask.name || 'Contact').trim() || 'Contact',
+                            customerEmail: (selectedTask.customerEmail || '').trim() || undefined,
+                            customerPhone: (selectedTask.customerPhone || '').trim() || undefined,
+                            type: 'Meeting',
+                            priority: 'Medium',
+                            scheduledDate: meetingDateTime.toISOString(),
+                            dueDate: meetingDateTime.toISOString(),
+                            description: (meetingTitle || 'Meeting').trim(),
+                            notes: `Meeting: ${googleCalendarLink} | Google Meet: ${googleMeetLink}`
+                          })
+                          if (createRes && createRes.success) {
+                            meetingTaskCreated = true
+                          } else {
+                            console.error('Meeting task create failed:', createRes?.message, createRes)
+                            Swal.fire({
+                              icon: 'warning',
+                              title: 'Meeting task not created',
+                              text: createRes?.message || 'Meeting task could not be created. Notes saved on current task.',
+                              confirmButtonColor: '#e9931c'
+                            })
+                          }
+                        } catch (createErr) {
+                          console.error('Error creating meeting task:', createErr)
                           Swal.fire({
                             icon: 'warning',
-                            title: 'Meeting task not created',
-                            text: createRes?.message || 'Meeting task could not be created. Notes saved on current task.',
+                            title: 'Meeting note saved',
+                            text: 'Meeting follow-up task could not be created. Notes saved on current task.',
                             confirmButtonColor: '#e9931c'
                           })
                         }
-                      } catch (createErr) {
-                        console.error('Error creating meeting task:', createErr)
+                      } else {
                         Swal.fire({
-                          icon: 'warning',
-                          title: 'Meeting note saved',
-                          text: 'Meeting follow-up task could not be created. Notes saved on current task.',
+                          icon: 'info',
+                          title: 'No salesman',
+                          text: 'Task has no salesman assigned. Meeting note saved; add a salesman to create a Meeting task.',
                           confirmButtonColor: '#e9931c'
                         })
                       }
-                    } else {
-                      Swal.fire({
-                        icon: 'info',
-                        title: 'No salesman',
-                        text: 'Task has no salesman assigned. Meeting note saved; add a salesman to create a Meeting task.',
-                        confirmButtonColor: '#e9931c'
-                      })
-                    }
 
-                    // Refetch so new meeting task appears; if on Pending tab, load All so meeting (Approved) shows
-                    if (meetingTaskCreated) {
-                      setActiveTab('All')
-                      await loadTasks('All')
-                    } else {
-                      await loadTasks()
+                      // Refetch so new meeting task appears; if on Pending tab, load All so meeting (Approved) shows
+                      if (meetingTaskCreated) {
+                        setActiveTab('All')
+                        await loadTasks('All')
+                      } else {
+                        await loadTasks()
+                      }
                     }
+                  } catch (e) {
+                    console.error('Error saving meeting:', e)
+                    Swal.fire({
+                      icon: 'error',
+                      title: 'Error',
+                      text: e?.message || 'Failed to save meeting.',
+                      confirmButtonColor: '#e9931c'
+                    })
+                    return
                   }
-                } catch (e) {
-                  console.error('Error saving meeting:', e)
+
+                  setShowMeetingModal(false)
                   Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: e?.message || 'Failed to save meeting.',
+                    icon: 'success',
+                    title: 'Meeting Created!',
+                    html: `Google Calendar opened.${meetingTaskCreated ? ' Meeting task added to list.' : ''}<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a> &nbsp; <a href="${googleMeetLink}" target="_blank" class="text-gray-700 underline">Start Google Meet</a>`,
                     confirmButtonColor: '#e9931c'
                   })
-                  return
-                }
-
-                setShowMeetingModal(false)
-                Swal.fire({
-                  icon: 'success',
-                  title: 'Meeting Created!',
-                  html: `Google Calendar opened.${meetingTaskCreated ? ' Meeting task added to list.' : ''}<br/><br/><a href="${googleCalendarLink}" target="_blank" class="text-gray-700 underline">Open Calendar</a> &nbsp; <a href="${googleMeetLink}" target="_blank" class="text-gray-700 underline">Start Google Meet</a>`,
-                  confirmButtonColor: '#e9931c'
-                })
-              }}
-            >
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title *</label>
-                  <input
-                    type="text"
-                    name="meetingTitle"
-                    placeholder="Enter meeting title"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+                }}
+              >
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title *</label>
+                    <input
+                      type="text"
+                      name="meetingTitle"
+                      placeholder="Enter meeting title"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                    <input
+                      type="date"
+                      name="meetingDate"
+                      defaultValue={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
+                    <input
+                      type="time"
+                      name="meetingTime"
+                      defaultValue={new Date().toTimeString().slice(0, 5)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                    <select
+                      name="meetingDuration"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="30">30 minutes</option>
+                      <option value="60" selected>60 minutes</option>
+                      <option value="90">90 minutes</option>
+                      <option value="120">120 minutes</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                    >
+                      Create Meeting
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMeetingModal(false)}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                  <input
-                    type="date"
-                    name="meetingDate"
-                    defaultValue={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
-                  <input
-                    type="time"
-                    name="meetingTime"
-                    defaultValue={new Date().toTimeString().slice(0, 5)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
-                  <select
-                    name="meetingDuration"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="30">30 minutes</option>
-                    <option value="60" selected>60 minutes</option>
-                    <option value="90">90 minutes</option>
-                    <option value="120">120 minutes</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
-                  >
-                    Create Meeting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowMeetingModal(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </form>
+              </form>
             </div>
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

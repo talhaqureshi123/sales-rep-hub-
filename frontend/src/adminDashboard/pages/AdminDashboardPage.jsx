@@ -265,8 +265,8 @@ const AdminDashboardPage = () => {
                     <p className="text-sm text-gray-600">{schedule.address || schedule.city || 'Location'}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${schedule.priority === 'High' ? 'bg-red-100 text-red-700' :
-                          schedule.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
+                        schedule.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-blue-100 text-blue-700'
                         }`}>
                         {schedule.priority}
                       </span>
@@ -457,8 +457,8 @@ const AdminDashboardPage = () => {
                     <p className="text-xs text-gray-500 truncate">{visit.address || visit.city || 'Location'}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                          visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                            'bg-yellow-100 text-yellow-700'
+                        visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
                         }`}>
                         {visit.status || 'Pending'}
                       </span>
@@ -479,7 +479,7 @@ const AdminDashboardPage = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <FaBullseye className="w-5 h-5 text-purple-600" />
-                <h4 className="font-semibold text-gray-800">My Sales Targets</h4>
+                <h4 className="font-semibold text-gray-800">Sales Targets</h4>
               </div>
               <button
                 onClick={handleViewSalesTargets}
@@ -503,8 +503,8 @@ const AdminDashboardPage = () => {
                     </p>
                     {target.status && (
                       <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${target.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                          target.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                            'bg-yellow-100 text-yellow-700'
+                        target.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
                         }`}>
                         {target.status}
                       </span>
@@ -516,6 +516,7 @@ const AdminDashboardPage = () => {
           </div>
         </div>
       </div>
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

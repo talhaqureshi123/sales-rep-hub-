@@ -30,7 +30,7 @@ const ShiftPhotos = () => {
   useEffect(() => {
     if (!salesmenLoaded.current) {
       salesmenLoaded.current = true
-      loadSalesmen().catch(() => {})
+      loadSalesmen().catch(() => { })
     }
   }, [])
 
@@ -392,10 +392,10 @@ const ShiftPhotos = () => {
                   </div>
                   {/* Status Badge */}
                   <span className={`px-2 py-1 rounded text-xs font-medium ${shift.status === 'active'
-                      ? 'bg-green-100 text-green-800'
-                      : shift.status === 'stopped' || shift.status === 'completed'
-                        ? 'bg-gray-100 text-gray-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                    ? 'bg-green-100 text-green-800'
+                    : shift.status === 'stopped' || shift.status === 'completed'
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'bg-yellow-100 text-yellow-800'
                     }`}>
                     {shift.status === 'active' ? 'Active' : shift.status === 'stopped' ? 'Stopped' : shift.status === 'completed' ? 'Completed' : 'Unknown'}
                   </span>
@@ -609,6 +609,7 @@ const ShiftPhotos = () => {
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

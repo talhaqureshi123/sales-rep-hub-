@@ -254,16 +254,16 @@ const Tasks = () => {
     const assignedCustomerIds = customers.map(c => c._id || c.id).filter(id => id)
     const assignedCustomerEmails = customers.map(c => (c.email || '').toLowerCase()).filter(email => email)
     const assignedCustomerNames = customers.map(c => (c.name || c.firstName || '').toLowerCase()).filter(name => name)
-    
+
     // Filter tasks to show only those related to salesman's assigned customers
     list = list.filter((t) => {
       // Exclude HubSpot imported tasks
-      const isHubSpotImported = t.source === 'hubspot' || 
-                                 (t.hubspotTaskId && t.hubspotTaskId !== '' && t.hubspotTaskId !== null) ||
-                                 (t.description || '').toLowerCase().includes('hubspot task')
-      
+      const isHubSpotImported = t.source === 'hubspot' ||
+        (t.hubspotTaskId && t.hubspotTaskId !== '' && t.hubspotTaskId !== null) ||
+        (t.description || '').toLowerCase().includes('hubspot task')
+
       if (isHubSpotImported) return false
-      
+
       // Show tasks that are:
       // 1. Created by salesman – show all (no admin approval needed)
       // 2. Created by admin AND approved AND customer is assigned to this salesman
@@ -288,7 +288,7 @@ const Tasks = () => {
 
       return false
     })
-    
+
     if (activeTab !== 'All') {
       list = list.filter((t) => t.status === activeTab)
     }
@@ -460,7 +460,7 @@ const Tasks = () => {
     setSubmitting(true)
     try {
       const typeLower = (formData.type || '').toLowerCase().trim()
-      
+
       // Handle Sample Track - create sample instead of task
       if (typeLower === 'sample track' || typeLower.includes('sample')) {
         const custName = (formData.customerName || '').trim()
@@ -700,7 +700,7 @@ const Tasks = () => {
         // Find current task index in filtered list
         const index = filtered.findIndex(t => t._id === task._id)
         setCurrentTaskIndex(index >= 0 ? index : 0)
-        
+
         let loadedCustomer = null
         if (res.data.customer) {
           try {
@@ -1033,29 +1033,29 @@ const Tasks = () => {
   // Sort filtered tasks - Today's tasks first by default
   const sortedTasks = useMemo(() => {
     let sorted = [...filtered]
-    
+
     // Check if we're sorting by dueDate (default) and no custom sort is applied
     const isDefaultDueDateSort = sortField === 'dueDate' && sortOrder === 'asc'
-    
+
     if (isDefaultDueDateSort) {
       // Separate today's tasks from others
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
-      
+
       const todayTasks = []
       const otherTasks = []
-      
+
       sorted.forEach(task => {
         if (!task.dueDate) {
           otherTasks.push(task)
           return
         }
-        
+
         const dueDate = new Date(task.dueDate)
         dueDate.setHours(0, 0, 0, 0)
-        
+
         // Check if task is due today
         if (dueDate.getTime() === today.getTime()) {
           todayTasks.push(task)
@@ -1063,7 +1063,7 @@ const Tasks = () => {
           otherTasks.push(task)
         }
       })
-      
+
       // Sort today's tasks by time (if available) or keep original order
       todayTasks.sort((a, b) => {
         if (a.dueTime && b.dueTime) {
@@ -1071,18 +1071,18 @@ const Tasks = () => {
         }
         return 0
       })
-      
+
       // Sort other tasks by date (ascending - oldest first)
       otherTasks.sort((a, b) => {
         const aDate = new Date(a.dueDate || 0).getTime()
         const bDate = new Date(b.dueDate || 0).getTime()
         return aDate - bDate
       })
-      
+
       // Return today's tasks first, then others
       return [...todayTasks, ...otherTasks]
     }
-    
+
     // For other sort fields, use normal sorting
     sorted.sort((a, b) => {
       let aVal, bVal
@@ -1222,8 +1222,8 @@ const Tasks = () => {
               setCurrentPage(1)
             }}
             className={`flex-shrink-0 px-3 py-2 sm:px-4 rounded-full text-xs sm:text-sm font-medium transition-colors relative ${activeTab === tab.id
-                ? 'text-white'
-                : 'text-gray-700 hover:bg-gray-100'
+              ? 'text-white'
+              : 'text-gray-700 hover:bg-gray-100'
               }`}
             style={activeTab === tab.id ? { backgroundColor: appTheme.primary.main } : {}}
           >
@@ -1680,8 +1680,8 @@ const Tasks = () => {
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
                     className={`px-2 sm:px-3 py-1.5 rounded text-xs sm:text-sm font-medium ${currentPage === pageNum
-                        ? 'bg-blue-600 text-white'
-                        : 'border border-gray-300 hover:bg-gray-50'
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-gray-300 hover:bg-gray-50'
                       }`}
                   >
                     {pageNum}
@@ -1735,479 +1735,479 @@ const Tasks = () => {
             </div>
             <form onSubmit={handleCreateTask} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6">
-              {/* Section A: Task Information */}
-              <div className="border-b pb-6">
-                <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section A: Task Information</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Task Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.type}
-                      onChange={(e) => {
-                        const newType = e.target.value
-                        const updates = {
-                          ...formData,
-                          type: newType,
-                          followUpType: newType === 'Follow-up' ? formData.followUpType : 'Call'
-                        }
-                        if (newType === 'Sample Track') {
-                          if (!updates.visitDate) updates.visitDate = getLocalDateString()
-                          if (!updates.expectedDate) updates.expectedDate = ''
-                        }
-                        setFormData(updates)
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                    >
-                      {TASK_TYPES.map((type) => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Priority <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.priority}
-                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                    >
-                      {PRIORITIES.map((priority) => (
-                        <option key={priority} value={priority}>{priority}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {/* Follow-up Type - Show only when Follow-up is selected */}
-                  {formData.type === 'Follow-up' && (
-                    <div className="md:col-span-2">
+                {/* Section A: Task Information */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section A: Task Information</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Follow-up Type <span className="text-red-500">*</span>
+                        Task Type <span className="text-red-500">*</span>
                       </label>
                       <select
                         required
-                        value={formData.followUpType}
-                        onChange={(e) => setFormData({ ...formData, followUpType: e.target.value })}
+                        value={formData.type}
+                        onChange={(e) => {
+                          const newType = e.target.value
+                          const updates = {
+                            ...formData,
+                            type: newType,
+                            followUpType: newType === 'Follow-up' ? formData.followUpType : 'Call'
+                          }
+                          if (newType === 'Sample Track') {
+                            if (!updates.visitDate) updates.visitDate = getLocalDateString()
+                            if (!updates.expectedDate) updates.expectedDate = ''
+                          }
+                          setFormData(updates)
+                        }}
                         className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
                         style={{
                           borderColor: appTheme.border.medium,
                           focusRingColor: appTheme.primary.main
                         }}
                       >
-                        <option value="Call">Call</option>
-                        <option value="Email">Email</option>
-                        <option value="Meeting">Meeting</option>
-                        <option value="WhatsApp">WhatsApp</option>
-                        <option value="Visit">Visit</option>
-                        <option value="Other">Other</option>
+                        {TASK_TYPES.map((type) => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
                       </select>
                     </div>
-                  )}
-                  {formData.type !== 'Sample Track' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                          Due Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.dueDate}
-                          onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                          style={{
-                            borderColor: appTheme.border.medium,
-                            focusRingColor: appTheme.primary.main
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                          Due Time
-                        </label>
-                        <input
-                          type="time"
-                          value={formData.dueTime}
-                          onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                          style={{
-                            borderColor: appTheme.border.medium,
-                            focusRingColor: appTheme.primary.main
-                          }}
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Section B: Customer Details */}
-              <div className="border-b pb-6">
-                <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section B: Customer Details</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2 relative">
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Customer <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={customerSearch || formData.customerName}
-                      onChange={(e) => {
-                        setCustomerSearch(e.target.value)
-                        setShowCustomerDropdown(true)
-                        if (!e.target.value) {
-                          setFormData(prev => ({ ...prev, customer: '', customerName: '', customerEmail: '', customerPhone: '', contactPerson: '', billingAddress: '', deliveryAddress: '' }))
-                        }
-                      }}
-                      onFocus={() => {
-                        setShowCustomerDropdown(true)
-                        if (!customerSearch && formData.customerName) {
-                          setCustomerSearch(formData.customerName)
-                        }
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => setShowCustomerDropdown(false), 200)
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Search customers by name, email, or phone..."
-                      required
-                    />
-                    {showCustomerDropdown && filteredCustomers.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border-2 rounded-lg shadow-lg max-h-60 overflow-y-auto" style={{ borderColor: appTheme.border.medium }}>
-                        {filteredCustomers.map(customer => (
-                          <div
-                            key={customer._id || customer.id}
-                            onClick={() => handleCustomerSelect(customer)}
-                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b"
-                            style={{ borderColor: appTheme.border.light }}
-                          >
-                            <p className="font-medium" style={{ color: appTheme.text.primary }}>{customer.name || customer.firstName}</p>
-                            <p className="text-sm" style={{ color: appTheme.text.secondary }}>
-                              {customer.email && `Email: ${customer.email}`}
-                              {customer.phone && ` | Phone: ${customer.phone}`}
-                            </p>
-                            {customer.address && (
-                              <p className="text-xs mt-1" style={{ color: appTheme.text.secondary }}>{customer.address}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Customer Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.customerName}
-                      onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter customer name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Contact Person
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.contactPerson}
-                      onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Contact person name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Customer Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.customerEmail}
-                      onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter customer email"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Customer Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.customerPhone}
-                      onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter customer phone"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Billing Address
-                    </label>
-                    <textarea
-                      value={formData.billingAddress}
-                      onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
-                      rows="3"
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter billing address"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                      Delivery Address
-                    </label>
-                    <textarea
-                      value={formData.deliveryAddress}
-                      onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
-                      rows="3"
-                      className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
-                      style={{
-                        borderColor: appTheme.border.medium,
-                        focusRingColor: appTheme.primary.main
-                      }}
-                      placeholder="Enter delivery address"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section C: Task Details or Sample Tracker */}
-              {formData.type === 'Sample Track' ? (
-                <div>
-                  <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section C: Sample Details</h2>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                          Visit Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.visitDate}
-                          onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                          style={{
-                            borderColor: appTheme.border.medium,
-                            focusRingColor: appTheme.primary.main
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                          Expected Date
-                        </label>
-                        <input
-                          type="date"
-                          value={formData.expectedDate}
-                          onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                          style={{
-                            borderColor: appTheme.border.medium,
-                            focusRingColor: appTheme.primary.main
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                          Expected Time
-                        </label>
-                        <input
-                          type="time"
-                          value={formData.expectedTime || '09:00'}
-                          onChange={(e) => setFormData({ ...formData, expectedTime: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                          style={{
-                            borderColor: appTheme.border.medium,
-                            focusRingColor: appTheme.primary.main
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Add Items Section */}
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Add Item (one or more products) <span className="text-red-500">*</span>
+                        Priority <span className="text-red-500">*</span>
                       </label>
-                      <div
-                        className="flex gap-2 mb-2"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            addItemToSelection()
-                          }
+                      <select
+                        required
+                        value={formData.priority}
+                        onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
                         }}
                       >
+                        {PRIORITIES.map((priority) => (
+                          <option key={priority} value={priority}>{priority}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Follow-up Type - Show only when Follow-up is selected */}
+                    {formData.type === 'Follow-up' && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Follow-up Type <span className="text-red-500">*</span>
+                        </label>
                         <select
-                          value={addItemProduct}
-                          onChange={(e) => setAddItemProduct(e.target.value)}
-                          className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          required
+                          value={formData.followUpType}
+                          onChange={(e) => setFormData({ ...formData, followUpType: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
                           style={{
                             borderColor: appTheme.border.medium,
                             focusRingColor: appTheme.primary.main
                           }}
                         >
-                          <option value="">Select product...</option>
-                          {products.map((product) => (
-                            <option key={product._id} value={product._id}>
-                              {product.name} {product.productCode ? `(${product.productCode})` : ''}
-                            </option>
-                          ))}
+                          <option value="Call">Call</option>
+                          <option value="Email">Email</option>
+                          <option value="Meeting">Meeting</option>
+                          <option value="WhatsApp">WhatsApp</option>
+                          <option value="Visit">Visit</option>
+                          <option value="Other">Other</option>
                         </select>
-                        <input
-                          type="number"
-                          min="1"
-                          value={addItemQty}
-                          onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-20 px-3 py-2 border rounded-lg outline-none focus:ring-2"
-                          style={{
-                            borderColor: appTheme.border.medium,
-                            focusRingColor: appTheme.primary.main
-                          }}
-                          placeholder="Qty"
-                        />
-                        <button
-                          type="button"
-                          onClick={addItemToSelection}
-                          className="px-4 py-2 rounded-lg font-medium text-white transition-all"
-                          style={{ backgroundColor: appTheme.primary.main }}
-                          title="Add this product to the list"
-                        >
-                          <FaPlus className="w-4 h-4" />
-                        </button>
                       </div>
+                    )}
+                    {formData.type !== 'Sample Track' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Due Date <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={formData.dueDate}
+                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Due Time
+                          </label>
+                          <input
+                            type="time"
+                            value={formData.dueTime}
+                            onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
 
-                      {/* Hint when no items added */}
-                      {selectedItems.length === 0 && (
-                        <p className="mt-2 text-sm" style={{ color: appTheme.text.secondary }}>
-                          Select a product and quantity above, then click <strong>+</strong> or press <strong>Enter</strong> to add. Add at least one item to enable &quot;Create Sample&quot;.
-                        </p>
-                      )}
-
-                      {/* Selected Items List */}
-                      {selectedItems.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                          <p className="text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                            Added items ({selectedItems.length}) — add more above if needed
-                          </p>
-                          {selectedItems.map((item, index) => (
-                            <div key={index} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: appTheme.border.medium }}>
-                              <div className="flex-1">
-                                <p className="font-medium" style={{ color: appTheme.text.primary }}>{item.productName}</p>
-                                <p className="text-sm" style={{ color: appTheme.text.secondary }}>
-                                  {item.productCode && `Code: ${item.productCode} | `}Quantity: {item.quantity}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeItemFromSelection(index)}
-                                className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              >
-                                <FaTrash className="w-4 h-4" />
-                              </button>
+                {/* Section B: Customer Details */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section B: Customer Details</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2 relative">
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Customer <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customerSearch || formData.customerName}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value)
+                          setShowCustomerDropdown(true)
+                          if (!e.target.value) {
+                            setFormData(prev => ({ ...prev, customer: '', customerName: '', customerEmail: '', customerPhone: '', contactPerson: '', billingAddress: '', deliveryAddress: '' }))
+                          }
+                        }}
+                        onFocus={() => {
+                          setShowCustomerDropdown(true)
+                          if (!customerSearch && formData.customerName) {
+                            setCustomerSearch(formData.customerName)
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => setShowCustomerDropdown(false), 200)
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Search customers by name, email, or phone..."
+                        required
+                      />
+                      {showCustomerDropdown && filteredCustomers.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border-2 rounded-lg shadow-lg max-h-60 overflow-y-auto" style={{ borderColor: appTheme.border.medium }}>
+                          {filteredCustomers.map(customer => (
+                            <div
+                              key={customer._id || customer.id}
+                              onClick={() => handleCustomerSelect(customer)}
+                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b"
+                              style={{ borderColor: appTheme.border.light }}
+                            >
+                              <p className="font-medium" style={{ color: appTheme.text.primary }}>{customer.name || customer.firstName}</p>
+                              <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+                                {customer.email && `Email: ${customer.email}`}
+                                {customer.phone && ` | Phone: ${customer.phone}`}
+                              </p>
+                              {customer.address && (
+                                <p className="text-xs mt-1" style={{ color: appTheme.text.secondary }}>{customer.address}</p>
+                              )}
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Notes
-                      </label>
-                      <textarea
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        rows={4}
-                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
-                        style={{
-                          borderColor: appTheme.border.medium,
-                          focusRingColor: appTheme.primary.main
-                        }}
-                        placeholder="Add any additional notes..."
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section C: Task Details</h2>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Description
+                        Customer Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        required
+                        value={formData.customerName}
+                        onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                         className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
                         style={{
                           borderColor: appTheme.border.medium,
                           focusRingColor: appTheme.primary.main
                         }}
-                        placeholder="e.g., Follow up with sample tracker for salesman"
+                        placeholder="Enter customer name"
                       />
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
-                        Notes
+                        Contact Person
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.contactPerson}
+                        onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Contact person name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Customer Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.customerEmail}
+                        onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Enter customer email"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Customer Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.customerPhone}
+                        onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Enter customer phone"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Billing Address
                       </label>
                       <textarea
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        rows={4}
+                        value={formData.billingAddress}
+                        onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
+                        rows="3"
                         className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
                         style={{
                           borderColor: appTheme.border.medium,
                           focusRingColor: appTheme.primary.main
                         }}
-                        placeholder="Add any additional notes..."
+                        placeholder="Enter billing address"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                        Delivery Address
+                      </label>
+                      <textarea
+                        value={formData.deliveryAddress}
+                        onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
+                        rows="3"
+                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                        style={{
+                          borderColor: appTheme.border.medium,
+                          focusRingColor: appTheme.primary.main
+                        }}
+                        placeholder="Enter delivery address"
                       />
                     </div>
                   </div>
                 </div>
-              )}
+
+                {/* Section C: Task Details or Sample Tracker */}
+                {formData.type === 'Sample Track' ? (
+                  <div>
+                    <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section C: Sample Details</h2>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Visit Date <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={formData.visitDate}
+                            onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Expected Date
+                          </label>
+                          <input
+                            type="date"
+                            value={formData.expectedDate}
+                            onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                            Expected Time
+                          </label>
+                          <input
+                            type="time"
+                            value={formData.expectedTime || '09:00'}
+                            onChange={(e) => setFormData({ ...formData, expectedTime: e.target.value })}
+                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Add Items Section */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Add Item (one or more products) <span className="text-red-500">*</span>
+                        </label>
+                        <div
+                          className="flex gap-2 mb-2"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              addItemToSelection()
+                            }
+                          }}
+                        >
+                          <select
+                            value={addItemProduct}
+                            onChange={(e) => setAddItemProduct(e.target.value)}
+                            className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                          >
+                            <option value="">Select product...</option>
+                            {products.map((product) => (
+                              <option key={product._id} value={product._id}>
+                                {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="1"
+                            value={addItemQty}
+                            onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-20 px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                            style={{
+                              borderColor: appTheme.border.medium,
+                              focusRingColor: appTheme.primary.main
+                            }}
+                            placeholder="Qty"
+                          />
+                          <button
+                            type="button"
+                            onClick={addItemToSelection}
+                            className="px-4 py-2 rounded-lg font-medium text-white transition-all"
+                            style={{ backgroundColor: appTheme.primary.main }}
+                            title="Add this product to the list"
+                          >
+                            <FaPlus className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Hint when no items added */}
+                        {selectedItems.length === 0 && (
+                          <p className="mt-2 text-sm" style={{ color: appTheme.text.secondary }}>
+                            Select a product and quantity above, then click <strong>+</strong> or press <strong>Enter</strong> to add. Add at least one item to enable &quot;Create Sample&quot;.
+                          </p>
+                        )}
+
+                        {/* Selected Items List */}
+                        {selectedItems.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            <p className="text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                              Added items ({selectedItems.length}) — add more above if needed
+                            </p>
+                            {selectedItems.map((item, index) => (
+                              <div key={index} className="flex items-center justify-between p-3 border rounded-lg" style={{ borderColor: appTheme.border.medium }}>
+                                <div className="flex-1">
+                                  <p className="font-medium" style={{ color: appTheme.text.primary }}>{item.productName}</p>
+                                  <p className="text-sm" style={{ color: appTheme.text.secondary }}>
+                                    {item.productCode && `Code: ${item.productCode} | `}Quantity: {item.quantity}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeItemFromSelection(index)}
+                                  className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <FaTrash className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Notes
+                        </label>
+                        <textarea
+                          value={formData.notes}
+                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                          rows={4}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                          placeholder="Add any additional notes..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <h2 className="text-xl font-semibold mb-4" style={{ color: appTheme.text.primary }}>Section C: Task Details</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Description
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.description}
+                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                          placeholder="e.g., Follow up with sample tracker for salesman"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: appTheme.text.primary }}>
+                          Notes
+                        </label>
+                        <textarea
+                          value={formData.notes}
+                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                          rows={4}
+                          className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 resize-none"
+                          style={{
+                            borderColor: appTheme.border.medium,
+                            focusRingColor: appTheme.primary.main
+                          }}
+                          placeholder="Add any additional notes..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               </div>
               {/* Form Actions – sticky footer so full form + buttons visible on mobile */}
@@ -2328,7 +2328,7 @@ const Tasks = () => {
         <div className="fixed inset-0 z-50 bg-gray-50 overflow-hidden">
           <div className="h-full flex flex-col">
             {/* Header Bar */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <div className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 md:py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-4">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => {
@@ -2340,7 +2340,7 @@ const Tasks = () => {
                   <FaTimes className="w-5 h-5" />
                 </button>
                 <div>
-                  <h1 className="text-2xl font-semibold text-gray-900">
+                  <h1 className="text-base md:text-xl xl:text-2xl font-semibold text-gray-900 line-clamp-1">
                     {selectedTask.description || `Follow up with ${selectedTask.customerName}`}
                   </h1>
                   <div className="flex items-center gap-2 mt-1">
@@ -2364,11 +2364,11 @@ const Tasks = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                 {selectedTask.status !== 'Completed' && (
                   <button
                     onClick={() => handleCompleteTask(selectedTask._id)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                    className="px-3 md:px-4 py-1.5 md:py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm md:text-base"
                   >
                     Complete
                   </button>
@@ -2388,10 +2388,10 @@ const Tasks = () => {
             {/* Main Content - Three Panel Layout */}
             <div className="flex-1 flex overflow-hidden">
               {/* Left Panel - Contact Information */}
-              <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+              <div className="hidden lg:block w-72 xl:w-80 bg-white border-r border-gray-200 overflow-y-auto flex-shrink-0">
                 {(() => {
                   // Prioritize customer details from customer object
-                  const displayName = taskCustomerDetails?.name || 
+                  const displayName = taskCustomerDetails?.name ||
                     taskCustomerDetails?.firstName ||
                     selectedTask.customerName ||
                     ''
@@ -2416,239 +2416,239 @@ const Tasks = () => {
                           </div>
                         </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button 
-                          onClick={() => {
-                            setModalActiveTab('activities')
-                            // Focus typing pad after a short delay
-                            setTimeout(() => {
-                              if (noteInputRef.current) {
-                                noteInputRef.current.focus()
-                              }
-                            }, 100)
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <FaStickyNote className="w-4 h-4" />
-                          Note
-                        </button>
-                        <button 
-                          onClick={async () => {
-                            const email = taskCustomerDetails?.email ||
-                              selectedTask.customerEmail ||
-                              ''
-                            if (email) {
-                              window.location.href = `mailto:${email}`
-                              
-                              // Save email activity
-                              try {
-                                if (selectedTask && selectedTask._id) {
-                                  const currentNotes = selectedTask.notes || ''
-                                  const activityNote = `[${new Date().toLocaleString('en-GB')}] Email: Sent to ${email}`
-                                  const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                  
-                                  await updateMyFollowUp(selectedTask._id, {
-                                    notes: updatedNotes
-                                  })
-                                  
-                                  // Add to activities
-                                  const newActivity = {
-                                    type: 'Email',
-                                    content: `Email sent to ${email}`,
-                                    date: new Date().toISOString(),
-                                    createdAt: new Date().toISOString()
-                                  }
-                                  setTaskActivities([newActivity, ...taskActivities])
-                                  
-                                  // Reload task
-                                  const updatedRes = await getMyFollowUp(selectedTask._id)
-                                  if (updatedRes.success) {
-                                    setSelectedTask(updatedRes.data)
-                                  }
-                                  
-                                  await loadTasks()
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => {
+                              setModalActiveTab('activities')
+                              // Focus typing pad after a short delay
+                              setTimeout(() => {
+                                if (noteInputRef.current) {
+                                  noteInputRef.current.focus()
                                 }
-                              } catch (e) {
-                                console.error('Error saving email activity:', e)
-                              }
-                            } else {
-                              Swal.fire({
-                                icon: 'warning',
-                                title: 'No Email',
-                                text: 'No email address available for this contact',
-                                confirmButtonColor: '#e9931c'
-                              })
-                            }
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <FaEnvelope className="w-4 h-4" />
-                          Email
-                        </button>
-                        <button 
-                          onClick={async () => {
-                            const phone = taskCustomerDetails?.phone ||
-                              selectedTask.customerPhone ||
-                              ''
-                            if (phone) {
-                              // Show options: Call or WhatsApp
-                              Swal.fire({
-                                title: 'Choose Action',
-                                showDenyButton: true,
-                                showCancelButton: true,
-                                confirmButtonText: 'Call',
-                                denyButtonText: 'WhatsApp',
-                                cancelButtonText: 'Cancel',
-                                confirmButtonColor: '#e9931c',
-                                denyButtonColor: '#25D366',
-                              }).then(async (result) => {
-                                if (result.isConfirmed) {
-                                  window.location.href = `tel:${phone}`
-                                  
-                                  // Save call activity
-                                  try {
-                                    if (selectedTask && selectedTask._id) {
-                                      const currentNotes = selectedTask.notes || ''
-                                      const activityNote = `[${new Date().toLocaleString('en-GB')}] Call: Called ${phone}`
-                                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                      
-                                      await updateMyFollowUp(selectedTask._id, {
-                                        notes: updatedNotes
-                                      })
-                                      
-                                      const newActivity = {
-                                        type: 'Call',
-                                        content: `Called ${phone}`,
-                                        date: new Date().toISOString(),
-                                        createdAt: new Date().toISOString()
-                                      }
-                                      setTaskActivities([newActivity, ...taskActivities])
-                                      
-                                      const updatedRes = await getMyFollowUp(selectedTask._id)
-                                      if (updatedRes.success) {
-                                        setSelectedTask(updatedRes.data)
-                                      }
-                                      
-                                      await loadTasks()
-                                    }
-                                  } catch (e) {
-                                    console.error('Error saving call activity:', e)
-                                  }
-                                } else if (result.isDenied) {
-                                  const cleanPhone = phone.replace(/\D/g, '')
-                                  window.open(`https://wa.me/${cleanPhone}`, '_blank')
-                                  
-                                  // Save WhatsApp activity
-                                  try {
-                                    if (selectedTask && selectedTask._id) {
-                                      const currentNotes = selectedTask.notes || ''
-                                      const activityNote = `[${new Date().toLocaleString('en-GB')}] WhatsApp: Messaged ${phone}`
-                                      const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                      
-                                      await updateMyFollowUp(selectedTask._id, {
-                                        notes: updatedNotes
-                                      })
-                                      
-                                      const newActivity = {
-                                        type: 'WhatsApp',
-                                        content: `WhatsApp message to ${phone}`,
-                                        date: new Date().toISOString(),
-                                        createdAt: new Date().toISOString()
-                                      }
-                                      setTaskActivities([newActivity, ...taskActivities])
-                                      
-                                      const updatedRes = await getMyFollowUp(selectedTask._id)
-                                      if (updatedRes.success) {
-                                        setSelectedTask(updatedRes.data)
-                                      }
-                                      
-                                      await loadTasks()
-                                    }
-                                  } catch (e) {
-                                    console.error('Error saving WhatsApp activity:', e)
-                                  }
-                                }
-                              })
-                            } else {
-                              Swal.fire({
-                                icon: 'warning',
-                                title: 'No Phone',
-                                text: 'No phone number available for this contact',
-                                confirmButtonColor: '#e9931c'
-                              })
-                            }
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <FaPhone className="w-4 h-4" />
-                          Call
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setModalActiveTab('activities')
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <FaCalendarAlt className="w-4 h-4" />
-                          Task
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setModalActiveTab('activities')
-                          }}
-                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <FaCalendarAlt className="w-4 h-4" />
-                          Meeting
-                        </button>
-                        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-                          <FaEllipsisH className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                              }, 100)
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <FaStickyNote className="w-4 h-4" />
+                            Note
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const email = taskCustomerDetails?.email ||
+                                selectedTask.customerEmail ||
+                                ''
+                              if (email) {
+                                window.location.href = `mailto:${email}`
 
-                    {/* About this contact */}
-                    <div className="p-6 border-b border-gray-200">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-4">About this contact</h3>
-                      <div className="space-y-3">
-                        {displayEmail && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Email</p>
-                            <p className="text-sm text-gray-900">{displayEmail}</p>
-                          </div>
-                        )}
-                        {(taskCustomerDetails?.phone || selectedTask.customerPhone) && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Phone Number</p>
-                            <p className="text-sm text-gray-900">{taskCustomerDetails?.phone || selectedTask.customerPhone}</p>
-                          </div>
-                        )}
-                        {(taskCustomerDetails?.address || taskCustomerDetails?.city || taskCustomerDetails?.state) && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Address</p>
-                            <p className="text-sm text-gray-900">
-                              {[taskCustomerDetails?.address, taskCustomerDetails?.city, taskCustomerDetails?.state].filter(Boolean).join(', ')}
-                            </p>
-                          </div>
-                        )}
-                        {selectedTask.salesman && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">Contact owner</p>
-                            <p className="text-sm text-gray-900">{selectedTask.salesman.name || selectedTask.salesman.email}</p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Last Contacted</p>
-                          <p className="text-sm text-gray-400">—</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Lead Status</p>
-                          <p className="text-sm text-gray-400">—</p>
+                                // Save email activity
+                                try {
+                                  if (selectedTask && selectedTask._id) {
+                                    const currentNotes = selectedTask.notes || ''
+                                    const activityNote = `[${new Date().toLocaleString('en-GB')}] Email: Sent to ${email}`
+                                    const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                                    await updateMyFollowUp(selectedTask._id, {
+                                      notes: updatedNotes
+                                    })
+
+                                    // Add to activities
+                                    const newActivity = {
+                                      type: 'Email',
+                                      content: `Email sent to ${email}`,
+                                      date: new Date().toISOString(),
+                                      createdAt: new Date().toISOString()
+                                    }
+                                    setTaskActivities([newActivity, ...taskActivities])
+
+                                    // Reload task
+                                    const updatedRes = await getMyFollowUp(selectedTask._id)
+                                    if (updatedRes.success) {
+                                      setSelectedTask(updatedRes.data)
+                                    }
+
+                                    await loadTasks()
+                                  }
+                                } catch (e) {
+                                  console.error('Error saving email activity:', e)
+                                }
+                              } else {
+                                Swal.fire({
+                                  icon: 'warning',
+                                  title: 'No Email',
+                                  text: 'No email address available for this contact',
+                                  confirmButtonColor: '#e9931c'
+                                })
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <FaEnvelope className="w-4 h-4" />
+                            Email
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const phone = taskCustomerDetails?.phone ||
+                                selectedTask.customerPhone ||
+                                ''
+                              if (phone) {
+                                // Show options: Call or WhatsApp
+                                Swal.fire({
+                                  title: 'Choose Action',
+                                  showDenyButton: true,
+                                  showCancelButton: true,
+                                  confirmButtonText: 'Call',
+                                  denyButtonText: 'WhatsApp',
+                                  cancelButtonText: 'Cancel',
+                                  confirmButtonColor: '#e9931c',
+                                  denyButtonColor: '#25D366',
+                                }).then(async (result) => {
+                                  if (result.isConfirmed) {
+                                    window.location.href = `tel:${phone}`
+
+                                    // Save call activity
+                                    try {
+                                      if (selectedTask && selectedTask._id) {
+                                        const currentNotes = selectedTask.notes || ''
+                                        const activityNote = `[${new Date().toLocaleString('en-GB')}] Call: Called ${phone}`
+                                        const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                                        await updateMyFollowUp(selectedTask._id, {
+                                          notes: updatedNotes
+                                        })
+
+                                        const newActivity = {
+                                          type: 'Call',
+                                          content: `Called ${phone}`,
+                                          date: new Date().toISOString(),
+                                          createdAt: new Date().toISOString()
+                                        }
+                                        setTaskActivities([newActivity, ...taskActivities])
+
+                                        const updatedRes = await getMyFollowUp(selectedTask._id)
+                                        if (updatedRes.success) {
+                                          setSelectedTask(updatedRes.data)
+                                        }
+
+                                        await loadTasks()
+                                      }
+                                    } catch (e) {
+                                      console.error('Error saving call activity:', e)
+                                    }
+                                  } else if (result.isDenied) {
+                                    const cleanPhone = phone.replace(/\D/g, '')
+                                    window.open(`https://wa.me/${cleanPhone}`, '_blank')
+
+                                    // Save WhatsApp activity
+                                    try {
+                                      if (selectedTask && selectedTask._id) {
+                                        const currentNotes = selectedTask.notes || ''
+                                        const activityNote = `[${new Date().toLocaleString('en-GB')}] WhatsApp: Messaged ${phone}`
+                                        const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
+
+                                        await updateMyFollowUp(selectedTask._id, {
+                                          notes: updatedNotes
+                                        })
+
+                                        const newActivity = {
+                                          type: 'WhatsApp',
+                                          content: `WhatsApp message to ${phone}`,
+                                          date: new Date().toISOString(),
+                                          createdAt: new Date().toISOString()
+                                        }
+                                        setTaskActivities([newActivity, ...taskActivities])
+
+                                        const updatedRes = await getMyFollowUp(selectedTask._id)
+                                        if (updatedRes.success) {
+                                          setSelectedTask(updatedRes.data)
+                                        }
+
+                                        await loadTasks()
+                                      }
+                                    } catch (e) {
+                                      console.error('Error saving WhatsApp activity:', e)
+                                    }
+                                  }
+                                })
+                              } else {
+                                Swal.fire({
+                                  icon: 'warning',
+                                  title: 'No Phone',
+                                  text: 'No phone number available for this contact',
+                                  confirmButtonColor: '#e9931c'
+                                })
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <FaPhone className="w-4 h-4" />
+                            Call
+                          </button>
+                          <button
+                            onClick={() => {
+                              setModalActiveTab('activities')
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <FaCalendarAlt className="w-4 h-4" />
+                            Task
+                          </button>
+                          <button
+                            onClick={() => {
+                              setModalActiveTab('activities')
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <FaCalendarAlt className="w-4 h-4" />
+                            Meeting
+                          </button>
+                          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                            <FaEllipsisH className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  </>
+
+                      {/* About this contact */}
+                      <div className="p-6 border-b border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">About this contact</h3>
+                        <div className="space-y-3">
+                          {displayEmail && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Email</p>
+                              <p className="text-sm text-gray-900">{displayEmail}</p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.phone || selectedTask.customerPhone) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Phone Number</p>
+                              <p className="text-sm text-gray-900">{taskCustomerDetails?.phone || selectedTask.customerPhone}</p>
+                            </div>
+                          )}
+                          {(taskCustomerDetails?.address || taskCustomerDetails?.city || taskCustomerDetails?.state) && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Address</p>
+                              <p className="text-sm text-gray-900">
+                                {[taskCustomerDetails?.address, taskCustomerDetails?.city, taskCustomerDetails?.state].filter(Boolean).join(', ')}
+                              </p>
+                            </div>
+                          )}
+                          {selectedTask.salesman && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Contact owner</p>
+                              <p className="text-sm text-gray-900">{selectedTask.salesman.name || selectedTask.salesman.email}</p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Last Contacted</p>
+                            <p className="text-sm text-gray-400">—</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Lead Status</p>
+                            <p className="text-sm text-gray-400">—</p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   ) : null
                 })()}
               </div>
@@ -2661,8 +2661,8 @@ const Tasks = () => {
                     <button
                       onClick={() => setModalActiveTab('overview')}
                       className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'overview'
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
                       Overview
@@ -2670,11 +2670,29 @@ const Tasks = () => {
                     <button
                       onClick={() => setModalActiveTab('activities')}
                       className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'activities'
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
                     >
                       Activities
+                    </button>
+                    <button
+                      onClick={() => setModalActiveTab('contact')}
+                      className={`lg:hidden py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'contact'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                      Contact
+                    </button>
+                    <button
+                      onClick={() => setModalActiveTab('associations')}
+                      className={`lg:hidden py-4 px-1 border-b-2 font-medium text-sm transition-colors ${modalActiveTab === 'associations'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                      Associations
                     </button>
                   </div>
                 </div>
@@ -2719,14 +2737,14 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.scheduledDate
                                 ? `${new Date(selectedTask.scheduledDate).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.scheduledDate).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.scheduledDate).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
@@ -2735,14 +2753,14 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.dueDate
                                 ? `${new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.dueDate).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
@@ -2767,14 +2785,14 @@ const Tasks = () => {
                             <p className="text-sm font-medium text-gray-900">
                               {selectedTask.createdAt
                                 ? `${new Date(selectedTask.createdAt).toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: 'numeric'
-                                  })} ${new Date(selectedTask.createdAt).toLocaleTimeString('en-GB', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false
-                                  })}`
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })} ${new Date(selectedTask.createdAt).toLocaleTimeString('en-GB', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false
+                                })}`
                                 : '—'}
                             </p>
                           </div>
@@ -2797,21 +2815,20 @@ const Tasks = () => {
                               {taskActivities.length > 0 ? (
                                 <div className="space-y-3">
                                   {taskActivities.slice(0, 5).map((activity, idx) => (
-                                    <div 
+                                    <div
                                       key={idx}
                                       className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
                                     >
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="flex-1">
                                           <div className="flex items-center gap-2 mb-2">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                              activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
+                                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
                                               activity.type === 'Email' ? 'bg-green-100 text-green-800' :
-                                              activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
-                                              activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
-                                              activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
-                                              'bg-gray-100 text-gray-800'
-                                            }`}>
+                                                activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
+                                                  activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                                    activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
+                                                      'bg-gray-100 text-gray-800'
+                                              }`}>
                                               {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
                                               {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
                                               {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
@@ -2900,9 +2917,9 @@ const Tasks = () => {
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                            <input 
-                              type="checkbox" 
-                              className="rounded border-gray-300" 
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300"
                               checked={selectedTask.status === 'Completed'}
                               readOnly
                             />
@@ -2913,20 +2930,20 @@ const Tasks = () => {
                                 </span>
                                 <span className="text-sm text-gray-500">›</span>
                                 <span className="text-sm text-gray-600">
-                                  {selectedTask.status === 'Completed' 
+                                  {selectedTask.status === 'Completed'
                                     ? `Completed ${selectedTask.completedDate ? new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      }) + ' GMT+5' : ''}`
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    }) + ' GMT+5' : ''}`
                                     : `Task assigned to ${selectedTask.salesman?.name || 'Salesman'}`}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className={`text-xs px-2 py-1 rounded ${selectedTask.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                                    selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
+                                  selectedTask.status === 'Today' ? 'bg-yellow-100 text-yellow-700' :
                                     selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                       'bg-blue-100 text-blue-700'
                                   }`}>
@@ -2935,12 +2952,12 @@ const Tasks = () => {
                                 <span className="text-sm text-gray-600">
                                   {selectedTask.status === 'Completed' && selectedTask.completedDate
                                     ? `${new Date(selectedTask.completedDate).toLocaleDateString('en-GB', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                        year: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      })} GMT+5`
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })} GMT+5`
                                     : selectedTask.dueDate
                                       ? new Date(selectedTask.dueDate).toLocaleDateString('en-GB', {
                                         day: '2-digit',
@@ -2959,7 +2976,7 @@ const Tasks = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                     </div>
                   )}
 
@@ -2980,7 +2997,7 @@ const Tasks = () => {
                             </div>
                           </div>
                         </div>
-                        
+
                         {/* Typing Pad */}
                         <div className="pb-4 border-b border-gray-200">
                           <div className="flex items-end gap-2">
@@ -3002,24 +3019,24 @@ const Tasks = () => {
                                       }
                                       setTaskActivities([newActivity, ...taskActivities])
                                       setNoteInput('')
-                                      
+
                                       // Save to backend
                                       try {
                                         if (selectedTask && selectedTask._id) {
                                           const currentNotes = selectedTask.notes || ''
                                           const activityNote = `[${new Date().toLocaleString('en-GB')}] Note: ${noteContent}`
                                           const updatedNotes = currentNotes ? `${currentNotes}\n${activityNote}` : activityNote
-                                          
+
                                           await updateMyFollowUp(selectedTask._id, {
                                             notes: updatedNotes
                                           })
-                                          
+
                                           // Reload task
                                           const updatedRes = await getMyFollowUp(selectedTask._id)
                                           if (updatedRes.success) {
                                             setSelectedTask(updatedRes.data)
                                           }
-                                          
+
                                           await loadTasks()
                                         }
                                       } catch (e) {
@@ -3036,7 +3053,7 @@ const Tasks = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Scrollable Activities List */}
                       <div className="flex-1 overflow-y-auto space-y-3">
                         {taskActivities.filter(activity => {
@@ -3059,21 +3076,20 @@ const Tasks = () => {
                               (activity.timeStr && activity.timeStr.includes(search))
                             )
                           }).map((activity, idx) => (
-                            <div 
+                            <div
                               key={idx}
                               className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                                      activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
+                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${activity.type === 'Note' ? 'bg-blue-100 text-blue-800' :
                                       activity.type === 'Email' ? 'bg-green-100 text-green-800' :
-                                      activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
-                                      activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
-                                      activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
-                                      'bg-gray-100 text-gray-800'
-                                    }`}>
+                                        activity.type === 'Call' ? 'bg-orange-100 text-orange-800' :
+                                          activity.type === 'WhatsApp' ? 'bg-green-100 text-green-800' :
+                                            activity.type === 'Meeting' ? 'bg-purple-100 text-purple-800' :
+                                              'bg-gray-100 text-gray-800'
+                                      }`}>
                                       {activity.type === 'Note' && <FaStickyNote className="w-3 h-3 mr-1" />}
                                       {activity.type === 'Email' && <FaEnvelope className="w-3 h-3 mr-1" />}
                                       {activity.type === 'Call' && <FaPhone className="w-3 h-3 mr-1" />}
@@ -3099,11 +3115,79 @@ const Tasks = () => {
                     </div>
                   )}
 
+                  {/* Mobile Mobile Only - Contact Info Tab Content */}
+                  {modalActiveTab === 'contact' && (
+                    <div className="lg:hidden space-y-6">
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">Contact Information</h3>
+                        {(() => {
+                          const displayName = taskCustomerDetails?.name || taskCustomerDetails?.firstName || selectedTask.customerName || 'Contact'
+                          const displayEmail = taskCustomerDetails?.email || selectedTask.customerEmail || ''
+                          const phone = taskCustomerDetails?.phone || selectedTask.customerPhone
+                          return (
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-gray-600">
+                                  {(displayName || '?')[0].toUpperCase()}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-gray-900">{displayName}</p>
+                                  <p className="text-sm text-gray-500">{displayEmail || 'No email'}</p>
+                                </div>
+                              </div>
+                              <div className="pt-4 border-t border-gray-100 space-y-3">
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wider">Phone Number</p>
+                                  <p className="text-sm font-medium">{phone || '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wider">Address</p>
+                                  <p className="text-sm">
+                                    {[taskCustomerDetails?.address, taskCustomerDetails?.city, taskCustomerDetails?.state].filter(Boolean).join(', ') || '—'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mobile Only - Associations Tab Content */}
+                  {modalActiveTab === 'associations' && (
+                    <div className="lg:hidden space-y-6">
+                      <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">Associations</h3>
+                        <p className="text-sm text-gray-500 mb-2 font-medium">Companies</p>
+                        {selectedTask.customer?.company ? (
+                          <div className="p-3 bg-gray-50 rounded border border-gray-100 mb-4 font-medium text-sm">
+                            {selectedTask.customer.company}
+                          </div>
+                        ) : <p className="text-xs text-gray-400 mb-4">No companies associated</p>}
+
+                        <p className="text-sm text-gray-500 mb-2 font-medium">Deals / Quotations ({taskQuotations.length})</p>
+                        {taskQuotations.length > 0 ? (
+                          <div className="space-y-2 mb-4">
+                            {taskQuotations.map(q => (
+                              <div key={q._id} className="p-2 bg-gray-50 rounded border border-gray-100 text-xs">
+                                {q.quotationNumber || 'Quote'} - £{Number(q.total || 0).toFixed(2)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p className="text-xs text-gray-400 mb-4">No quotations associated</p>}
+
+                        <p className="text-sm text-gray-500 mb-2 font-medium">Tickets</p>
+                        <p className="text-xs text-gray-400">No tickets associated</p>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
 
               {/* Right Panel - Associated Companies */}
-              <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto">
+              <div className="hidden lg:block w-72 xl:w-80 bg-white border-l border-gray-200 overflow-y-auto flex-shrink-0">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-gray-900">
@@ -3198,6 +3282,130 @@ const Tasks = () => {
           </div>
         </div>
       )}
+
+      {/* Import Excel Modal */}
+      {showImportExcelModal && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">Import Tasks from CSV</h3>
+              <button
+                onClick={() => {
+                  setShowImportExcelModal(false)
+                  setImportExcelFile(null)
+                  setImportExcelPreview([])
+                }}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select CSV File</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 cursor-pointer group">
+                    <div className="w-full border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center group-hover:border-[#e9931c] group-hover:bg-orange-50 transition-colors">
+                      <FaFileExcel className="w-8 h-8 text-green-600 mb-2" />
+                      <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                        {importExcelFile ? importExcelFile.name : 'Click to upload CSV'}
+                      </span>
+                      <span className="text-xs text-gray-400 mt-1">supports .csv</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleTaskExcelFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                  {importExcelFile && (
+                    <button
+                      onClick={() => {
+                        setImportExcelFile(null)
+                        setImportExcelPreview([])
+                      }}
+                      className="p-3 text-red-500 hover:bg-red-50 rounded-lg border border-red-200 hover:border-red-300 transition-colors"
+                      title="Remove file"
+                    >
+                      <FaTrash className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+                <div className="mt-3 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  <p className="font-semibold mb-1">Required Columns:</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li><strong>customerName</strong> (Exact name as in system)</li>
+                    <li><strong>dueDate</strong> (Format: YYYY-MM-DD or DD/MM/YYYY)</li>
+                  </ul>
+                  <p className="font-semibold mt-2 mb-1">Optional Columns:</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li><strong>type</strong> (Call, Email, Meeting, Visit, etc.)</li>
+                    <li><strong>priority</strong> (Low, Medium, High, Urgent)</li>
+                    <li><strong>description</strong> (Task title)</li>
+                    <li><strong>notes</strong> (Additional details)</li>
+                    <li><strong>customerEmail</strong> (To help match customer)</li>
+                  </ul>
+                </div>
+              </div>
+
+              {importExcelPreview.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-700">Preview ({importExcelPreview.length} rows)</span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {importExcelPreview.slice(0, 50).map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-xs text-gray-900 font-medium truncate max-w-[150px]">{row.customerName}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{row.type || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{row.dueDate}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500 truncate max-w-[200px]">{row.description || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3 bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowImportExcelModal(false)
+                  setImportExcelFile(null)
+                  setImportExcelPreview([])
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition-colors"
+                disabled={importExcelLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImportTaskExcelSubmit}
+                disabled={!importExcelPreview.length || importExcelLoading}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm transition-colors"
+              >
+                {importExcelLoading ? <FaSpinner className="animate-spin w-4 h-4" /> : <FaFileExcel className="w-4 h-4" />}
+                {importExcelLoading ? 'Importing...' : `Import ${importExcelPreview.length} Tasks`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

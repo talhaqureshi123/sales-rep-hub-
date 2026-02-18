@@ -96,9 +96,8 @@ const ProductCatalog = () => {
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedCategory === cat ? 'bg-[#e9931c] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat ? 'bg-[#e9931c] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 {cat}
               </button>
@@ -115,9 +114,8 @@ const ProductCatalog = () => {
               <button
                 key={status}
                 onClick={() => setSelectedStatus(status)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedStatus === status ? 'bg-[#e9931c] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedStatus === status ? 'bg-[#e9931c] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 {status}
               </button>
@@ -171,9 +169,8 @@ const ProductCatalog = () => {
               </p>
               <div className="flex flex-wrap gap-2">
                 <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    product.isActive ? 'bg-[#e9931c] text-white' : 'bg-gray-200 text-gray-700'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold ${product.isActive ? 'bg-[#e9931c] text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
                 >
                   {product.isActive ? 'Active' : 'Inactive'}
                 </span>
@@ -187,6 +184,7 @@ const ProductCatalog = () => {
           ))}
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

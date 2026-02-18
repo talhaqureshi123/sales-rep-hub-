@@ -151,18 +151,18 @@ const getCustomers = async (req, res) => {
 
     const customers = listView
       ? await Customer.find(filter)
-          .select(listSelect)
-          .populate("createdBy", "name email role")
-          .populate("allottedSalesman", "name email")
-          .sort({ createdAt: -1 })
-          .limit(limit)
-          .lean()
+        .select(listSelect)
+        .populate("createdBy", "name email role")
+        .populate("allottedSalesman", "name email")
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean()
       : await Customer.find(filter)
-          .populate("createdBy", "name email role")
-          .populate("allottedSalesman", "name email")
-          .sort({ createdAt: -1 })
-          .limit(limit)
-          .lean();
+        .populate("createdBy", "name email role")
+        .populate("allottedSalesman", "name email")
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
 
     res.status(200).json({
       success: true,
@@ -177,25 +177,25 @@ const getCustomers = async (req, res) => {
         monthlySpendRange:
           monthlySpendMin || monthlySpendMax
             ? {
-                min: monthlySpendMin || 0,
-                max: monthlySpendMax || null,
-              }
+              min: monthlySpendMin || 0,
+              max: monthlySpendMax || null,
+            }
             : null,
         createdBy: createdBy || null,
         dateRanges: {
           created:
             createdFrom || createdTo
               ? {
-                  from: createdFrom || null,
-                  to: createdTo || null,
-                }
+                from: createdFrom || null,
+                to: createdTo || null,
+              }
               : null,
           updated:
             updatedFrom || updatedTo
               ? {
-                  from: updatedFrom || null,
-                  to: updatedTo || null,
-                }
+                from: updatedFrom || null,
+                to: updatedTo || null,
+              }
               : null,
         },
       },
@@ -632,6 +632,19 @@ const importCustomers = async (req, res) => {
           : 0;
 
       try {
+        // Prevent Duplicates: Check if customer with same email or phone already exists
+        const query = [];
+        if (row.email) query.push({ email: String(row.email).trim().toLowerCase() });
+        if (row.phone) query.push({ phone: String(row.phone).trim() });
+
+        if (query.length > 0) {
+          const existing = await Customer.findOne({ $or: query });
+          if (existing) {
+            skipped.push({ row: i + 1, reason: `Customer already exists (Matching ${existing.email === String(row.email).trim().toLowerCase() ? 'Email' : 'Phone'})` });
+            continue;
+          }
+        }
+
         const customer = await Customer.create({
           firstName,
           name: firstName,

@@ -19,7 +19,7 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [filterStatus, setFilterStatus] = useState('All')
-  const [filterSource, setFilterSource] = useState('All') // All | My Customers (admin + HubSpot only; no salesman-created)
+  const [filterSource, setFilterSource] = useState('My Customers') // All | My Customers (admin + HubSpot only; no salesman-created)
   const [filterSalesman, setFilterSalesman] = useState('') // '' = All; salesmanId = only that salesman's allotted customers
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'map'
@@ -65,7 +65,6 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
   })
 
   const statusOptions = [
-    { value: 'All', label: 'All' },
     { value: 'Not Visited', label: 'Not Visited' },
     { value: 'Visited', label: 'Visited' },
     { value: 'Follow-up Needed', label: 'Follow-up Needed' },
@@ -97,7 +96,7 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
         } else {
           await loadCustomers()
         }
-        if (!cancelled) loadSalesmen().catch(() => {})
+        if (!cancelled) loadSalesmen().catch(() => { })
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -894,41 +893,47 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <FaFilter className="text-gray-500" />
+            <FaFilter className="text-gray-500 mr-2" />
             {statusOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => setFilterStatus(option.value)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === option.value
-                    ? 'bg-[#e9931c] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                onClick={() => setFilterStatus(filterStatus === option.value ? 'All' : option.value)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${filterStatus === option.value
+                  ? 'bg-[#e9931c] text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 {option.label}
               </button>
             ))}
-            <span className="text-gray-400 mx-1">|</span>
-            <span className="text-sm text-gray-600">Source:</span>
-            <button
-              type="button"
-              onClick={() => setFilterSource(filterSource === 'My Customers' ? 'All' : 'My Customers')}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterSource === 'My Customers'
-                  ? 'bg-[#e9931c] text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              title={filterSource === 'My Customers' ? 'Showing only admin + HubSpot (click to show all)' : 'Click to show only My Customers (admin + HubSpot)'}
-            >
-              My Customers
-            </button>
-            <span className="text-gray-400 mx-1">|</span>
-            <span className="text-sm text-gray-600">Salesman:</span>
+
+            <div className="h-6 w-px bg-gray-300 mx-2"></div>
+
+            <span className="text-sm text-gray-600 font-medium">Source:</span>
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setFilterSource('All')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${filterSource === 'All' ? 'bg-white text-[#e9931c] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                All Customers
+              </button>
+              <button
+                onClick={() => setFilterSource('My Customers')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${filterSource === 'My Customers' ? 'bg-white text-[#e9931c] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                My Customers
+              </button>
+            </div>
+
+            <div className="h-6 w-px bg-gray-300 mx-2"></div>
+
+            <span className="text-sm text-gray-600 font-medium">Salesman:</span>
             <select
               value={filterSalesman}
               onChange={(e) => setFilterSalesman(e.target.value || '')}
-              className="px-3 py-2 rounded-full text-sm font-medium border border-gray-200 bg-white focus:outline-none focus:border-[#e9931c]"
-              title="Filter by allotted salesman (Customer Allotment)"
+              className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white focus:outline-none focus:border-[#e9931c]"
             >
-              <option value="">All</option>
+              <option value="">All Salesmen</option>
               {salesmen.map((s) => (
                 <option key={s._id || s.id} value={s._id || s.id}>{s.name || s.email || s._id}</option>
               ))}
@@ -941,8 +946,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
           <button
             onClick={() => setViewMode('grid')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'grid'
-                ? 'bg-gray-200 text-gray-900'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              ? 'bg-gray-200 text-gray-900'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
           >
             <FaTh className="w-4 h-4 inline mr-2" />
@@ -951,8 +956,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
           <button
             onClick={() => setViewMode('map')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'map'
-                ? 'bg-gray-200 text-gray-900'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              ? 'bg-gray-200 text-gray-900'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
           >
             <FaMapMarkerAlt className="w-4 h-4 inline mr-2" />
@@ -1073,325 +1078,325 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               </button>
             </div>
             <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleInputChange}
-                  required
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter first name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
-                <input
-                  type="text"
-                  name="contactPerson"
-                  value={formData.contactPerson}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter contact person name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
-                <input
-                  type="text"
-                  name="company"
-                  value={formData.company}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter company name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter email"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter phone number"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                <textarea
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  rows="3"
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter full address (street, area, etc.)"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                   <input
                     type="text"
-                    name="city"
-                    value={formData.city}
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleInputChange}
+                    required
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter first name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
+                  <input
+                    type="text"
+                    name="contactPerson"
+                    value={formData.contactPerson}
                     onChange={handleInputChange}
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="City"
+                    placeholder="Enter contact person name"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">State / Region</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
                   <input
                     type="text"
-                    name="state"
-                    value={formData.state}
+                    name="company"
+                    value={formData.company}
                     onChange={handleInputChange}
                     disabled={loading}
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="State or region"
+                    placeholder="Enter company name"
                   />
                 </div>
-              </div>
 
-              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter email"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                  <textarea
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    rows="3"
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter full address (street, area, etc.)"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="City"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">State / Region</label>
+                    <input
+                      type="text"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="State or region"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGeocodeAddress}
+                    disabled={loading || geocodingAddress}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {geocodingAddress ? (
+                      <>
+                        <FaSpinner className="w-4 h-4 animate-spin" />
+                        Getting location...
+                      </>
+                    ) : (
+                      <>
+                        <FaMapMarkerAlt className="w-4 h-4" />
+                        Auto-fill postcode & location from address
+                      </>
+                    )}
+                  </button>
+                  <p className="text-xs text-gray-500">Uses address + city/state to set postcode, latitude and longitude</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Postcode</label>
+                  <input
+                    type="text"
+                    name="postcode"
+                    value={formData.postcode}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Auto-filled from address or enter manually (e.g. 75400)"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Auto-filled when you use &quot;Auto-fill postcode & location&quot;. Used for map and visit tasks.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
+                    <input
+                      type="text"
+                      name="latitude"
+                      value={formData.latitude}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Auto-filled from address or enter manually"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Used for Visit Target location (correct lat/lng from address)</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
+                    <input
+                      type="text"
+                      name="longitude"
+                      value={formData.longitude}
+                      onChange={handleInputChange}
+                      disabled={loading}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="Auto-filled from address or enter manually"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Used for Visit Target location (correct lat/lng from address)</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Order Potential</label>
+                  <select
+                    name="orderPotential"
+                    value={formData.orderPotential}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select potential</option>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                    <option value="Very High">Very High</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Spend (£)</label>
+                  <input
+                    type="number"
+                    name="monthlySpend"
+                    value={formData.monthlySpend}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="Not Visited">Not Visited</option>
+                    <option value="Visited">Visited</option>
+                    <option value="Follow-up Needed">Follow-up Needed</option>
+                    <option value="Qualified Lead">Qualified Lead</option>
+                    <option value="Not Interested">Not Interested</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    rows="3"
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter any notes about the customer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Competitor Info</label>
+                  <textarea
+                    name="competitorInfo"
+                    value={formData.competitorInfo}
+                    onChange={handleInputChange}
+                    rows="3"
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Competitor prices, delivery schedules, weak points....."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Associated Contact</label>
+                  <input
+                    type="text"
+                    name="associatedContactName"
+                    value={formData.associatedContactName}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter associated contact name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Associated Company</label>
+                  <input
+                    type="text"
+                    name="associatedCompanyName"
+                    value={formData.associatedCompanyName}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    placeholder="Enter associated company name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Contact</label>
+                  <input
+                    type="date"
+                    name="lastContact"
+                    value={formData.lastContact}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Engagement</label>
+                  <input
+                    type="date"
+                    name="lastEngagement"
+                    value={formData.lastEngagement}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                {/* View Access: removed from form – only admin allots; new customers default to salesman view */}
+
+              </div>
+              <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
-                  onClick={handleGeocodeAddress}
-                  disabled={loading || geocodingAddress}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={resetForm}
+                  disabled={loading}
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {geocodingAddress ? (
-                    <>
-                      <FaSpinner className="w-4 h-4 animate-spin" />
-                      Getting location...
-                    </>
-                  ) : (
-                    <>
-                      <FaMapMarkerAlt className="w-4 h-4" />
-                      Auto-fill postcode & location from address
-                    </>
-                  )}
+                  Cancel
                 </button>
-                <p className="text-xs text-gray-500">Uses address + city/state to set postcode, latitude and longitude</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Postcode</label>
-                <input
-                  type="text"
-                  name="postcode"
-                  value={formData.postcode}
-                  onChange={handleInputChange}
+                <button
+                  type="submit"
                   disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Auto-filled from address or enter manually (e.g. 75400)"
-                />
-                <p className="mt-1 text-xs text-gray-500">Auto-filled when you use &quot;Auto-fill postcode & location&quot;. Used for map and visit tasks.</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
-                  <input
-                    type="text"
-                    name="latitude"
-                    value={formData.latitude}
-                    onChange={handleInputChange}
-                    disabled={loading}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Auto-filled from address or enter manually"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Used for Visit Target location (correct lat/lng from address)</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
-                  <input
-                    type="text"
-                    name="longitude"
-                    value={formData.longitude}
-                    onChange={handleInputChange}
-                    disabled={loading}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="Auto-filled from address or enter manually"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Used for Visit Target location (correct lat/lng from address)</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Order Potential</label>
-                <select
-                  name="orderPotential"
-                  value={formData.orderPotential}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="">Select potential</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                  <option value="Very High">Very High</option>
-                </select>
+                  {loading ? 'Processing...' : editingCustomer ? 'Update Customer' : 'Add Customer'}
+                </button>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Spend (£)</label>
-                <input
-                  type="number"
-                  name="monthlySpend"
-                  value={formData.monthlySpend}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="Not Visited">Not Visited</option>
-                  <option value="Visited">Visited</option>
-                  <option value="Follow-up Needed">Follow-up Needed</option>
-                  <option value="Qualified Lead">Qualified Lead</option>
-                  <option value="Not Interested">Not Interested</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  rows="3"
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter any notes about the customer"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Competitor Info</label>
-                <textarea
-                  name="competitorInfo"
-                  value={formData.competitorInfo}
-                  onChange={handleInputChange}
-                  rows="3"
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Competitor prices, delivery schedules, weak points....."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Associated Contact</label>
-                <input
-                  type="text"
-                  name="associatedContactName"
-                  value={formData.associatedContactName}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter associated contact name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Associated Company</label>
-                <input
-                  type="text"
-                  name="associatedCompanyName"
-                  value={formData.associatedCompanyName}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="Enter associated company name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Last Contact</label>
-                <input
-                  type="date"
-                  name="lastContact"
-                  value={formData.lastContact}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Last Engagement</label>
-                <input
-                  type="date"
-                  name="lastEngagement"
-                  value={formData.lastEngagement}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                />
-              </div>
-
-              {/* View Access: removed from form – only admin allots; new customers default to salesman view */}
-
-            </div>
-            <div className="flex-shrink-0 flex gap-2 sm:gap-3 justify-end p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
-              <button
-                type="button"
-                onClick={resetForm}
-                disabled={loading}
-                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Processing...' : editingCustomer ? 'Update Customer' : 'Add Customer'}
-              </button>
-            </div>
             </form>
           </div>
         </div>
@@ -1529,8 +1534,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                             if (!getWhatsAppHref(customer.phone)) e.preventDefault()
                           }}
                           className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${getWhatsAppHref(customer.phone)
-                              ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                             }`}
                           title="Send WhatsApp"
                         >
@@ -1546,8 +1551,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                             if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
                           }}
                           className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${getEmailHref(customer.email, customer.name)
-                              ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                              : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                            ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                             }`}
                           title="Send Email"
                         >
@@ -1638,8 +1643,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                         <button
                           onClick={() => setCurrentPage(page)}
                           className={`px-4 py-2 rounded-lg font-semibold transition-colors ${currentPage === page
-                              ? 'bg-[#e9931c] text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-[#e9931c] text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                         >
                           {page}
@@ -1822,8 +1827,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               <button
                 onClick={() => setCustomerDetailTab('overview')}
                 className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'overview'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
                   }`}
               >
                 <FaInfoCircle className="w-4 h-4" />
@@ -1832,8 +1837,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               <button
                 onClick={() => setCustomerDetailTab('tasks')}
                 className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'tasks'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
                   }`}
               >
                 <FaTasks className="w-4 h-4" />
@@ -1842,8 +1847,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               <button
                 onClick={() => setCustomerDetailTab('visits')}
                 className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'visits'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
                   }`}
               >
                 <FaMapMarkerAlt className="w-4 h-4" />
@@ -1852,8 +1857,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               <button
                 onClick={() => setCustomerDetailTab('samples')}
                 className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'samples'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
                   }`}
               >
                 <FaFlask className="w-4 h-4" />
@@ -1862,8 +1867,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               <button
                 onClick={() => setCustomerDetailTab('quotations')}
                 className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'quotations'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
                   }`}
               >
                 <FaFileAlt className="w-4 h-4" />
@@ -1872,8 +1877,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
               <button
                 onClick={() => setCustomerDetailTab('orders')}
                 className={`px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${customerDetailTab === 'orders'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
                   }`}
               >
                 <FaShoppingCart className="w-4 h-4" />
@@ -2066,9 +2071,9 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">{task.description || task.customerName || 'Task'}</p>
                                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${task.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                      task.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                                        task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
-                                          'bg-yellow-100 text-yellow-700'
+                                    task.status === 'Overdue' ? 'bg-red-100 text-red-700' :
+                                      task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-yellow-100 text-yellow-700'
                                     }`}>
                                     {task.status}
                                   </span>
@@ -2079,8 +2084,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                                   )}
                                   {task.priority && (
                                     <span className={`px-2 py-0.5 rounded text-xs ${task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
-                                        task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                          'bg-gray-100 text-gray-700'
+                                      task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-gray-100 text-gray-700'
                                       }`}>
                                       {task.priority}
                                     </span>
@@ -2136,8 +2141,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">{visit.name || 'Visit'}</p>
                                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                      visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                        'bg-yellow-100 text-yellow-700'
+                                    visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-yellow-100 text-yellow-700'
                                     }`}>
                                     {visit.status}
                                   </span>
@@ -2198,8 +2203,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                                   )}
                                   {sample.status && (
                                     <span className={`px-2 py-0.5 rounded ${sample.status === 'Converted' ? 'bg-green-100 text-green-700' :
-                                        sample.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
-                                          'bg-yellow-100 text-yellow-700'
+                                      sample.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-yellow-100 text-yellow-700'
                                       }`}>
                                       {sample.status}
                                     </span>
@@ -2242,8 +2247,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                                   <p className="font-semibold text-gray-800">Quotation #{quotation.quotationNumber || 'N/A'}</p>
                                   {quotation.status && (
                                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${quotation.status === 'Approved' ? 'bg-green-100 text-green-700' :
-                                        quotation.status === 'Rejected' ? 'bg-red-100 text-red-700' :
-                                          'bg-yellow-100 text-yellow-700'
+                                      quotation.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                                        'bg-yellow-100 text-yellow-700'
                                       }`}>
                                       {quotation.status}
                                     </span>
@@ -2291,8 +2296,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                                   <p className="font-semibold text-gray-800">Order #{order.soNumber || 'N/A'}</p>
                                   {order.orderStatus && (
                                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${order.orderStatus === 'Completed' ? 'bg-green-100 text-green-700' :
-                                        order.orderStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                                          'bg-gray-100 text-gray-700'
+                                      order.orderStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-gray-100 text-gray-700'
                                       }`}>
                                       {order.orderStatus}
                                     </span>

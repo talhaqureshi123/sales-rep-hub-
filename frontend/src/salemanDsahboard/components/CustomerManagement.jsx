@@ -192,7 +192,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const handleAddCustomer = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const customerData = {
         firstName: formData.firstName,
@@ -698,11 +698,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                   <div className="flex-1">
                     <h3 className="text-base font-semibold text-gray-900 mb-1">{customer.name}</h3>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        customer.status === 'Active'
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${customer.status === 'Active'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
-                      }`}>
+                        }`}>
                         {customer.status}
                       </span>
                       {(customer.approvalStatus === 'Pending' || customer.approvalStatus === 'Approved') && (
@@ -746,11 +745,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     onClick={(e) => {
                       if (!getWhatsAppHref(customer.phone)) e.preventDefault()
                     }}
-                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                      getWhatsAppHref(customer.phone)
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${getWhatsAppHref(customer.phone)
                         ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
                         : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                    }`}
+                      }`}
                     title="Send WhatsApp"
                   >
                     <FaWhatsapp />
@@ -763,11 +761,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     onClick={(e) => {
                       if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
                     }}
-                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                      getEmailHref(customer.email, customer.name)
+                    className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors ${getEmailHref(customer.email, customer.name)
                         ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
                         : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                    }`}
+                      }`}
                     title="Send Email"
                   >
                     <FaEnvelope />
@@ -808,11 +805,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                             onClick={(e) => {
                               if (!getWhatsAppHref(customer.phone)) e.preventDefault()
                             }}
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                              getWhatsAppHref(customer.phone)
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${getWhatsAppHref(customer.phone)
                                 ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
                                 : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                            }`}
+                              }`}
                             title="Send WhatsApp"
                           >
                             <FaWhatsapp />
@@ -825,11 +821,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                             onClick={(e) => {
                               if (!getEmailHref(customer.email, customer.name)) e.preventDefault()
                             }}
-                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                              getEmailHref(customer.email, customer.name)
+                            className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors ${getEmailHref(customer.email, customer.name)
                                 ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
                                 : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                            }`}
+                              }`}
                             title="Send Email"
                           >
                             <FaEnvelope />
@@ -850,11 +845,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            customer.status === 'Active'
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${customer.status === 'Active'
                               ? 'bg-green-100 text-green-800'
                               : 'bg-gray-100 text-gray-800'
-                          }`}>
+                            }`}>
                             {customer.status}
                           </span>
                           {(customer.approvalStatus === 'Pending' || customer.approvalStatus === 'Approved') && (
@@ -872,6 +866,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
           </div>
         </>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

@@ -668,8 +668,8 @@ const ProductCatalog = () => {
                 key={category}
                 onClick={() => setSelectedCategory(category)}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === category
-                    ? 'bg-[#e9931c] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-[#e9931c] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 {category}
@@ -689,8 +689,8 @@ const ProductCatalog = () => {
                 key={status}
                 onClick={() => setSelectedStatus(status)}
                 className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedStatus === status
-                    ? 'bg-[#e9931c] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-[#e9931c] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 {status}
@@ -839,106 +839,106 @@ const ProductCatalog = () => {
             </div>
             <form onSubmit={editingProduct ? handleUpdateProduct : handleAddProduct} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {/* same form as before */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter product name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Product Code (Auto-generated if empty)</label>
-                <input
-                  type="text"
-                  name="productCode"
-                  value={formData.productCode}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Leave empty for auto-generation"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price *</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={formData.price}
-                  onChange={handleInputChange}
-                  required
-                  min="0"
-                  step="0.01"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter price"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  <option value="">Select category</option>
-                  {categories.filter(c => c !== 'All').map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="flex items-center gap-2">
+                {/* same form as before */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
                   <input
-                    type="checkbox"
-                    name="isActive"
-                    checked={formData.isActive}
+                    type="text"
+                    name="name"
+                    value={formData.name}
                     onChange={handleInputChange}
-                    className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter product name"
                   />
-                  <span className="text-sm text-gray-700">Active</span>
-                </label>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Image URL</label>
-                <input
-                  type="text"
-                  name="imageUrl"
-                  value={formData.imageUrl}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter image URL"
-                />
-              </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Code (Auto-generated if empty)</label>
+                  <input
+                    type="text"
+                    name="productCode"
+                    value={formData.productCode}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Leave empty for auto-generation"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Price *</label>
+                  <input
+                    type="number"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleInputChange}
+                    required
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter price"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  >
+                    <option value="">Select category</option>
+                    {categories.filter(c => c !== 'All').map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="isActive"
+                      checked={formData.isActive}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-[#e9931c] rounded focus:ring-[#e9931c]"
+                    />
+                    <span className="text-sm text-gray-700">Active</span>
+                  </label>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Image URL</label>
+                  <input
+                    type="text"
+                    name="imageUrl"
+                    value={formData.imageUrl}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter image URL"
+                  />
+                </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter product description"
-                  rows={3}
-                />
-              </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter product description"
+                    rows={3}
+                  />
+                </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Key Features</label>
-                <textarea
-                  name="keyFeatures"
-                  value={formData.keyFeatures}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter key features separated by commas"
-                  rows={2}
-                />
-              </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Key Features</label>
+                  <textarea
+                    name="keyFeatures"
+                    value={formData.keyFeatures}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter key features separated by commas"
+                    rows={2}
+                  />
+                </div>
 
               </div>
               <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
@@ -1090,8 +1090,8 @@ const ProductCatalog = () => {
               {/* Tags */}
               <div className="flex flex-wrap gap-2">
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${product.isActive
-                    ? 'bg-[#e9931c] text-white'
-                    : 'bg-gray-200 text-gray-700'
+                  ? 'bg-[#e9931c] text-white'
+                  : 'bg-gray-200 text-gray-700'
                   }`}>
                   {product.isActive ? 'Active' : 'Inactive'}
                 </span>
@@ -1105,6 +1105,7 @@ const ProductCatalog = () => {
           ))}
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

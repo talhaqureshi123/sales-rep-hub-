@@ -73,25 +73,25 @@ const getFollowUps = async (req, res) => {
 
     const followUps = listView
       ? await FollowUp.find(filter)
-          .populate("salesman", "name email")
-          .populate("customer", "name email phone company associatedContactName associatedContactEmail associatedCompanyName")
-          .populate("visitTarget", "name address")
-          .populate("createdBy", "name email role")
-          .sort({ dueDate: 1, priority: -1 })
-          .limit(listLimit)
-          .lean()
+        .populate("salesman", "name email")
+        .populate("customer", "name email phone company associatedContactName associatedContactEmail associatedCompanyName")
+        .populate("visitTarget", "name address")
+        .populate("createdBy", "name email role")
+        .sort({ dueDate: 1, priority: -1 })
+        .limit(listLimit)
+        .lean()
       : await FollowUp.find(filter)
-          .populate("salesman", "name email")
-          .populate(
-            "customer",
-            "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
-          )
-          .populate("relatedQuotation", "quotationNumber total")
-          .populate("relatedSample", "sampleNumber productName")
-          .populate("visitTarget", "name address")
-          .populate("approvedBy", "name email")
-          .populate("createdBy", "name email role")
-          .sort({ dueDate: 1, priority: -1 });
+        .populate("salesman", "name email")
+        .populate(
+          "customer",
+          "name email phone company associatedContactName associatedContactEmail associatedCompanyName lastContact lastEngagement",
+        )
+        .populate("relatedQuotation", "quotationNumber total")
+        .populate("relatedSample", "sampleNumber productName")
+        .populate("visitTarget", "name address")
+        .populate("approvedBy", "name email")
+        .populate("createdBy", "name email role")
+        .sort({ dueDate: 1, priority: -1 });
 
     res.status(200).json({
       success: true,
@@ -966,6 +966,23 @@ const importFollowUps = async (req, res) => {
       const customerPhone = row.customerPhone || row.customer_phone ? String(row.customerPhone || row.customer_phone).trim() : undefined;
 
       try {
+        const startOfMinute = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), dueDate.getHours(), dueDate.getMinutes(), 0, 0);
+        const endOfMinute = new Date(startOfMinute.getTime() + 60000);
+
+        // Prevent Duplicates: Check if exact same task exists
+        const existingTask = await FollowUp.findOne({
+          salesman: salesmanId,
+          customerName,
+          type,
+          dueDate: { $gte: startOfMinute, $lt: endOfMinute },
+          description
+        });
+
+        if (existingTask) {
+          skipped.push({ row: i + 1, reason: "Exact same task already exists for this salesman and customer at this time" });
+          continue;
+        }
+
         const followUp = await FollowUp.create({
           salesman: salesmanId,
           customerName,

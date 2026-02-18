@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { 
-  FaMapMarkerAlt, 
-  FaSearch, 
-  FaUsers, 
-  FaRoute, 
-  FaSyncAlt, 
-  FaEnvelope, 
-  FaToggleOn, 
+import {
+  FaMapMarkerAlt,
+  FaSearch,
+  FaUsers,
+  FaRoute,
+  FaSyncAlt,
+  FaEnvelope,
+  FaToggleOn,
   FaToggleOff,
   FaTasks,
   FaFlask,
@@ -54,16 +54,28 @@ const LiveTracking = () => {
   const loadSalesmenLocations = useCallback(async () => {
     setLoading(true)
     try {
-      // Mark as "online" if updated within last 5 minutes (backend default)
-      const result = await getLatestSalesmenLocations({ activeWithinMinutes: 5 })
+      // Fetch locations for the last 7 days to ensure we show last known location even for offline users
+      const result = await getLatestSalesmenLocations({ activeWithinMinutes: 10080 })
       if (result.success) {
         // Filter to only show salesmen (not admins) - safety filter
-        const rows = (result.data || []).filter(row => 
+        const rows = (result.data || []).filter(row =>
           row.salesman?.role === 'salesman' || !row.salesman?.role // Include if role is salesman or undefined (backward compatibility)
         )
-        
-        // Recalculate online count for filtered salesmen only
-        const filteredOnlineCount = rows.reduce((sum, r) => sum + (r.isOnline ? 1 : 0), 0)
+
+        setSalesmenLocations(rows)
+
+        // Helper for consistency
+        const checkIsOnline = (r) => {
+          const loc = r.latestLocation
+          const locationAge = loc?.timestamp
+            ? Math.round((Date.now() - new Date(loc.timestamp).getTime()) / 60000)
+            : null
+          const isLocationRecent = locationAge !== null && locationAge <= 5
+          return !!r.isOnline || isLocationRecent
+        }
+
+        // Recalculate online count using consistent logic
+        const filteredOnlineCount = rows.reduce((sum, r) => sum + (checkIsOnline(r) ? 1 : 0), 0)
         setOnlineCount(filteredOnlineCount)
 
         // Defer address loading so list/map show immediately; fetch addresses in background
@@ -148,7 +160,7 @@ const LiveTracking = () => {
         if (status === 'OK' && results[0]) {
           const addressComponents = results[0].address_components
           const formatted = results[0].formatted_address
-          
+
           // Extract meaningful parts
           let streetNumber = ''
           let route = ''
@@ -158,7 +170,7 @@ const LiveTracking = () => {
           let city = ''
           let state = ''
           let country = ''
-          
+
           addressComponents.forEach(component => {
             const types = component.types
             if (types.includes('street_number')) {
@@ -177,10 +189,10 @@ const LiveTracking = () => {
               country = component.long_name
             }
           })
-          
+
           // Build a cleaner address - prioritize meaningful location names
           const parts = []
-          
+
           // Priority 1: Area/Locality name (most important - this is what user wants to see)
           if (sublocality) {
             parts.push(sublocality)
@@ -189,24 +201,24 @@ const LiveTracking = () => {
           } else if (area) {
             parts.push(area)
           }
-          
+
           // Priority 2: Street address (if available)
           if (streetNumber && route) {
             parts.push(`${streetNumber} ${route}`)
           } else if (route && !parts.includes(route)) {
             parts.push(route)
           }
-          
+
           // Priority 3: City (if not already added as locality)
           if (city && !parts.includes(city) && city !== locality) {
             parts.push(city)
           }
-          
+
           // Priority 4: State (only if different from city/locality)
           if (state && state !== city && state !== locality && !parts.includes(state)) {
             parts.push(state)
           }
-          
+
           // Return formatted address - prefer meaningful location names
           if (parts.length > 0) {
             // Remove "V262+7FR" type plus codes and keep only meaningful names
@@ -247,11 +259,21 @@ const LiveTracking = () => {
   const filterSalesmen = () => {
     let filtered = salesmenLocations
 
+    // Helper to determine online status properly
+    const checkIsOnline = (r) => {
+      const loc = r.latestLocation
+      const locationAge = loc?.timestamp
+        ? Math.round((Date.now() - new Date(loc.timestamp).getTime()) / 60000)
+        : null
+      const isLocationRecent = locationAge !== null && locationAge <= 5
+      return !!r.isOnline || isLocationRecent
+    }
+
     // Filter by status
     if (filter === 'Online') {
-      filtered = filtered.filter(r => r.isOnline)
+      filtered = filtered.filter(r => checkIsOnline(r))
     } else if (filter === 'Offline') {
-      filtered = filtered.filter(r => !r.isOnline)
+      filtered = filtered.filter(r => !checkIsOnline(r))
     }
 
     // Filter by search term
@@ -280,7 +302,7 @@ const LiveTracking = () => {
   // Load salesman details when selected
   const loadSalesmanDetails = async (salesmanId) => {
     if (!salesmanId) return
-    
+
     setLoadingDetails(true)
     try {
       // Find latest location from current data
@@ -357,14 +379,14 @@ const LiveTracking = () => {
       })
       .map(r => {
         const salesmanId = r.salesman?._id
-        const locationAge = r.latestLocation?.timestamp 
+        const locationAge = r.latestLocation?.timestamp
           ? Math.round((Date.now() - new Date(r.latestLocation.timestamp).getTime()) / 60000)
           : null
-        
+
         // Determine status: Online if location is recent OR if salesman is marked online
         const isLocationRecent = locationAge !== null && locationAge <= 5
         const status = (r.isOnline || isLocationRecent) ? 'Online' : 'Offline'
-        
+
         return {
           _id: r.latestLocation?._id || salesmanId,
           name: r.salesman?.name || r.salesman?.email || 'Salesman',
@@ -379,12 +401,12 @@ const LiveTracking = () => {
           locationAgeMinutes: locationAge, // Add location age for debugging
         }
       })
-    
+
     console.log(`🗺️ Map markers created: ${markers.length} markers`)
     markers.forEach(m => {
       console.log(`   ${m.name}: ${m.status}, Location age: ${m.locationAgeMinutes !== null ? m.locationAgeMinutes + ' min' : 'N/A'}`)
     })
-    
+
     return markers
   }, [salesmenLocations, locationAddresses]) // Only update when locations or addresses change
 
@@ -392,7 +414,7 @@ const LiveTracking = () => {
   const firstSalesmanLocation = salesmenLocations.find(r => r.latestLocation?.latitude && r.latestLocation?.longitude)
   const firstLat = firstSalesmanLocation?.latestLocation?.latitude
   const firstLng = firstSalesmanLocation?.latestLocation?.longitude
-  
+
   // Memoize map center to prevent map resetting - only update when coordinates actually change
   const mapCenter = useMemo(() => {
     if (firstLat && firstLng) {
@@ -403,8 +425,8 @@ const LiveTracking = () => {
 
   // Memoize marker click handler
   const handleMarkerClick = useCallback((target) => {
-    const row = salesmenLocations.find(r => 
-      (r.salesman?._id === target.salesman?._id) || 
+    const row = salesmenLocations.find(r =>
+      (r.salesman?._id === target.salesman?._id) ||
       (r.latestLocation?._id === target._id) ||
       (r.salesman?._id === target._id)
     )
@@ -567,8 +589,8 @@ const LiveTracking = () => {
                 <button
                   onClick={() => setFilter('All')}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === 'All'
-                      ? 'bg-[#e9931c] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   All
@@ -576,8 +598,8 @@ const LiveTracking = () => {
                 <button
                   onClick={() => setFilter('Online')}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === 'Online'
-                      ? 'bg-[#e9931c] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   Online
@@ -585,8 +607,8 @@ const LiveTracking = () => {
                 <button
                   onClick={() => setFilter('Offline')}
                   className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === 'Offline'
-                      ? 'bg-[#e9931c] text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-[#e9931c] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                 >
                   Offline
@@ -611,7 +633,13 @@ const LiveTracking = () => {
                   {filteredSalesmen.map((row) => {
                     const salesman = row.salesman || {}
                     const loc = row.latestLocation
-                    const isOnline = !!row.isOnline
+
+                    // Consistent Online logic: Backend flag OR location within last 5 minutes
+                    const locationAge = loc?.timestamp
+                      ? Math.round((Date.now() - new Date(loc.timestamp).getTime()) / 60000)
+                      : null
+                    const isLocationRecent = locationAge !== null && locationAge <= 5
+                    const isOnline = !!row.isOnline || isLocationRecent
 
                     return (
                       <div
@@ -648,7 +676,7 @@ const LiveTracking = () => {
                                     </p>
                                   </div>
                                 </div>
-                                
+
                                 {/* Last Seen & Accuracy */}
                                 <div className="flex items-center gap-3 pl-5 text-xs text-gray-500">
                                   {loc.timestamp && (
@@ -656,11 +684,11 @@ const LiveTracking = () => {
                                       <FaClock className="w-3 h-3" />
                                       {row.lastSeenMs !== null && row.lastSeenMs !== undefined ? (
                                         <>
-                                          {row.lastSeenMs < 60000 
+                                          {row.lastSeenMs < 60000
                                             ? `${Math.floor(row.lastSeenMs / 1000)}s ago`
                                             : row.lastSeenMs < 3600000
-                                            ? `${Math.floor(row.lastSeenMs / 60000)}m ago`
-                                            : `${Math.floor(row.lastSeenMs / 3600000)}h ago`}
+                                              ? `${Math.floor(row.lastSeenMs / 60000)}m ago`
+                                              : `${Math.floor(row.lastSeenMs / 3600000)}h ago`}
                                         </>
                                       ) : (
                                         new Date(loc.timestamp).toLocaleTimeString()
@@ -752,44 +780,40 @@ const LiveTracking = () => {
             <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0">
               <button
                 onClick={() => setDetailTab('tasks')}
-                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  detailTab === 'tasks'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${detailTab === 'tasks'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  }`}
               >
                 <FaTasks className="w-4 h-4" />
                 Tasks ({salesmanTasks.length})
               </button>
               <button
                 onClick={() => setDetailTab('samples')}
-                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  detailTab === 'samples'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${detailTab === 'samples'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  }`}
               >
                 <FaFlask className="w-4 h-4" />
                 Samples ({salesmanSamples.length})
               </button>
               <button
                 onClick={() => setDetailTab('visits')}
-                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  detailTab === 'visits'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${detailTab === 'visits'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  }`}
               >
                 <FaMapMarkerAlt className="w-4 h-4" />
                 Visits ({salesmanVisits.length})
               </button>
               <button
                 onClick={() => setDetailTab('tracking')}
-                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  detailTab === 'tracking'
-                    ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
-                    : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
-                }`}
+                className={`flex-1 px-4 py-3 font-semibold transition-colors flex items-center justify-center gap-2 ${detailTab === 'tracking'
+                  ? 'bg-white text-[#e9931c] border-b-2 border-[#e9931c]'
+                  : 'text-gray-600 hover:text-[#e9931c] hover:bg-gray-100'
+                  }`}
               >
                 <FaRoute className="w-4 h-4" />
                 Tracking ({salesmanTracking.length})
@@ -820,12 +844,11 @@ const LiveTracking = () => {
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">{task.title || task.customerName || 'Task'}</p>
-                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                    task.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${task.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                     task.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                                    task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-yellow-100 text-yellow-700'
-                                  }`}>
+                                      task.status === 'Today' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-yellow-100 text-yellow-700'
+                                    }`}>
                                     {task.status}
                                   </span>
                                   {task.type && (
@@ -848,11 +871,10 @@ const LiveTracking = () => {
                                     </span>
                                   )}
                                   {task.priority && (
-                                    <span className={`px-2 py-0.5 rounded ${
-                                      task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
+                                    <span className={`px-2 py-0.5 rounded ${task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
                                       task.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-gray-100 text-gray-700'
-                                    }`}>
+                                        'bg-gray-100 text-gray-700'
+                                      }`}>
                                       {task.priority}
                                     </span>
                                   )}
@@ -887,11 +909,10 @@ const LiveTracking = () => {
                                     <span>Quantity: {sample.quantity}</span>
                                   )}
                                   {sample.status && (
-                                    <span className={`px-2 py-0.5 rounded ${
-                                      sample.status === 'Converted' ? 'bg-green-100 text-green-700' :
+                                    <span className={`px-2 py-0.5 rounded ${sample.status === 'Converted' ? 'bg-green-100 text-green-700' :
                                       sample.status === 'Delivered' ? 'bg-blue-100 text-blue-700' :
-                                      'bg-yellow-100 text-yellow-700'
-                                    }`}>
+                                        'bg-yellow-100 text-yellow-700'
+                                      }`}>
                                       {sample.status}
                                     </span>
                                   )}
@@ -922,19 +943,17 @@ const LiveTracking = () => {
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-semibold text-gray-800">{visit.name || 'Visit'}</p>
-                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                    visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${visit.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                     visit.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-yellow-100 text-yellow-700'
-                                  }`}>
+                                      'bg-yellow-100 text-yellow-700'
+                                    }`}>
                                     {visit.status}
                                   </span>
                                   {visit.priority && (
-                                    <span className={`px-2 py-0.5 rounded text-xs ${
-                                      visit.priority === 'High' ? 'bg-red-100 text-red-700' :
+                                    <span className={`px-2 py-0.5 rounded text-xs ${visit.priority === 'High' ? 'bg-red-100 text-red-700' :
                                       visit.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                      'bg-gray-100 text-gray-700'
-                                    }`}>
+                                        'bg-gray-100 text-gray-700'
+                                      }`}>
                                       {visit.priority}
                                     </span>
                                   )}
@@ -1045,11 +1064,10 @@ const LiveTracking = () => {
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                       <p className="font-semibold text-gray-800">Tracking Session</p>
-                                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                        track.status === 'active' ? 'bg-green-100 text-green-700' :
+                                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${track.status === 'active' ? 'bg-green-100 text-green-700' :
                                         track.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                                        'bg-gray-100 text-gray-700'
-                                      }`}>
+                                          'bg-gray-100 text-gray-700'
+                                        }`}>
                                         {track.status}
                                       </span>
                                     </div>

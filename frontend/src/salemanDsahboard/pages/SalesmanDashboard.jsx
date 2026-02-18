@@ -106,7 +106,7 @@ const SalesmanDashboard = ({ onLogout }) => {
         </div>
 
         {/* Main Content - full height for Sales Tracking map; top margin on mobile so tasks/forms don't hide */}
-        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${activeTab === 'sales-tracking' ? 'p-0 h-full' : ''} ${activeTab === 'sales-tracking' ? '' : 'overflow-y-auto'} ${activeTab === 'quotation' ? 'p-0' : activeTab === 'sales-tracking' ? '' : 'p-2 sm:p-4'} ${activeTab === 'sales-tracking' ? '' : 'pt-6 sm:pt-4 pb-20 md:pb-24 lg:pb-4 lg:pt-4'}`}>
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${activeTab === 'sales-tracking' ? 'p-0 h-full' : ''} ${activeTab === 'sales-tracking' ? '' : 'overflow-y-auto'} ${activeTab === 'quotation' ? 'p-0' : activeTab === 'sales-tracking' ? '' : 'p-2 sm:p-4'} ${activeTab === 'sales-tracking' ? '' : 'pt-6 sm:pt-4 pb-44 md:pb-48 lg:pb-4 lg:pt-4'}`}>
           {activeTab === 'sales-tracking' ? (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
               {renderContent()}

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { 
-  FaVideo, 
-  FaSearch, 
-  FaFilter, 
-  FaPlay, 
+import {
+  FaVideo,
+  FaSearch,
+  FaFilter,
+  FaPlay,
   FaClock,
   FaTag,
   FaYoutube,
@@ -53,7 +53,7 @@ const ProductVideos = () => {
         const activeVideos = result.data.filter(video => video.isActive !== false)
         setVideos(activeVideos)
         setFilteredVideos(activeVideos)
-        
+
         if (activeVideos.length === 0) {
           Swal.fire({
             icon: 'info',
@@ -113,51 +113,51 @@ const ProductVideos = () => {
   // Convert YouTube/Vimeo URL to embed URL
   const getEmbedUrl = (url) => {
     if (!url) return ''
-    
+
     // YouTube URL patterns
     let videoId = null
-    
+
     const watchMatch = url.match(/(?:youtube\.com\/watch\?v=)([^&?\s]+)/)
     if (watchMatch) {
       videoId = watchMatch[1]
     }
-    
+
     const embedMatch = url.match(/(?:youtube\.com\/embed\/)([^&?\s]+)/)
     if (embedMatch) {
       videoId = embedMatch[1]
     }
-    
+
     const vMatch = url.match(/(?:youtube\.com\/v\/)([^&?\s]+)/)
     if (vMatch) {
       videoId = vMatch[1]
     }
-    
+
     const shortMatch = url.match(/(?:youtu\.be\/)([^&?\s]+)/)
     if (shortMatch) {
       videoId = shortMatch[1]
     }
-    
+
     if (videoId) {
       videoId = videoId.split('&')[0].split('?')[0]
       return `https://www.youtube.com/embed/${videoId}`
     }
-    
+
     // Vimeo URL patterns
     const vimeoMatch = url.match(/(?:vimeo\.com\/)(?:.*\/)?(\d+)/)
     if (vimeoMatch) {
       return `https://player.vimeo.com/video/${vimeoMatch[1]}`
     }
-    
+
     // Direct video URL
     if (url.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
       return url
     }
-    
+
     // If already an embed URL
     if (url.includes('youtube.com/embed') || url.includes('player.vimeo.com')) {
       return url
     }
-    
+
     return url
   }
 
@@ -220,11 +220,10 @@ const ProductVideos = () => {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedCategory === category
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === category
                     ? 'bg-[#e9931c] text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {category}
               </button>
@@ -268,7 +267,7 @@ const ProductVideos = () => {
           </div>
           <h3 className="text-2xl font-bold text-gray-800 mb-2">No videos found</h3>
           <p className="text-gray-600 mb-8 max-w-md mx-auto">
-            {searchTerm || selectedCategory !== 'All' 
+            {searchTerm || selectedCategory !== 'All'
               ? 'Try adjusting your filters to see more videos.'
               : 'No product videos available at the moment.'}
           </p>
@@ -281,7 +280,7 @@ const ProductVideos = () => {
               className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-[#e9931c] transition-all duration-300 group"
             >
               {/* Video Thumbnail */}
-              <div 
+              <div
                 className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 cursor-pointer overflow-hidden"
                 onClick={() => handlePlayVideo(video)}
               >
@@ -303,7 +302,7 @@ const ProductVideos = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Play Button Overlay */}
                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
                   <div className="bg-white bg-opacity-90 rounded-full p-4 transform scale-0 group-hover:scale-100 transition-transform">
@@ -344,7 +343,7 @@ const ProductVideos = () => {
                 <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-2 group-hover:text-[#e9931c] transition-colors">
                   {video.title}
                 </h3>
-                
+
                 {/* Category Badge */}
                 {video.category && (
                   <div className="mb-2">
@@ -403,13 +402,13 @@ const ProductVideos = () => {
                 </svg>
               </button>
             </div>
-            
+
             {/* Video Player */}
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-4">
               {(() => {
                 const embedUrl = getEmbedUrl(playingVideo.videoUrl)
                 const isDirectVideo = playingVideo.videoUrl?.match(/\.(mp4|webm|ogg)(\?.*)?$/i)
-                
+
                 if (isDirectVideo) {
                   return (
                     <video
@@ -447,7 +446,7 @@ const ProductVideos = () => {
                 }
               })()}
             </div>
-            
+
             {/* Video Description */}
             {playingVideo.description && (
               <div className="mb-4">
@@ -455,7 +454,7 @@ const ProductVideos = () => {
                 <p className="text-sm text-gray-600">{playingVideo.description}</p>
               </div>
             )}
-            
+
             {/* Video Info */}
             <div className="flex items-center gap-4 text-sm text-gray-600 px-4 sm:px-6 pb-4">
               {playingVideo.duration && (
@@ -465,6 +464,7 @@ const ProductVideos = () => {
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

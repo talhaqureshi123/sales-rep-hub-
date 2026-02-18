@@ -6,7 +6,7 @@ import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQu
 import { getCustomers } from '../../services/adminservices/customerService'
 import { getProducts } from '../../services/adminservices/productService'
 import { getUsers } from '../../services/adminservices/userService'
-import { pushQuotationsToHubSpot } from '../../services/adminservices/hubspotService'
+
 import QRCameraScanner from '../../components/QRCameraScanner'
 
 const Quotes = ({ initialFilter, onFilterConsumed }) => {
@@ -34,7 +34,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
   const [showQRCamera, setShowQRCamera] = useState(false)
   const [qrScanning, setQrScanning] = useState(false)
   const [editingQuotation, setEditingQuotation] = useState(null)
-  const [pushingQuotations, setPushingQuotations] = useState(false)
+
   const [importingQuotations, setImportingQuotations] = useState(false)
   const importFileInputRef = useRef(null)
 
@@ -115,12 +115,12 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
         status: selectedStatus !== 'All' ? selectedStatus : undefined,
         search: searchTerm || undefined,
       }
-      
+
       // Add myQuotes filter if "My Quotes" is selected
       if (filterSource === 'My Quotes') {
         params.myQuotesOnly = true
       }
-      
+
       const result = await getQuotations(params)
       if (result.success && result.data) {
         setQuotes(result.data)
@@ -223,18 +223,18 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     const updatedItems = formData.lineItems.map((item) => {
       if (item.id === itemId) {
         const updatedItem = { ...item, [field]: value }
-        
+
         // Calculate line total
         if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
           const qty = field === 'quantity' ? parseFloat(value) || 0 : updatedItem.quantity
           const price = field === 'unitPrice' ? parseFloat(value) || 0 : updatedItem.unitPrice
           const discount = field === 'discount' ? parseFloat(value) || 0 : updatedItem.discount
-          
+
           const subtotal = qty * price
           const discountAmount = (subtotal * discount) / 100
           updatedItem.lineTotal = subtotal - discountAmount
         }
-        
+
         return updatedItem
       }
       return item
@@ -267,12 +267,12 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
             lineTotal: 0,
           }
         }
-        
+
         const product = products.find((p) => {
           const pId = p._id || p.id
           return pId === productId || String(pId) === String(productId)
         })
-        
+
         if (product) {
           const qty = item.quantity || 1
           const price = product.price || 0
@@ -280,9 +280,9 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
           const subtotal = qty * price
           const discountAmount = (subtotal * discount) / 100
           const lineTotal = subtotal - discountAmount
-          
+
           const finalProductId = product._id || product.id || productId
-          
+
           return {
             ...item,
             product: finalProductId,
@@ -360,12 +360,12 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
 
   const handleQRScan = async (code) => {
     if (!code) return
-    
+
     setQrScanning(true)
-    
+
     try {
       let productCode = code
-      
+
       // Try to parse JSON if QR code contains JSON data
       try {
         const parsedData = JSON.parse(code)
@@ -383,7 +383,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
               stock: parsedData.stock || 0,
               productCode: parsedData.productCode,
             }
-            
+
             handleAddFromQR(product)
             setQrScanning(false)
             return
@@ -393,11 +393,11 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
         // Not JSON, use code as is
         productCode = code
       }
-      
+
       // Fetch product from API using productCode
       const { getProductByCode } = await import('../../services/salemanservices/productService')
       const result = await getProductByCode(productCode)
-      
+
       if (result.success && result.data) {
         const product = {
           id: result.data.productCode,
@@ -406,7 +406,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
           price: result.data.price,
           productCode: result.data.productCode,
         }
-        
+
         handleAddFromQR(product)
       } else {
         alert(result.message || 'Product not found')
@@ -431,7 +431,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       discount: 0,
       lineTotal: product.price,
     }
-    
+
     const updatedItems = [...formData.lineItems, newItem]
     const subtotal = updatedItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0)
     const tax = subtotal * 0.20
@@ -444,7 +444,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       tax,
       total,
     })
-    
+
     setShowCreateModal(true)
   }
 
@@ -456,7 +456,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
 
   const handleCreateQuote = async (e) => {
     e.preventDefault()
-    
+
     // Validate form
     if (!formData.customer && !formData.customerName) {
       alert('Please select or enter a customer')
@@ -469,7 +469,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       const hasValidQuantity = item.quantity > 0
       return hasProduct && hasValidQuantity
     })
-    
+
     if (validItems.length === 0) {
       alert('Please add at least one product to the quotation')
       return
@@ -478,7 +478,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     setLoading(true)
     try {
       const selectedCustomer = customers.find((c) => c.id === formData.customer || c._id === formData.customer)
-      
+
       const validLineItems = formData.lineItems
         .filter(item => {
           const hasProduct = !!(item.productId || item.product)
@@ -510,7 +510,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       }
 
       const result = await createQuotation(quotationData)
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -551,7 +551,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     setLoading(true)
     try {
       const selectedCustomer = customers.find((c) => c.id === formData.customer || c._id === formData.customer)
-      
+
       const quotationData = {
         customerName: selectedCustomer?.name || formData.customerName || '',
         customerEmail: selectedCustomer?.email || formData.customerEmail || '',
@@ -577,7 +577,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       }
 
       const result = await createQuotation(quotationData)
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -616,12 +616,12 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
         const quote = result.data
         setEditingQuotation(quote)
         setSelectedQuote(quote)
-        
+
         // Find customer
-        const customer = customers.find(c => 
+        const customer = customers.find(c =>
           (c.name || '').toLowerCase() === (quote.customerName || '').toLowerCase()
         )
-        
+
         setFormData({
           customer: customer?.id || customer?._id || '',
           salesman: quote.salesman?._id || quote.salesman?.id || quote.salesman || '',
@@ -630,29 +630,29 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
           customerPhone: quote.customerPhone || '',
           customerAddress: quote.customerAddress || '',
           validUntil: quote.validUntil ? new Date(quote.validUntil).toISOString().split('T')[0] : '',
-          lineItems: quote.items && quote.items.length > 0 
+          lineItems: quote.items && quote.items.length > 0
             ? quote.items.map((item, index) => ({
-                id: index + 1,
-                product: item.product?._id || item.productId || '',
-                productId: item.product?._id || item.productId || '',
-                productName: item.productName || item.name || '',
-                quantity: item.quantity || 1,
-                unitPrice: item.price || item.unitPrice || 0,
-                discount: item.discount || 0,
-                lineTotal: item.total || item.lineTotal || (item.quantity * (item.price || 0)),
-              }))
+              id: index + 1,
+              product: item.product?._id || item.productId || '',
+              productId: item.product?._id || item.productId || '',
+              productName: item.productName || item.name || '',
+              quantity: item.quantity || 1,
+              unitPrice: item.price || item.unitPrice || 0,
+              discount: item.discount || 0,
+              lineTotal: item.total || item.lineTotal || (item.quantity * (item.price || 0)),
+            }))
             : [
-                {
-                  id: 1,
-                  product: '',
-                  productId: '',
-                  productName: '',
-                  quantity: 1,
-                  unitPrice: 0,
-                  discount: 0,
-                  lineTotal: 0,
-                },
-              ],
+              {
+                id: 1,
+                product: '',
+                productId: '',
+                productName: '',
+                quantity: 1,
+                unitPrice: 0,
+                discount: 0,
+                lineTotal: 0,
+              },
+            ],
           subtotal: quote.subtotal || 0,
           tax: quote.tax || 0,
           total: quote.total || 0,
@@ -677,7 +677,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       const hasValidQuantity = item.quantity > 0
       return hasProduct && hasValidQuantity
     })
-    
+
     if (validItems.length === 0) {
       alert('Please add at least one product to the quotation')
       return
@@ -686,7 +686,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     setLoading(true)
     try {
       const selectedCustomer = customers.find((c) => c.id === formData.customer || c._id === formData.customer)
-      
+
       const validLineItems = formData.lineItems
         .filter(item => {
           const hasProduct = !!(item.productId || item.product)
@@ -718,7 +718,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       }
 
       const result = await updateQuotation(editingQuotation._id || editingQuotation.id, quotationData)
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -822,39 +822,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     URL.revokeObjectURL(url)
   }
 
-  // Push quotations to HubSpot
-  const handlePushToHubSpot = async () => {
-    setPushingQuotations(true)
-    try {
-      const result = await pushQuotationsToHubSpot(false, 0)
-      if (result.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Pushed!',
-          text: result.message || 'Quotations pushed to HubSpot successfully.',
-          confirmButtonColor: '#e9931c'
-        })
-        loadQuotes()
-      } else {
-        Swal.fire({
-          icon: 'error',
-          title: 'Push failed',
-          text: result.message || 'Failed to push quotations to HubSpot.',
-          confirmButtonColor: '#e9931c'
-        })
-      }
-    } catch (error) {
-      console.error('Error pushing quotations:', error)
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Error pushing quotations. Please try again.',
-        confirmButtonColor: '#e9931c'
-      })
-    } finally {
-      setPushingQuotations(false)
-    }
-  }
+
 
   // Parse CSV (customerName, customerEmail, notes) – simple comma split
   const parseCSV = (text) => {
@@ -1102,19 +1070,6 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={handlePushToHubSpot}
-            disabled={pushingQuotations}
-            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors text-sm"
-            title="Push quotations to HubSpot"
-          >
-            {pushingQuotations ? (
-              <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-            ) : (
-              <FaCloudUploadAlt className="w-5 h-5" />
-            )}
-            <span>Push</span>
-          </button>
           <input
             ref={importFileInputRef}
             type="file"
@@ -1158,7 +1113,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
             <FaCheckSquare className="w-4 h-4" />
             <span>Select</span>
           </button>
-          
+
           {/* Source Filter */}
           <select
             value={filterSource}
@@ -1168,17 +1123,16 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
             <option value="All">All Quotes</option>
             <option value="My Quotes">My Quotes</option>
           </select>
-          
+
           <div className="flex flex-wrap gap-2">
             {statusOptions.map((status) => (
               <button
                 key={status}
                 onClick={() => setSelectedStatus(status)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  selectedStatus === status
-                    ? 'bg-[#e9931c] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedStatus === status
+                  ? 'bg-[#e9931c] text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 {status}
               </button>
@@ -1336,7 +1290,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       {/* Create Quote Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-[95vw] lg:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Modal Header */}
             <div className="flex-shrink-0 bg-white border-b-2 border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between rounded-t-2xl sm:rounded-t-2xl">
               <div className="flex-1 min-w-0">
@@ -1365,227 +1319,226 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
             {/* Modal Body – scrollable so buttons stay visible at bottom */}
             <form onSubmit={editingQuotation ? handleUpdateQuote : handleCreateQuote} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {/* Customer & Salesman Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer *
-                  </label>
-                  <select
-                    name="customer"
-                    value={formData.customer}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                  >
-                    <option value="">Search customers...</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id || customer._id} value={customer.id || customer._id}>
-                        {customer.name} {customer.email ? `(${customer.email})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Salesman *
-                  </label>
-                  <select
-                    name="salesman"
-                    value={formData.salesman}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                  >
-                    <option value="">Select salesman...</option>
-                    {salesmen.map((s) => (
-                      <option key={s._id || s.id} value={s._id || s.id}>
-                        {s.name || s.email} {s.email ? `(${s.email})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Valid Until
-                  </label>
-                  <input
-                    type="date"
-                    name="validUntil"
-                    value={formData.validUntil}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Line Items Section */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Line Items *
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleQRScanClick}
-                      className="p-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
-                      title="Scan QR Code with Camera"
-                      disabled={qrScanning}
+                {/* Customer & Salesman Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Customer *
+                    </label>
+                    <select
+                      name="customer"
+                      value={formData.customer}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
                     >
-                      <FaQrcode className="w-6 h-6" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddLineItem}
-                      className="px-3 py-1 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-1"
-                      title="Add New Line Item"
+                      <option value="">Search customers...</option>
+                      {customers.map((customer) => (
+                        <option key={customer.id || customer._id} value={customer.id || customer._id}>
+                          {customer.name} {customer.email ? `(${customer.email})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Salesman *
+                    </label>
+                    <select
+                      name="salesman"
+                      value={formData.salesman}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add Item
-                    </button>
+                      <option value="">Select salesman...</option>
+                      {salesmen.map((s) => (
+                        <option key={s._id || s.id} value={s._id || s.id}>
+                          {s.name || s.email} {s.email ? `(${s.email})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {formData.lineItems.map((item, index) => (
-                    <div key={item.id} className="border-2 border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Product *
-                          </label>
-                          <select
-                            value={item.productId || item.product || ''}
-                            onChange={(e) => {
-                              const selectedValue = e.target.value
-                              handleProductSelect(item.id, selectedValue)
-                            }}
-                            required
-                            className={`w-full px-3 py-2 border-2 rounded-lg focus:outline-none bg-white text-sm ${
-                              item.productId || item.product
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Valid Until
+                    </label>
+                    <input
+                      type="date"
+                      name="validUntil"
+                      value={formData.validUntil}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Line Items Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Line Items *
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleQRScanClick}
+                        className="p-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
+                        title="Scan QR Code with Camera"
+                        disabled={qrScanning}
+                      >
+                        <FaQrcode className="w-6 h-6" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddLineItem}
+                        className="px-3 py-1 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-1"
+                        title="Add New Line Item"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Item
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {formData.lineItems.map((item, index) => (
+                      <div key={item.id} className="border-2 border-gray-200 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Product *
+                            </label>
+                            <select
+                              value={item.productId || item.product || ''}
+                              onChange={(e) => {
+                                const selectedValue = e.target.value
+                                handleProductSelect(item.id, selectedValue)
+                              }}
+                              required
+                              className={`w-full px-3 py-2 border-2 rounded-lg focus:outline-none bg-white text-sm ${item.productId || item.product
                                 ? 'border-gray-200 focus:border-[#e9931c]'
                                 : 'border-orange-300 focus:border-orange-500'
-                            }`}
-                          >
-                            <option value="">Select Product</option>
-                            {productsLoading ? (
-                              <option value="">Loading products...</option>
-                            ) : products.length === 0 ? (
-                              <option value="" disabled>No products available</option>
-                            ) : (
-                              products.map((product) => {
-                                const productValue = product._id || product.id
-                                return (
-                                  <option 
-                                    key={productValue} 
-                                    value={productValue}
-                                  >
-                                    {product.name} - £{product.price}
-                                  </option>
-                                )
-                              })
+                                }`}
+                            >
+                              <option value="">Select Product</option>
+                              {productsLoading ? (
+                                <option value="">Loading products...</option>
+                              ) : products.length === 0 ? (
+                                <option value="" disabled>No products available</option>
+                              ) : (
+                                products.map((product) => {
+                                  const productValue = product._id || product.id
+                                  return (
+                                    <option
+                                      key={productValue}
+                                      value={productValue}
+                                    >
+                                      {product.name} - £{product.price}
+                                    </option>
+                                  )
+                                })
+                              )}
+                            </select>
+                            {!item.product && !item.productId && (
+                              <p className="mt-1 text-xs text-orange-600 flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                Please select a product
+                              </p>
                             )}
-                          </select>
-                          {!item.product && !item.productId && (
-                            <p className="mt-1 text-xs text-orange-600 flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              Please select a product
-                            </p>
-                          )}
-                        </div>
+                          </div>
 
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Quantity
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => handleLineItemChange(item.id, 'quantity', e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
-                          />
-                        </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => handleLineItemChange(item.id, 'quantity', e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
+                            />
+                          </div>
 
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Unit Price (£)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unitPrice}
-                            onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Discount %
-                          </label>
-                          <div className="flex gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Unit Price (£)
+                            </label>
                             <input
                               type="number"
                               min="0"
-                              max="100"
-                              value={item.discount}
-                              onChange={(e) => handleLineItemChange(item.id, 'discount', e.target.value)}
-                              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
                             />
-                            {formData.lineItems.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLineItem(item.id)}
-                                className="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Discount %
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={item.discount}
+                                onChange={(e) => handleLineItemChange(item.id, 'discount', e.target.value)}
+                                className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
+                              />
+                              {formData.lineItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLineItem(item.id)}
+                                  className="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        <div className="mt-2 text-right">
+                          <span className="text-sm font-semibold text-gray-700">
+                            Line Total: £{item.lineTotal.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="mt-2 text-right">
-                        <span className="text-sm font-semibold text-gray-700">
-                          Line Total: £{item.lineTotal.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Summary Section */}
-              <div className="border-t-2 border-gray-200 pt-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700">Subtotal:</span>
-                    <span className="font-semibold">£{formData.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700">Tax (20%):</span>
-                    <span className="font-semibold">£{formData.tax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
-                    <span className="font-bold text-gray-800">Total:</span>
-                    <span className="font-bold" style={{ color: '#e9931c' }}>
-                      £{formData.total.toFixed(2)}
-                    </span>
+                {/* Summary Section */}
+                <div className="border-t-2 border-gray-200 pt-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-700">Subtotal:</span>
+                      <span className="font-semibold">£{formData.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-700">Tax (20%):</span>
+                      <span className="font-semibold">£{formData.tax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
+                      <span className="font-bold text-gray-800">Total:</span>
+                      <span className="font-bold" style={{ color: '#e9931c' }}>
+                        £{formData.total.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
               </div>
               {/* Modal Footer – always visible at bottom */}

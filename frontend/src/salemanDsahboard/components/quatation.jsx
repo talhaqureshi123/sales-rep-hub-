@@ -83,13 +83,13 @@ const Quotation = () => {
         const milestone = JSON.parse(milestoneData)
         // Auto-open create modal and pre-fill customer data
         setShowCreateModal(true)
-        
+
         // Find customer by name or create new entry
         setCustomers(prev => {
-          const existingCustomer = prev.find(c => 
+          const existingCustomer = prev.find(c =>
             c.name.toLowerCase() === milestone.customerName?.toLowerCase()
           )
-          
+
           if (existingCustomer) {
             setFormData(prevForm => ({
               ...prevForm,
@@ -116,7 +116,7 @@ const Quotation = () => {
             return [...prev, newCustomer]
           }
         })
-        
+
         // Clear milestone data after using it
         localStorage.removeItem('quotationMilestone')
       } catch (error) {
@@ -290,13 +290,13 @@ const Quotation = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    
+
     // If customer dropdown changed, auto-fill customer details
     if (name === 'customer' && value) {
       const selectedCustomer = customers.find((c) =>
         String(c._id || c.id) === String(value)
       )
-      
+
       if (selectedCustomer) {
         setFormData({
           ...formData,
@@ -308,7 +308,7 @@ const Quotation = () => {
         return
       }
     }
-    
+
     setFormData({
       ...formData,
       [name]: value,
@@ -319,18 +319,18 @@ const Quotation = () => {
     const updatedItems = formData.lineItems.map((item) => {
       if (item.id === itemId) {
         const updatedItem = { ...item, [field]: value }
-        
+
         // Calculate line total
         if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
           const qty = field === 'quantity' ? parseFloat(value) || 0 : updatedItem.quantity
           const price = field === 'unitPrice' ? parseFloat(value) || 0 : updatedItem.unitPrice
           const discount = field === 'discount' ? parseFloat(value) || 0 : updatedItem.discount
-          
+
           const subtotal = qty * price
           const discountAmount = (subtotal * discount) / 100
           updatedItem.lineTotal = subtotal - discountAmount
         }
-        
+
         return updatedItem
       }
       return item
@@ -398,12 +398,12 @@ const Quotation = () => {
             lineTotal: 0,
           }
         }
-        
+
         const product = products.find((p) => {
           const pId = p._id || p.id
           return pId === productId || String(pId) === String(productId)
         })
-        
+
         if (product) {
           const qty = item.quantity || 1
           const price = product.price || 0
@@ -411,10 +411,10 @@ const Quotation = () => {
           const subtotal = qty * price
           const discountAmount = (subtotal * discount) / 100
           const lineTotal = subtotal - discountAmount
-          
+
           // Always use _id if available, otherwise use id
           const finalProductId = product._id || product.id || productId
-          
+
           return {
             ...item,
             product: finalProductId, // Store productId for dropdown
@@ -462,12 +462,12 @@ const Quotation = () => {
 
   const handleQRScan = async (code) => {
     if (!code) return
-    
+
     setQrScanning(true)
-    
+
     try {
       let productCode = code
-      
+
       // Try to parse JSON if QR code contains JSON data
       try {
         const parsedData = JSON.parse(code)
@@ -487,9 +487,9 @@ const Quotation = () => {
               image: parsedData.image || '',
               keyFeatures: parsedData.keyFeatures || [],
             }
-            
+
             handleAddFromQR(product)
-            
+
             const successMsg = document.createElement('div')
             successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50'
             successMsg.textContent = `✓ Product "${product.name}" added successfully!`
@@ -505,11 +505,11 @@ const Quotation = () => {
         // Not JSON, use code as is
         productCode = code
       }
-      
+
       // Fetch product from API using productCode
       const { getProductByCode } = await import('../../services/salemanservices/productService')
       const result = await getProductByCode(productCode)
-      
+
       if (result.success && result.data) {
         const product = {
           id: result.data.productCode,
@@ -521,10 +521,10 @@ const Quotation = () => {
           stock: result.data.stock || 0,
           productCode: result.data.productCode,
         }
-        
+
         // Automatically add to quotation
         handleAddFromQR(product)
-        
+
         // Show success message
         const successMsg = document.createElement('div')
         successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50'
@@ -558,7 +558,7 @@ const Quotation = () => {
       discount: 0,
       lineTotal: product.price,
     }
-    
+
     const updatedItems = [...formData.lineItems, newItem]
     const subtotal = updatedItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0)
     const tax = subtotal * 0.20
@@ -571,7 +571,7 @@ const Quotation = () => {
       tax,
       total,
     })
-    
+
     setShowProductSelector(false)
     // Ensure quotation modal stays open after adding product from QR
     setShowCreateModal(true)
@@ -613,12 +613,12 @@ const Quotation = () => {
     }
 
     // Get customer details - support both id (frontend) and _id (backend)
-    const selectedCustomer = customers.find((c) => 
-      c.id === parseInt(formData.customer) || 
+    const selectedCustomer = customers.find((c) =>
+      c.id === parseInt(formData.customer) ||
       c._id === formData.customer ||
       c.id?.toString() === formData.customer?.toString()
     )
-    
+
     // Prepare quotation data for backend
     const quotationData = {
       customerName: selectedCustomer?.name || formData.customerName || '',
@@ -650,7 +650,7 @@ const Quotation = () => {
       } else {
         result = await createQuotation(quotationData)
       }
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -702,7 +702,7 @@ const Quotation = () => {
     // Backend already filters, but add extra check for security
     const currentUserId = localStorage.getItem('userId')
     const salesmanId = quotation.salesman?._id || quotation.salesman?.id || quotation.salesman
-    
+
     // If salesman field exists and doesn't match current user, prevent edit
     if (salesmanId && salesmanId !== currentUserId && salesmanId.toString() !== currentUserId) {
       alert('You can only edit your own quotations. Admin quotations cannot be edited by salesmen.')
@@ -717,29 +717,29 @@ const Quotation = () => {
       customerEmail: quotation.customerEmail || '',
       customerAddress: quotation.customerAddress || '',
       validUntil: quotation.validUntil || '',
-      lineItems: quotation.items && quotation.items.length > 0 
+      lineItems: quotation.items && quotation.items.length > 0
         ? quotation.items.map((item, index) => ({
-            id: index + 1,
-            product: item.productId || item.product?._id || '',
-            productId: item.productId || item.product?._id || '',
-            productName: item.productName || item.name || '',
-            quantity: item.quantity || 1,
-            unitPrice: item.unitPrice || item.price || 0,
-            discount: item.discount || 0,
-            lineTotal: item.lineTotal || item.total || (item.quantity * (item.unitPrice || item.price || 0)),
-          }))
+          id: index + 1,
+          product: item.productId || item.product?._id || '',
+          productId: item.productId || item.product?._id || '',
+          productName: item.productName || item.name || '',
+          quantity: item.quantity || 1,
+          unitPrice: item.unitPrice || item.price || 0,
+          discount: item.discount || 0,
+          lineTotal: item.lineTotal || item.total || (item.quantity * (item.unitPrice || item.price || 0)),
+        }))
         : [
-            {
-              id: 1,
-              product: '',
-              productId: '',
-              productName: '',
-              quantity: 1,
-              unitPrice: 0,
-              discount: 0,
-              lineTotal: 0,
-            },
-          ],
+          {
+            id: 1,
+            product: '',
+            productId: '',
+            productName: '',
+            quantity: 1,
+            unitPrice: 0,
+            discount: 0,
+            lineTotal: 0,
+          },
+        ],
       subtotal: quotation.subtotal || 0,
       tax: quotation.tax || 0,
       total: quotation.total || 0,
@@ -753,7 +753,7 @@ const Quotation = () => {
     // Backend already filters, but add extra check for security
     const currentUserId = localStorage.getItem('userId')
     const salesmanId = quotation.salesman?._id || quotation.salesman?.id || quotation.salesman
-    
+
     // If salesman field exists and doesn't match current user, prevent delete
     if (salesmanId && salesmanId !== currentUserId && salesmanId.toString() !== currentUserId) {
       alert('You can only delete your own quotations. Admin quotations cannot be deleted by salesmen.')
@@ -977,7 +977,7 @@ const Quotation = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     // Validate form
     if (!formData.customer && !formData.customerName) {
       alert('Please select or enter a customer')
@@ -990,7 +990,7 @@ const Quotation = () => {
       const hasValidQuantity = item.quantity > 0
       return hasProduct && hasValidQuantity
     })
-    
+
     if (validItems.length === 0) {
       // Check if there are items but none have products selected
       const itemsWithNoProduct = formData.lineItems.filter(item => !item.product && !item.productId)
@@ -1003,12 +1003,12 @@ const Quotation = () => {
     }
 
     // Get customer details - support both id (frontend) and _id (backend)
-    const selectedCustomer = customers.find((c) => 
-      c.id === parseInt(formData.customer) || 
+    const selectedCustomer = customers.find((c) =>
+      c.id === parseInt(formData.customer) ||
       c._id === formData.customer ||
       c.id?.toString() === formData.customer?.toString()
     )
-    
+
     // Prepare quotation data for backend
     // Filter and map line items to ensure valid products
     const validLineItems = formData.lineItems
@@ -1061,7 +1061,7 @@ const Quotation = () => {
       } else {
         result = await createQuotation(quotationData)
       }
-      
+
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -1218,236 +1218,228 @@ const Quotation = () => {
 
   return (
     <div className="h-full w-full flex flex-col bg-white">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 md:p-6">
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Quotations</h2>
-            <p className="text-sm md:text-base text-gray-600 mt-1">Manage your quotations</p>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-            <button
-              onClick={() => Swal.fire({ icon: 'info', title: 'Push to HubSpot', text: 'Push quotations to HubSpot is available in Admin Quotes page.', confirmButtonColor: '#e9931c' })}
-              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-sm flex-1 sm:flex-none justify-center"
-              title="Push to HubSpot (Admin)"
-            >
-              <FaCloudUploadAlt className="w-5 h-5" />
-              <span>Push</span>
-            </button>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={handleImportFile}
-            />
-            <button
-              onClick={() => importFileInputRef.current?.click()}
-              disabled={importingQuotations}
-              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 disabled:opacity-60 transition-colors text-sm flex-1 sm:flex-none justify-center"
-              title="Import from CSV"
-            >
-              {importingQuotations ? (
-                <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
-              ) : (
-                <FaFileImport className="w-5 h-5" />
-              )}
-              <span>Import</span>
-            </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors text-sm md:text-base w-full sm:w-auto justify-center"
-              title="Create New Quote"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>New Quote</span>
-            </button>
-          </div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 md:p-6">
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-800">Quotations</h2>
+          <p className="text-sm md:text-base text-gray-600 mt-1">Manage your quotations</p>
         </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <button
+            onClick={() => importFileInputRef.current?.click()}
+            disabled={importingQuotations}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 disabled:opacity-60 transition-colors text-sm flex-1 sm:flex-none justify-center"
+            title="Import from CSV"
+          >
+            {importingQuotations ? (
+              <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <FaFileImport className="w-5 h-5" />
+            )}
+            <span>Import</span>
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors text-sm md:text-base w-full sm:w-auto justify-center"
+            title="Create New Quote"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>New Quote</span>
+          </button>
+        </div>
+      </div>
 
-        {/* Quotations List */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 md:pb-6">
-          {quotations.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg">
-              <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="text-gray-600">No quotations found. Create your first quotation!</p>
-            </div>
-          ) : (
-            <>
-              {/* Mobile/Tablet Card View */}
-              <div className="block md:hidden space-y-4">
-                {quotations.map((quote) => (
-                  <div
-                    key={quote.id}
-                    className="bg-white border-2 border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-800 text-lg mb-1">{quote.quoteNumber}</h3>
-                        <p className="text-sm text-gray-600">{quote.customerName}</p>
-                        <p className="text-xs text-gray-500">{quote.customerEmail}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(quote.status)}`}>
-                        {quote.status}
-                      </span>
+      {/* Quotations List */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 md:pb-6">
+        {quotations.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg">
+            <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-gray-600">No quotations found. Create your first quotation!</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile/Tablet Card View */}
+            <div className="block md:hidden space-y-4">
+              {quotations.map((quote) => (
+                <div
+                  key={quote.id}
+                  className="bg-white border-2 border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-800 text-lg mb-1">{quote.quoteNumber}</h3>
+                      <p className="text-sm text-gray-600">{quote.customerName}</p>
+                      <p className="text-xs text-gray-500">{quote.customerEmail}</p>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 text-xs sm:text-sm">
-                      <div>
-                        <p className="text-gray-600 text-[10px] sm:text-xs">Valid Until</p>
-                        <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.validUntil}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-600 text-[10px] sm:text-xs">Created</p>
-                        <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.createdAt}</p>
-                      </div>
-                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(quote.status)}`}>
+                      {quote.status}
+                    </span>
+                  </div>
 
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                      <div>
-                        <p className="text-[10px] sm:text-xs text-gray-600">Total Amount</p>
-                        <p className="text-lg sm:text-xl font-bold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDownloadQuote(quote)}
-                          className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                          title="Download"
-                        >
-                          <FaDownload className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleSendQuoteWhatsApp(quote)}
-                          className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-                          title="Send to customer WhatsApp"
-                        >
-                          <FaWhatsapp className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleSendQuoteEmail(quote)}
-                          className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                          title="Send link to customer email"
-                        >
-                          <FaEnvelope className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleViewQuotation(quote)}
-                          className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                          title="View"
-                        >
-                          <FaEye className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleEditQuotation(quote)}
-                          className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-                          title="Edit"
-                        >
-                          <FaEdit className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteQuotation(quote)}
-                          className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                          title="Delete"
-                        >
-                          <FaTrash className="w-5 h-5" />
-                        </button>
-                      </div>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 text-xs sm:text-sm">
+                    <div>
+                      <p className="text-gray-600 text-[10px] sm:text-xs">Valid Until</p>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.validUntil}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 text-[10px] sm:text-xs">Created</p>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.createdAt}</p>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto w-full">
-                <table className="w-full min-w-full">
-                  <thead>
-                    <tr className="border-b-2 border-gray-200">
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Quote Number</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Customer</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Valid Until</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Total</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Created</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Actions</th>
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                    <div>
+                      <p className="text-[10px] sm:text-xs text-gray-600">Total Amount</p>
+                      <p className="text-lg sm:text-xl font-bold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDownloadQuote(quote)}
+                        className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                        title="Download"
+                      >
+                        <FaDownload className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleSendQuoteWhatsApp(quote)}
+                        className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                        title="Send to customer WhatsApp"
+                      >
+                        <FaWhatsapp className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleSendQuoteEmail(quote)}
+                        className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                        title="Send link to customer email"
+                      >
+                        <FaEnvelope className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleViewQuotation(quote)}
+                        className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                        title="View"
+                      >
+                        <FaEye className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleEditQuotation(quote)}
+                        className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                        title="Edit"
+                      >
+                        <FaEdit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteQuotation(quote)}
+                        className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                        title="Delete"
+                      >
+                        <FaTrash className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto w-full">
+              <table className="w-full min-w-full">
+                <thead>
+                  <tr className="border-b-2 border-gray-200">
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Quote Number</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Customer</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Valid Until</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Total</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Created</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotations.map((quote) => (
+                    <tr key={quote.id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
+                      <td className="py-4 px-4">
+                        <div className="font-semibold text-gray-800">{quote.quoteNumber}</div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="font-medium text-gray-800">{quote.customerName}</div>
+                        <div className="text-sm text-gray-500">{quote.customerEmail}</div>
+                      </td>
+                      <td className="py-4 px-4 text-gray-700">{quote.validUntil}</td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(quote.status)}`}>
+                          {quote.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="font-semibold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</div>
+                      </td>
+                      <td className="py-4 px-4 text-gray-700">{quote.createdAt}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDownloadQuote(quote)}
+                            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                            title="Download"
+                          >
+                            <FaDownload className="w-5 h-5 text-gray-600" />
+                          </button>
+                          <button
+                            onClick={() => handleSendQuoteWhatsApp(quote)}
+                            className="p-2 rounded-lg hover:bg-green-50 transition-colors"
+                            title="Send to customer WhatsApp"
+                          >
+                            <FaWhatsapp className="w-5 h-5 text-green-600" />
+                          </button>
+                          <button
+                            onClick={() => handleSendQuoteEmail(quote)}
+                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                            title="Send link to customer email"
+                          >
+                            <FaEnvelope className="w-5 h-5 text-blue-600" />
+                          </button>
+                          <button
+                            onClick={() => handleViewQuotation(quote)}
+                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                            title="View"
+                          >
+                            <FaEye className="w-5 h-5 text-blue-600" />
+                          </button>
+                          <button
+                            onClick={() => handleEditQuotation(quote)}
+                            className="p-2 rounded-lg hover:bg-green-50 transition-colors"
+                            title="Edit"
+                          >
+                            <FaEdit className="w-5 h-5 text-green-600" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteQuotation(quote)}
+                            className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Delete"
+                          >
+                            <FaTrash className="w-5 h-5 text-red-600" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {quotations.map((quote) => (
-                      <tr key={quote.id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
-                        <td className="py-4 px-4">
-                          <div className="font-semibold text-gray-800">{quote.quoteNumber}</div>
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="font-medium text-gray-800">{quote.customerName}</div>
-                          <div className="text-sm text-gray-500">{quote.customerEmail}</div>
-                        </td>
-                        <td className="py-4 px-4 text-gray-700">{quote.validUntil}</td>
-                        <td className="py-4 px-4">
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(quote.status)}`}>
-                            {quote.status}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <div className="font-semibold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</div>
-                        </td>
-                        <td className="py-4 px-4 text-gray-700">{quote.createdAt}</td>
-                        <td className="py-4 px-4">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleDownloadQuote(quote)}
-                              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                              title="Download"
-                            >
-                              <FaDownload className="w-5 h-5 text-gray-600" />
-                            </button>
-                            <button
-                              onClick={() => handleSendQuoteWhatsApp(quote)}
-                              className="p-2 rounded-lg hover:bg-green-50 transition-colors"
-                              title="Send to customer WhatsApp"
-                            >
-                              <FaWhatsapp className="w-5 h-5 text-green-600" />
-                            </button>
-                            <button
-                              onClick={() => handleSendQuoteEmail(quote)}
-                              className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                              title="Send link to customer email"
-                            >
-                              <FaEnvelope className="w-5 h-5 text-blue-600" />
-                            </button>
-                            <button
-                              onClick={() => handleViewQuotation(quote)}
-                              className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                              title="View"
-                            >
-                              <FaEye className="w-5 h-5 text-blue-600" />
-                            </button>
-                            <button
-                              onClick={() => handleEditQuotation(quote)}
-                              className="p-2 rounded-lg hover:bg-green-50 transition-colors"
-                              title="Edit"
-                            >
-                              <FaEdit className="w-5 h-5 text-green-600" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuotation(quote)}
-                              className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                              title="Delete"
-                            >
-                              <FaTrash className="w-5 h-5 text-red-600" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Product Selector Modal */}
       {showProductSelector && (
@@ -1475,7 +1467,7 @@ const Quotation = () => {
       {/* Create Quotation Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(2.75rem,calc(1rem+env(safe-area-inset-top)))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-2xl sm:shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-[95vw] lg:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-2xl sm:shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             {/* Modal Header – extra top padding on mobile so title/subtitle not cut off */}
             <div className="flex-shrink-0 bg-white border-b-2 border-gray-200 px-4 md:px-6 pt-5 pb-3 md:py-4 flex items-center justify-between rounded-t-2xl md:rounded-t-2xl">
               <div className="flex-1 min-w-0">
@@ -1501,238 +1493,237 @@ const Quotation = () => {
             {/* Modal Body – scrollable so buttons stay visible at bottom */}
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {/* Customer & Salesman Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer *
-                  </label>
-                  <select
-                    name="customer"
-                    value={formData.customer}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                  >
-                    <option value="">Select customer...</option>
-                    {customers.length === 0 ? (
-                      <option value="" disabled>No customers available. Customers will appear after allocation.</option>
-                    ) : (
-                      customers.map((customer) => (
-                        <option key={customer._id || customer.id} value={customer._id || customer.id}>
-                          {customer.name} {customer.email ? `(${customer.email})` : ''}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Salesman
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'You'}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-default"
-                    title="Quote will be created under your name"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer email <span className="text-gray-500">(for sending quote link)</span>
-                  </label>
-                  <input
-                    type="email"
-                    name="customerEmail"
-                    value={formData.customerEmail || ''}
-                    onChange={handleInputChange}
-                    placeholder="customer@example.com"
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Valid Until
-                  </label>
-                  <input
-                    type="date"
-                    name="validUntil"
-                    value={formData.validUntil}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Line Items Section */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Line Items *
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleQRScanClick}
-                      className="p-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
-                      title="Scan QR Code with Camera"
-                      disabled={qrScanning}
+                {/* Customer & Salesman Section */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Customer *
+                    </label>
+                    <select
+                      name="customer"
+                      value={formData.customer}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
                     >
-                      <FaQrcode className="w-6 h-6" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAddLineItem}
-                      className="px-3 py-1 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-1"
-                      title="Add New Line Item"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add Item
-                    </button>
+                      <option value="">Select customer...</option>
+                      {customers.length === 0 ? (
+                        <option value="" disabled>No customers available. Customers will appear after allocation.</option>
+                      ) : (
+                        customers.map((customer) => (
+                          <option key={customer._id || customer.id} value={customer._id || customer.id}>
+                            {customer.name} {customer.email ? `(${customer.email})` : ''}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Salesman
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'You'}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-default"
+                      title="Quote will be created under your name"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  {formData.lineItems.map((item, index) => (
-                    <div key={item.id} className="border-2 border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Product *
-                          </label>
-                          <select
-                            value={item.productId || item.product || ''}
-                            onChange={(e) => {
-                              const selectedValue = e.target.value
-                              handleProductSelect(item.id, selectedValue)
-                            }}
-                            required
-                            className={`w-full px-3 py-2 border-2 rounded-lg focus:outline-none bg-white text-sm ${
-                              item.productId || item.product
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Customer email <span className="text-gray-500">(for sending quote link)</span>
+                    </label>
+                    <input
+                      type="email"
+                      name="customerEmail"
+                      value={formData.customerEmail || ''}
+                      onChange={handleInputChange}
+                      placeholder="customer@example.com"
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Valid Until
+                    </label>
+                    <input
+                      type="date"
+                      name="validUntil"
+                      value={formData.validUntil}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Line Items Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Line Items *
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleQRScanClick}
+                        className="p-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
+                        title="Scan QR Code with Camera"
+                        disabled={qrScanning}
+                      >
+                        <FaQrcode className="w-6 h-6" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddLineItem}
+                        className="px-3 py-1 bg-[#e9931c] text-white rounded-lg text-sm font-semibold hover:bg-[#d8820a] transition-colors flex items-center gap-1"
+                        title="Add New Line Item"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Item
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {formData.lineItems.map((item, index) => (
+                      <div key={item.id} className="border-2 border-gray-200 rounded-lg p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Product *
+                            </label>
+                            <select
+                              value={item.productId || item.product || ''}
+                              onChange={(e) => {
+                                const selectedValue = e.target.value
+                                handleProductSelect(item.id, selectedValue)
+                              }}
+                              required
+                              className={`w-full px-3 py-2 border-2 rounded-lg focus:outline-none bg-white text-sm ${item.productId || item.product
                                 ? 'border-gray-200 focus:border-[#e9931c]'
                                 : 'border-orange-300 focus:border-orange-500'
-                            }`}
-                          >
-                            <option value="">Select Product</option>
-                            {productsLoading ? (
-                              <option value="">Loading products...</option>
-                            ) : products.length === 0 ? (
-                              <option value="" disabled>No products available</option>
-                            ) : (
-                              products.map((product) => {
-                                // Always prefer _id over id for MongoDB compatibility
-                                const productValue = product._id || product.id
-                                return (
-                                  <option 
-                                    key={productValue} 
-                                    value={productValue}
-                                  >
-                                    {product.name} - £{product.price}
-                                  </option>
-                                )
-                              })
+                                }`}
+                            >
+                              <option value="">Select Product</option>
+                              {productsLoading ? (
+                                <option value="">Loading products...</option>
+                              ) : products.length === 0 ? (
+                                <option value="" disabled>No products available</option>
+                              ) : (
+                                products.map((product) => {
+                                  // Always prefer _id over id for MongoDB compatibility
+                                  const productValue = product._id || product.id
+                                  return (
+                                    <option
+                                      key={productValue}
+                                      value={productValue}
+                                    >
+                                      {product.name} - £{product.price}
+                                    </option>
+                                  )
+                                })
+                              )}
+                            </select>
+                            {!item.product && !item.productId && (
+                              <p className="mt-1 text-xs text-orange-600 flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                Please select a product
+                              </p>
                             )}
-                          </select>
-                          {!item.product && !item.productId && (
-                            <p className="mt-1 text-xs text-orange-600 flex items-center gap-1">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              Please select a product
-                            </p>
-                          )}
-                        </div>
+                          </div>
 
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Quantity
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => handleLineItemChange(item.id, 'quantity', e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
-                          />
-                        </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => handleLineItemChange(item.id, 'quantity', e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
+                            />
+                          </div>
 
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Unit Price (£)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unitPrice}
-                            onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
-                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Discount %
-                          </label>
-                          <div className="flex gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Unit Price (£)
+                            </label>
                             <input
                               type="number"
                               min="0"
-                              max="100"
-                              value={item.discount}
-                              onChange={(e) => handleLineItemChange(item.id, 'discount', e.target.value)}
-                              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
                             />
-                            {formData.lineItems.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveLineItem(item.id)}
-                                className="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Discount %
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={item.discount}
+                                onChange={(e) => handleLineItemChange(item.id, 'discount', e.target.value)}
+                                className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white text-sm"
+                              />
+                              {formData.lineItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLineItem(item.id)}
+                                  className="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
+                        <div className="mt-2 text-right">
+                          <span className="text-sm font-semibold text-gray-700">
+                            Line Total: £{item.lineTotal.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="mt-2 text-right">
-                        <span className="text-sm font-semibold text-gray-700">
-                          Line Total: £{item.lineTotal.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Summary Section */}
-              <div className="border-t-2 border-gray-200 pt-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700">Subtotal:</span>
-                    <span className="font-semibold">£{formData.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-700">Tax (20%):</span>
-                    <span className="font-semibold">£{formData.tax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
-                    <span className="font-bold text-gray-800">Total:</span>
-                    <span className="font-bold" style={{ color: '#e9931c' }}>
-                      £{formData.total.toFixed(2)}
-                    </span>
+                {/* Summary Section */}
+                <div className="border-t-2 border-gray-200 pt-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-700">Subtotal:</span>
+                      <span className="font-semibold">£{formData.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-700">Tax (20%):</span>
+                      <span className="font-semibold">£{formData.tax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
+                      <span className="font-bold text-gray-800">Total:</span>
+                      <span className="font-bold" style={{ color: '#e9931c' }}>
+                        £{formData.total.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
               </div>
               {/* Modal Footer – always visible at bottom */}
@@ -1957,6 +1948,7 @@ const Quotation = () => {
           </div>
         </div>
       )}
+      <div className="h-20 md:h-28 lg:hidden"></div>
     </div>
   )
 }

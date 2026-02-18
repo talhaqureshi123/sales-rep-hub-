@@ -1,0 +1,5 @@
+customerName,dueDate,type,priority,description,notes,customerEmail
+"John Doe",2024-03-20,Call,High,"Follow up on previous order","Client was interested in bulk purchase","john@example.com"
+"Jane Smith",2024-03-21,Email,Medium,"Send new product catalog","Discuss seasonal discounts","jane@example.com"
+"Global Tech",2024-03-22,Meeting,Urgent,"Quarterly Review","In-person visit to head office","contact@globaltech.com"
+"Sample Customer",2024-03-25,Visit,Low,"Routine check-up","Deliver sample products",
