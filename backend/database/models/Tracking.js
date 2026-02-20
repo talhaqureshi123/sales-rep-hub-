@@ -11,9 +11,12 @@ const trackingSchema = new mongoose.Schema({
     required: [true, 'Please provide starting kilometers'],
   },
   speedometerImage: {
-    type: String, // Base64 encoded image or URL
+    type: String, // Base64 or URL path (path when saved to shift-photos folder)
     required: [true, 'Please provide speedometer image'],
   },
+  speedometerImagePath: { type: String }, // When set, image is in shift-photos folder; frontend uses this URL
+  endingMeterImagePath: { type: String },
+  visitedAreaImagePath: { type: String },
   startLocation: {
     latitude: {
       type: Number,
@@ -42,10 +45,10 @@ const trackingSchema = new mongoose.Schema({
     type: Number,
   },
   endingMeterImage: {
-    type: String, // Base64 encoded image or URL
+    type: String, // Base64 or URL path
   },
   visitedAreaImage: {
-    type: String, // Base64 encoded image or URL
+    type: String, // Base64 or URL path
   },
   endLocation: {
     latitude: {

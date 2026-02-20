@@ -5,11 +5,17 @@ import { getUsers } from '../../services/adminservices/userService'
 
 const SHIFT_LIST_LIMIT = 80
 
+// Shift photo base URL – production VM (path already has /api/... so base = domain only)
+const SHIFT_PHOTO_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL)
+  ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, '')
+  : 'https://salesrephub.iotfiysolutions.com'
+
 // Backend saves shift photos to folder; DB may have path (/api/shift-photos/files/...) or base64
 function getShiftPhotoSrc(img) {
   if (!img || typeof img !== 'string') return ''
   const s = img.trim()
-  if (s.startsWith('http') || s.startsWith('/')) return s
+  if (s.startsWith('http')) return s
+  if (s.startsWith('/')) return `${SHIFT_PHOTO_BASE}${s}`
   if (s.startsWith('data:')) return s
   return `data:image/jpeg;base64,${s}`
 }

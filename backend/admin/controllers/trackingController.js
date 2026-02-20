@@ -160,9 +160,11 @@ const getAllTracking = async (req, res) => {
 
         return {
           ...tracking,
-          visitCount,
+          speedometerImage: tracking.speedometerImagePath || tracking.speedometerImage,
+          endingMeterImage: tracking.endingMeterImagePath || tracking.endingMeterImage,
           visitedAreaImage:
-            visitedAreaImage || tracking.visitedAreaImage || null,
+            visitedAreaImage || tracking.visitedAreaImagePath || tracking.visitedAreaImage || null,
+          visitCount,
           visitedAreaImages,
           estimatedKilometers,
           actualKilometers,
@@ -205,10 +207,14 @@ const getTracking = async (req, res) => {
       trackingId: tracking._id,
     });
 
+    const obj = tracking.toObject();
+    if (obj.speedometerImagePath) obj.speedometerImage = obj.speedometerImagePath;
+    if (obj.endingMeterImagePath) obj.endingMeterImage = obj.endingMeterImagePath;
+    if (obj.visitedAreaImagePath) obj.visitedAreaImage = obj.visitedAreaImagePath;
     res.status(200).json({
       success: true,
       data: {
-        ...tracking.toObject(),
+        ...obj,
         visitCount,
       },
     });

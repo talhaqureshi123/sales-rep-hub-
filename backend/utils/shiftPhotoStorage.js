@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const SHIFT_PHOTOS_DIR = path.join(__dirname, "..", "shift-photos");
+const SHIFT_PHOTOS_DIR = path.resolve(__dirname, "..", "shift-photos");
 const PUBLIC_PATH_PREFIX = "/api/shift-photos/files";
 
 function ensureDir(dirPath) {

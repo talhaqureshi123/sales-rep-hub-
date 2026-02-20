@@ -4,6 +4,8 @@ const fs = require("fs");
 const connectDB = require("./database/connection");
 const errorHandler = require("./middleware/errorHandler");
 const config = require("./config");
+const Tracking = require("./database/models/Tracking");
+const VisitTarget = require("./database/models/VisitTarget");
 
 // Import routes
 const authRoutes = require("./authentication/authRoutes");
@@ -21,10 +23,41 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Shift photos: save uploaded images to backend/shift-photos folder; serve them here
-const shiftPhotosDir = path.join(__dirname, "shift-photos");
+// Shift photos: absolute path so VM/Hostinger uses correct folder (no cwd dependency)
+const shiftPhotosDir = path.resolve(__dirname, "shift-photos");
 if (!fs.existsSync(shiftPhotosDir)) fs.mkdirSync(shiftPhotosDir, { recursive: true });
+// Serve from disk first; when file missing on VM, fallback serves from DB (base64)
 app.use("/api/shift-photos/files", express.static(shiftPhotosDir));
+app.get("/api/shift-photos/files/:id/:filename", async (req, res) => {
+  const { id, filename } = req.params;
+  const isBase64 = (v) => typeof v === "string" && v && !v.startsWith("/") && !v.startsWith("http");
+  if (id.startsWith("visit-")) {
+    const visitId = id.replace("visit-", "");
+    const visit = await VisitTarget.findById(visitId).select("visitedAreaImage visitedAreaImages").lean();
+    if (!visit) return res.status(404).send("Not found");
+    const idx = filename.match(/visited_(\d+)\.jpg/);
+    const arr = Array.isArray(visit.visitedAreaImages) ? visit.visitedAreaImages : (visit.visitedAreaImage ? [visit.visitedAreaImage] : []);
+    const img = idx ? arr[Number(idx[1])] : arr[0];
+    if (img && isBase64(img)) {
+      const buf = Buffer.from(img.startsWith("data:") ? img.split(",")[1] : img, "base64");
+      res.setHeader("Content-Type", "image/jpeg");
+      return res.send(buf);
+    }
+  } else {
+    const tracking = await Tracking.findById(id).select("speedometerImage endingMeterImage visitedAreaImage").lean();
+    if (!tracking) return res.status(404).send("Not found");
+    let img;
+    if (filename === "start.jpg") img = tracking.speedometerImage;
+    else if (filename === "end.jpg") img = tracking.endingMeterImage;
+    else if (filename.startsWith("visited")) img = tracking.visitedAreaImage;
+    if (img && isBase64(img)) {
+      const buf = Buffer.from(img.startsWith("data:") ? img.split(",")[1] : img, "base64");
+      res.setHeader("Content-Type", "image/jpeg");
+      return res.send(buf);
+    }
+  }
+  res.status(404).send("Not found");
+});
 
 // CORS middleware (for frontend connection)
 app.use((req, res, next) => {
