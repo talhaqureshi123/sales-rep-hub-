@@ -31,7 +31,7 @@ const startTracking = async (req, res) => {
       });
     }
 
-    // Create new tracking session first to get _id
+    // Create tracking to get _id (model requires speedometerImage), then save image to folder and store only path in DB
     const tracking = await Tracking.create({
       salesman: req.user._id,
       startingKilometers: parseFloat(startingKilometers),
@@ -43,11 +43,11 @@ const startTracking = async (req, res) => {
       status: "active",
     });
 
-    // Save to shift-photos folder; keep path in Path field and base64 in main field (VM fallback when file missing)
     const isBase64 = typeof speedometerImage === "string" && (speedometerImage.startsWith("data:") || !speedometerImage.startsWith("/"));
     if (isBase64 && tracking._id) {
       const filePath = saveShiftPhotoToFolder(speedometerImage, String(tracking._id), "start");
       if (filePath) {
+        tracking.speedometerImage = filePath;
         tracking.speedometerImagePath = filePath;
         await tracking.save();
       }
@@ -119,21 +119,25 @@ const stopTracking = async (req, res) => {
 
     tracking.endingKilometers = endingKmNum;
 
-    // Save to shift-photos folder; keep path in Path fields, base64 in main fields (VM fallback)
+    // Save to shift-photos folder only; DB stores path only (no base64)
     const tid = String(tracking._id);
     const isBase64Like = (v) => typeof v === "string" && v && (v.startsWith("data:") || !v.startsWith("/"));
     if (endingMeterImage && isBase64Like(endingMeterImage)) {
       const filePath = saveShiftPhotoToFolder(endingMeterImage, tid, "end");
-      if (filePath) tracking.endingMeterImagePath = filePath;
+      if (filePath) {
+        tracking.endingMeterImagePath = filePath;
+        tracking.endingMeterImage = filePath;
+      }
+    } else if (endingMeterImage !== undefined) {
       tracking.endingMeterImage = endingMeterImage;
-    } else {
-      tracking.endingMeterImage = endingMeterImage || undefined;
     }
     if (visitedAreaImage !== undefined) {
       if (isBase64Like(visitedAreaImage)) {
         const filePath = saveShiftPhotoToFolder(visitedAreaImage, tid, "visited");
-        if (filePath) tracking.visitedAreaImagePath = filePath;
-        tracking.visitedAreaImage = visitedAreaImage;
+        if (filePath) {
+          tracking.visitedAreaImagePath = filePath;
+          tracking.visitedAreaImage = filePath;
+        }
       } else {
         tracking.visitedAreaImage = visitedAreaImage;
       }

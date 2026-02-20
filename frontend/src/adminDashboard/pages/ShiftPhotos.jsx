@@ -10,7 +10,7 @@ const SHIFT_PHOTO_BASE = (typeof import.meta !== 'undefined' && import.meta.env 
   ? String(import.meta.env.VITE_API_BASE_URL).replace(/\/$/, '')
   : 'https://salesrephub.iotfiysolutions.com'
 
-// Backend saves shift photos to folder; DB may have path (/api/shift-photos/files/...) or base64
+// Shift photos: save & serve from backend folder only; DB stores path (/api/shift-photos/files/...)
 function getShiftPhotoSrc(img) {
   if (!img || typeof img !== 'string') return ''
   const s = img.trim()
