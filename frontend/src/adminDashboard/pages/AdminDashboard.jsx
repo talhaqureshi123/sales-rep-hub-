@@ -131,8 +131,11 @@ const AdminDashboard = ({ onLogout }) => {
           </button>
         </div>
 
-        {/* Main Content – top margin on mobile so tasks/forms don't hide under header; bottom clearance for nav */}
-        <div className={`flex-1 overflow-y-auto min-w-0 ${activePage === 'user-management' ? 'p-3 sm:p-4' : 'p-3 sm:p-4 lg:p-6'} pt-4 sm:pt-4 pb-24 lg:pb-4 lg:pt-4`} style={{ WebkitOverflowScrolling: 'touch' }}>
+        {/* Main Content – top margin on mobile so tasks/forms don't hide under header; bottom clearance for nav; no horizontal slide */}
+        <div
+          className={`flex-1 overflow-y-auto overflow-x-hidden min-w-0 ${activePage === 'user-management' ? 'p-3 sm:p-4' : 'p-3 sm:p-4 lg:p-6'} pt-4 sm:pt-4 pb-24 lg:pb-4 lg:pt-4`}
+          style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
+        >
           {renderContent()}
         </div>
 

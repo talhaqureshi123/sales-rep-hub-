@@ -1,0 +1,10 @@
+customerName,salesmanEmail,dueDate,type,priority,description,customerEmail,customerPhone,notes
+Customer Call,usman.abid00321@gmail.com,2026-02-21,Call,Medium,Task: Call,,,
+Customer Visit,usman.abid00321@gmail.com,2026-02-22,Visit,Medium,Task: Visit,,,
+Customer Email,usman.abid00321@gmail.com,2026-02-23,Email,Medium,Task: Email,,,
+Customer Meeting,usman.abid00321@gmail.com,2026-02-24,Meeting,Medium,Task: Meeting,,,
+Customer WhatsApp,usman.abid00321@gmail.com,2026-02-25,WhatsApp,Medium,Task: WhatsApp,,,
+Customer Other,usman.abid00321@gmail.com,2026-02-26,Other,Medium,Task: Other,,,
+Customer Quote Follow up,usman.abid00321@gmail.com,2026-02-27,Quote Follow-up,Medium,Task: Quote Follow-up,,,
+Customer Sample Feedback,usman.abid00321@gmail.com,2026-02-28,Sample Feedback,Medium,Task: Sample Feedback,,,
+Customer Order Check,usman.abid00321@gmail.com,2026-03-01,Order Check,Medium,Task: Order Check,,,

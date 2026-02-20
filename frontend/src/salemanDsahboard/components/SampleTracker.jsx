@@ -420,7 +420,7 @@ const SampleTracker = () => {
     if (isOverdue) {
       return 'bg-red-100 text-red-800'
     }
-    
+
     switch (sample.status) {
       case 'Pending':
         return 'bg-yellow-100 text-yellow-800'
@@ -442,14 +442,14 @@ const SampleTracker = () => {
       }
       return false
     }
-    
+
     const expectedDate = sample.expectedDate ? new Date(sample.expectedDate) : (sample.receivedDate ? new Date(sample.receivedDate) : null)
     if (!expectedDate) return false
-    
+
     if (sample.status === 'Pending' && expectedDate < new Date()) {
       return true
     }
-    
+
     return false
   }
 
@@ -502,11 +502,10 @@ const SampleTracker = () => {
             <button
               key={status}
               onClick={() => setSelectedStatus(status)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                selectedStatus === status
-                  ? 'bg-[#e9931c] text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedStatus === status
+                ? 'bg-[#e9931c] text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               {status}
             </button>
@@ -545,7 +544,7 @@ const SampleTracker = () => {
             const displayStatus = getDisplayStatus(sample)
             const givenDate = sample.visitDate ? new Date(sample.visitDate) : null
             const expectedDate = sample.expectedDate ? new Date(sample.expectedDate) : (sample.receivedDate ? new Date(sample.receivedDate) : null)
-            
+
             return (
               <div
                 key={sample._id || sample.id}
@@ -556,25 +555,25 @@ const SampleTracker = () => {
                   <h3 className="text-lg font-bold text-gray-900 mb-3">
                     {sample.customerName}
                   </h3>
-                  
+
                   {/* Product Name */}
                   <p className="text-sm text-gray-700 mb-3 font-medium">
                     {sample.productName}
                   </p>
-                  
+
                   {/* Status Badge */}
                   <div className="mb-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(sample)}`}>
                       {displayStatus}
                     </span>
                   </div>
-                  
+
                   {/* Quantity */}
                   <div className="mb-3">
                     <p className="text-xs text-gray-500">Quantity</p>
                     <p className="text-sm font-semibold text-gray-900">{sample.quantity || 1}</p>
                   </div>
-                  
+
                   {/* Given Date */}
                   {givenDate && (
                     <div className="mb-2">
@@ -584,7 +583,7 @@ const SampleTracker = () => {
                       </p>
                     </div>
                   )}
-                  
+
                   {/* Expected Date */}
                   {expectedDate && (
                     <div className="mb-4">
@@ -594,7 +593,7 @@ const SampleTracker = () => {
                       </p>
                     </div>
                   )}
-                  
+
                   {/* Action Buttons */}
                   <div className="flex gap-2 mt-4">
                     <button
@@ -621,8 +620,8 @@ const SampleTracker = () => {
 
       {/* Edit Sample Modal */}
       {showEditModal && selectedSample && (
-        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:rounded-t-xl sm:rounded-xl sm:shadow-xl sm:max-w-2xl sm:w-auto sm:h-auto sm:min-h-0 sm:max-h-[90vh] overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
             <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800">Edit Sample</h3>
               <button
@@ -640,69 +639,69 @@ const SampleTracker = () => {
             </div>
             <form onSubmit={handleUpdateSample} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sample Number</label>
-                <input
-                  type="text"
-                  value={selectedSample.sampleNumber}
-                  disabled
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-                <input
-                  type="text"
-                  value={selectedSample.customerName}
-                  disabled
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Product</label>
-                <input
-                  type="text"
-                  value={selectedSample.productName}
-                  disabled
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                >
-                  {statusOptions.filter(s => s !== 'All').map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Customer Feedback</label>
-                <textarea
-                  name="customerFeedback"
-                  value={formData.customerFeedback}
-                  onChange={handleInputChange}
-                  rows="3"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter customer feedback"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  rows="3"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter any notes about the sample"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Sample Number</label>
+                  <input
+                    type="text"
+                    value={selectedSample.sampleNumber}
+                    disabled
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
+                  <input
+                    type="text"
+                    value={selectedSample.customerName}
+                    disabled
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product</label>
+                  <input
+                    type="text"
+                    value={selectedSample.productName}
+                    disabled
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                  >
+                    {statusOptions.filter(s => s !== 'All').map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Feedback</label>
+                  <textarea
+                    name="customerFeedback"
+                    value={formData.customerFeedback}
+                    onChange={handleInputChange}
+                    rows="3"
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter customer feedback"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea
+                    name="notes"
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    rows="3"
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter any notes about the sample"
+                  />
+                </div>
               </div>
               <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
@@ -730,8 +729,8 @@ const SampleTracker = () => {
 
       {/* Create Sample Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-3xl sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
             <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-800">Create New Sample</h3>
               <button
@@ -749,143 +748,143 @@ const SampleTracker = () => {
             </div>
             <form onSubmit={handleCreateSample} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-                  <select
-                    name="customer"
-                    value={createFormData.customer}
-                    onChange={handleCreateInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  >
-                    <option value="">Select Customer (Optional)</option>
-                    {customers.map((customer) => (
-                      <option key={customer._id} value={customer._id}>
-                        {customer.name || customer.firstName} {customer.email ? `(${customer.email})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Name *</label>
-                  <input
-                    type="text"
-                    name="customerName"
-                    value={createFormData.customerName}
-                    onChange={handleCreateInputChange}
-                    required
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter customer name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Email</label>
-                  <input
-                    type="email"
-                    name="customerEmail"
-                    value={createFormData.customerEmail}
-                    onChange={handleCreateInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter customer email"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Customer Phone</label>
-                  <input
-                    type="text"
-                    name="customerPhone"
-                    value={createFormData.customerPhone}
-                    onChange={handleCreateInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                    placeholder="Enter customer phone"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Add Item (one or more products) *</label>
-                  <div className="flex flex-wrap gap-2 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
                     <select
-                      value={addItemProduct}
-                      onChange={(e) => setAddItemProduct(e.target.value)}
-                      className="flex-1 min-w-[180px] px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      name="customer"
+                      value={createFormData.customer}
+                      onChange={handleCreateInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                     >
-                      <option value="">Select Product</option>
-                      {products.filter(p => p.isActive !== false).map((product) => (
-                        <option key={product._id} value={product._id}>
-                          {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                      <option value="">Select Customer (Optional)</option>
+                      {customers.map((customer) => (
+                        <option key={customer._id} value={customer._id}>
+                          {customer.name || customer.firstName} {customer.email ? `(${customer.email})` : ''}
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="number"
-                      value={addItemQty}
-                      onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      min="1"
-                      className="w-20 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                      placeholder="Qty"
-                    />
-                    <button
-                      type="button"
-                      onClick={addItemToSelection}
-                      className="flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] transition-colors"
-                      title="Add this product to the list"
-                    >
-                      <FaListUl className="w-4 h-4" />
-                      Add Item
-                    </button>
                   </div>
-                  {selectedItems.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs font-medium text-gray-600">{selectedItems.length} item(s) selected</p>
-                      <ul className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
-                        {selectedItems.map((item, index) => (
-                          <li key={index} className="flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100">
-                            <span className="text-sm font-medium text-gray-800">{item.productName} {item.productCode ? `(${item.productCode})` : ''} × {item.quantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeItemFromSelection(index)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                              title="Remove"
-                            >
-                              <FaTrash className="w-4 h-4" />
-                            </button>
-                          </li>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Customer Name *</label>
+                    <input
+                      type="text"
+                      name="customerName"
+                      value={createFormData.customerName}
+                      onChange={handleCreateInputChange}
+                      required
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      placeholder="Enter customer name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Customer Email</label>
+                    <input
+                      type="email"
+                      name="customerEmail"
+                      value={createFormData.customerEmail}
+                      onChange={handleCreateInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      placeholder="Enter customer email"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Customer Phone</label>
+                    <input
+                      type="text"
+                      name="customerPhone"
+                      value={createFormData.customerPhone}
+                      onChange={handleCreateInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      placeholder="Enter customer phone"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Add Item (one or more products) *</label>
+                    <div className="flex flex-wrap gap-2 items-end">
+                      <select
+                        value={addItemProduct}
+                        onChange={(e) => setAddItemProduct(e.target.value)}
+                        className="flex-1 min-w-[180px] px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                      >
+                        <option value="">Select Product</option>
+                        {products.filter(p => p.isActive !== false).map((product) => (
+                          <option key={product._id} value={product._id}>
+                            {product.name} {product.productCode ? `(${product.productCode})` : ''}
+                          </option>
                         ))}
-                      </ul>
+                      </select>
+                      <input
+                        type="number"
+                        value={addItemQty}
+                        onChange={(e) => setAddItemQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        min="1"
+                        className="w-20 px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                        placeholder="Qty"
+                      />
+                      <button
+                        type="button"
+                        onClick={addItemToSelection}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#e9931c] text-white rounded-lg font-medium hover:bg-[#d8820a] transition-colors"
+                        title="Add this product to the list"
+                      >
+                        <FaListUl className="w-4 h-4" />
+                        Add Item
+                      </button>
                     </div>
-                  )}
+                    {selectedItems.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs font-medium text-gray-600">{selectedItems.length} item(s) selected</p>
+                        <ul className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                          {selectedItems.map((item, index) => (
+                            <li key={index} className="flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100">
+                              <span className="text-sm font-medium text-gray-800">{item.productName} {item.productCode ? `(${item.productCode})` : ''} × {item.quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeItemFromSelection(index)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                title="Remove"
+                              >
+                                <FaTrash className="w-4 h-4" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Visit Date (Given)</label>
+                    <input
+                      type="date"
+                      name="visitDate"
+                      value={createFormData.visitDate}
+                      onChange={handleCreateInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Expected Date</label>
+                    <input
+                      type="date"
+                      name="expectedDate"
+                      value={createFormData.expectedDate}
+                      onChange={handleCreateInputChange}
+                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Visit Date (Given)</label>
-                  <input
-                    type="date"
-                    name="visitDate"
-                    value={createFormData.visitDate}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea
+                    name="notes"
+                    value={createFormData.notes}
                     onChange={handleCreateInputChange}
+                    rows="3"
                     className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
+                    placeholder="Enter any notes about the sample"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Expected Date</label>
-                  <input
-                    type="date"
-                    name="expectedDate"
-                    value={createFormData.expectedDate}
-                    onChange={handleCreateInputChange}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <textarea
-                  name="notes"
-                  value={createFormData.notes}
-                  onChange={handleCreateInputChange}
-                  rows="3"
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                  placeholder="Enter any notes about the sample"
-                />
-              </div>
               </div>
               <div className="flex-shrink-0 flex gap-3 justify-end p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-xl sm:rounded-b-lg pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button

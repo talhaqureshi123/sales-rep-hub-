@@ -3087,6 +3087,7 @@ const SalesTracking = () => {
                 height="100%"
                 showUserLocation={true}
                 showRadius={false}
+                visitMarkerStyle="circle"
                 routeToMilestone={routeToVisitTarget ? {
                   from: routeToVisitTarget.from,
                   to: routeToVisitTarget.to,

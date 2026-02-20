@@ -328,15 +328,18 @@ const Tasks = () => {
     try {
       const result = await importFollowUps(importExcelPreview)
       if (result.success) {
-        const { createdCount = 0, skippedCount = 0 } = result.data || {}
+        const { createdCount = 0, skippedCount = 0, skipped = [] } = result.data || {}
         setShowImportExcelModal(false)
         setImportExcelFile(null)
         setImportExcelPreview([])
         loadTasks()
+        const skippedMsg = skippedCount > 0 && Array.isArray(skipped) && skipped.length
+          ? `<p class="text-left mt-2">Skipped ${skippedCount} row(s):</p><ul class="text-left text-sm mt-1 max-h-32 overflow-y-auto">${skipped.slice(0, 15).map(s => `<li>Row ${s.row}: ${s.reason}</li>`).join('')}${skipped.length > 15 ? `<li>... and ${skipped.length - 15} more</li>` : ''}</ul>`
+          : (skippedCount > 0 ? `<p>Skipped: ${skippedCount} row(s).</p>` : '')
         Swal.fire({
           icon: 'success',
           title: 'Import complete',
-          html: `<p>Imported <strong>${createdCount}</strong> task(s).</p>${skippedCount > 0 ? `<p>Skipped: ${skippedCount} row(s).</p>` : ''}`,
+          html: `<p>Imported <strong>${createdCount}</strong> task(s).</p>${skippedMsg}`,
           confirmButtonColor: '#e9931c',
         })
       } else {
@@ -3223,8 +3226,8 @@ const Tasks = () => {
 
       {/* Create Task Form Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0 bg-white sm:bg-black/50">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-lg sm:rounded-lg shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
             <div className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b" style={{ backgroundColor: appTheme.primary.main, borderColor: appTheme.border.light }}>
               <h3 className="text-xl font-bold text-white">Create Task</h3>
               <button
@@ -3820,8 +3823,8 @@ const Tasks = () => {
 
       {/* Import Tasks from Excel / CSV Modal */}
       {showImportExcelModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-lg sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800">Import Tasks from Excel / CSV</h3>
               <button
@@ -3895,7 +3898,7 @@ const Tasks = () => {
 
       {/* Task Detail View - HubSpot Style */}
       {showTaskDetail && selectedTask && (
-        <div className="fixed inset-0 z-50 bg-gray-50 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-white overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
           <div className="h-full flex flex-col">
             {/* Header Bar */}
             <div className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 md:py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 md:gap-4">

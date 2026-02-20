@@ -436,24 +436,24 @@ const LiveTracking = () => {
   }, [salesmenLocations, handleSalesmanClick])
 
   return (
-    <div className="w-full flex flex-col" style={{ height: 'calc(100vh - 120px)', minHeight: '600px' }}>
+    <div className="w-full flex flex-col" style={{ minHeight: 'calc(100dvh - 120px)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
+      <div className="flex items-center justify-between mb-4 flex-shrink-0 px-2 sm:px-0">
         <div className="flex items-center gap-3">
-          <FaMapMarkerAlt className="w-8 h-8 text-[#e9931c]" />
+          <FaMapMarkerAlt className="w-6 h-6 sm:w-8 sm:h-8 text-[#e9931c]" />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Live Tracking</h1>
-            <p className="text-gray-600">Monitor sales reps in real-time</p>
+            <h1 className="text-xl sm:text-3xl font-bold text-gray-900">Live Tracking</h1>
+            <p className="text-sm sm:text-base text-gray-600">Monitor sales reps in real-time</p>
           </div>
         </div>
       </div>
 
       {/* Main Content - Map and Sidebar */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 gap-4 sm:gap-6 min-h-0">
         {/* Map Section - Takes 2/3 width on large screens */}
-        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col" style={{ minHeight: '600px', height: '100%' }}>
+        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px] sm:min-h-[500px] lg:min-h-[600px] h-[400px] sm:h-[550px] lg:h-[calc(100vh-280px)]">
           {/* Map Container - Always show map so it loads; markers appear when salesman locations exist */}
-          <div className="flex-1 bg-gray-100 relative" style={{ minHeight: '500px', height: '100%', width: '100%' }}>
+          <div className="flex-1 bg-gray-100 relative" style={{ height: '100%', width: '100%' }}>
             <div style={{ height: '100%', width: '100%', position: 'relative' }}>
               <LeafletMapView
                 key="live-tracking-map"
@@ -466,6 +466,7 @@ const LiveTracking = () => {
                 showUserLocation={false}
                 showRadius={false}
                 isTracking={false}
+                visitMarkerStyle="circle"
                 onMarkerClick={handleMarkerClick}
               />
             </div>
@@ -513,7 +514,7 @@ const LiveTracking = () => {
         </div>
 
         {/* Right Sidebar - Controls and Reps List */}
-        <div className="flex flex-col gap-4 min-h-0" style={{ height: '100%' }}>
+        <div className="flex flex-col gap-4 min-h-0 lg:h-full">
           {/* Controls */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
@@ -538,13 +539,6 @@ const LiveTracking = () => {
                   title="Refresh"
                 >
                   <FaSyncAlt className="w-4 h-4 text-gray-700" />
-                </button>
-                <button
-                  onClick={handleSendReport}
-                  className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  title="Send Report"
-                >
-                  <FaEnvelope className="w-4 h-4 text-gray-700" />
                 </button>
               </div>
             </div>
@@ -739,8 +733,8 @@ const LiveTracking = () => {
 
       {/* Salesman Detail Modal */}
       {showDetailModal && selectedSalesman && (
-        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-6xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-6xl sm:max-h-[90vh] sm:rounded-2xl shadow-2xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-[#e9931c] to-[#d8820a] rounded-t-2xl flex-shrink-0">
               <div className="flex items-center justify-between">

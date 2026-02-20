@@ -913,6 +913,34 @@ const getFollowUpStats = async (req, res) => {
   }
 };
 
+// Parse date from CSV/Excel (multiple formats so sab tasks create hon)
+function parseTaskDueDate(val) {
+  if (val == null || String(val).trim() === "") return null;
+  const s = String(val).trim();
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) return d;
+  // DD/MM/YYYY or DD-MM-YYYY
+  const parts = s.split(/[/\-.]/);
+  if (parts.length === 3) {
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10) - 1;
+    const p2 = parseInt(parts[2], 10);
+    if (p0 > 31) return new Date(p0, p1, p2);
+    if (p2 > 31) return new Date(p2, p1, p0);
+    const asDDMM = new Date(p2, p1, p0);
+    if (!isNaN(asDDMM.getTime())) return asDDMM;
+    return new Date(p0, p1, p2);
+  }
+  // Excel serial number (e.g. 45321)
+  const num = parseInt(s, 10);
+  if (!isNaN(num) && num > 0) {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + num * 86400000);
+    if (!isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
 // @desc    Import tasks (follow-ups) from Excel/CSV (bulk create)
 // @route   POST /api/admin/follow-ups/import
 // @access  Private/Admin
@@ -953,9 +981,9 @@ const importFollowUps = async (req, res) => {
       const typeRaw = (row.type || row.taskType || "").trim();
       const type = validTypes.includes(typeRaw) ? typeRaw : "Call";
       const dueDateRaw = row.dueDate || row.due_date || row.date;
-      const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+      const dueDate = parseTaskDueDate(dueDateRaw);
       if (!dueDate || isNaN(dueDate.getTime())) {
-        skipped.push({ row: i + 1, reason: "Missing or invalid due date" });
+        skipped.push({ row: i + 1, reason: "Missing or invalid due date (use YYYY-MM-DD or DD/MM/YYYY)" });
         continue;
       }
 

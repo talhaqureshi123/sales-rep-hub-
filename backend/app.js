@@ -1,4 +1,6 @@
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
 const connectDB = require("./database/connection");
 const errorHandler = require("./middleware/errorHandler");
 const config = require("./config");
@@ -18,6 +20,11 @@ const app = express();
 // Body parser middleware - Increase limit for image uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Shift photos: save uploaded images to backend/shift-photos folder; serve them here
+const shiftPhotosDir = path.join(__dirname, "shift-photos");
+if (!fs.existsSync(shiftPhotosDir)) fs.mkdirSync(shiftPhotosDir, { recursive: true });
+app.use("/api/shift-photos/files", express.static(shiftPhotosDir));
 
 // CORS middleware (for frontend connection)
 app.use((req, res, next) => {

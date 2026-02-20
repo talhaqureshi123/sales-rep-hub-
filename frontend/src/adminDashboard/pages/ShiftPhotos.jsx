@@ -5,6 +5,15 @@ import { getUsers } from '../../services/adminservices/userService'
 
 const SHIFT_LIST_LIMIT = 80
 
+// Backend saves shift photos to folder; DB may have path (/api/shift-photos/files/...) or base64
+function getShiftPhotoSrc(img) {
+  if (!img || typeof img !== 'string') return ''
+  const s = img.trim()
+  if (s.startsWith('http') || s.startsWith('/')) return s
+  if (s.startsWith('data:')) return s
+  return `data:image/jpeg;base64,${s}`
+}
+
 const ShiftPhotos = () => {
   const [shifts, setShifts] = useState([])
   const [salesmen, setSalesmen] = useState([])
@@ -105,13 +114,11 @@ const ShiftPhotos = () => {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <FaCamera className="w-8 h-8 text-[#e9931c]" />
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Shift Photos</h1>
-            <p className="text-gray-600">View and manage shift photos from sales team.</p>
-          </div>
+      <div className="flex items-center gap-3 mb-6">
+        <FaCamera className="w-8 h-8 text-[#e9931c]" />
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Shift Photos</h1>
+          <p className="text-gray-600">View and manage shift photos from sales team.</p>
         </div>
       </div>
 
@@ -228,13 +235,12 @@ const ShiftPhotos = () => {
                   {shift.speedometerImage ? (
                     <>
                       <img
-                        src={shift.speedometerImage.startsWith('data:') ? shift.speedometerImage : `data:image/jpeg;base64,${shift.speedometerImage}`}
+                        src={getShiftPhotoSrc(shift.speedometerImage)}
                         alt="Start Meter"
                         className="w-full h-full object-contain cursor-pointer"
                         onClick={() => handleViewPhoto(shift)}
                         onError={(e) => {
-                          // Fallback: try without base64 prefix if it fails
-                          if (!shift.speedometerImage.startsWith('data:')) {
+                          if (shift.speedometerImage.startsWith('/')) {
                             e.target.src = shift.speedometerImage
                           }
                         }}
@@ -275,13 +281,11 @@ const ShiftPhotos = () => {
                           ).map((img, idx) => (
                             <div key={`${shift._id}-visitimg-${idx}`} className="relative w-full h-full">
                               <img
-                                src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
+                                src={getShiftPhotoSrc(img)}
                                 alt={`Visited area ${idx + 1}`}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  if (!img.startsWith('data:')) {
-                                    e.target.src = img
-                                  }
+                                  if (img.startsWith('/')) e.target.src = img
                                 }}
                               />
                               {idx === 3 && uniqueVisitedImages.length > 4 && (
@@ -313,14 +317,12 @@ const ShiftPhotos = () => {
                     shift.visitedAreaImage ? (
                       <>
                         <img
-                          src={shift.visitedAreaImage.startsWith('data:') ? shift.visitedAreaImage : `data:image/jpeg;base64,${shift.visitedAreaImage}`}
+                          src={getShiftPhotoSrc(shift.visitedAreaImage)}
                           alt="Visited area"
                           className="w-full h-full object-cover cursor-pointer"
                           onClick={() => handleViewPhoto(shift)}
                           onError={(e) => {
-                            if (!shift.visitedAreaImage.startsWith('data:')) {
-                              e.target.src = shift.visitedAreaImage
-                            }
+                            if (shift.visitedAreaImage.startsWith('/')) e.target.src = shift.visitedAreaImage
                           }}
                         />
                         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -347,13 +349,11 @@ const ShiftPhotos = () => {
                   {shift.endingMeterImage ? (
                     <>
                       <img
-                        src={shift.endingMeterImage.startsWith('data:') ? shift.endingMeterImage : `data:image/jpeg;base64,${shift.endingMeterImage}`}
+                        src={getShiftPhotoSrc(shift.endingMeterImage)}
                         alt="End Meter"
                         className="w-full h-full object-contain cursor-pointer"
                         onError={(e) => {
-                          if (!shift.endingMeterImage.startsWith('data:')) {
-                            e.target.src = shift.endingMeterImage
-                          }
+                          if (shift.endingMeterImage.startsWith('/')) e.target.src = shift.endingMeterImage
                         }}
                         onClick={() => handleViewPhoto(shift)}
                       />
@@ -456,8 +456,8 @@ const ShiftPhotos = () => {
 
       {/* Image Modal */}
       {showImageModal && selectedShift && (
-        <div className="fixed inset-0 bg-white sm:bg-black/75 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl sm:p-0 overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+        <div className="fixed inset-0 bg-white sm:bg-black/75 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-4xl sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
                 Shift Photo - {selectedShift.salesman?.name || selectedShift.salesman?.email}
@@ -474,86 +474,110 @@ const ShiftPhotos = () => {
                 </svg>
               </button>
             </div>
-            <div className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                {selectedShift.speedometerImage && (
-                  <div>
-                    <h4 className="font-medium mb-2">Meter Photo:</h4>
-                    <img
-                      src={selectedShift.speedometerImage.startsWith('data:') ? selectedShift.speedometerImage : `data:image/jpeg;base64,${selectedShift.speedometerImage}`}
-                      alt="Shift meter"
-                      className="w-full h-auto rounded-lg"
-                      onError={(e) => {
-                        if (!selectedShift.speedometerImage.startsWith('data:')) {
-                          e.target.src = selectedShift.speedometerImage
-                        }
-                      }}
-                    />
+            <div className="p-4 overflow-y-auto">
+              {/* Image Grid Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Section 1: Meter Photos (Starting & Ending) */}
+                {(selectedShift.speedometerImage || selectedShift.endingMeterImage) && (
+                  <div className="space-y-4">
+                    <h4 className="flex items-center gap-2 font-bold text-gray-800 border-b pb-2">
+                      <FaClock className="text-[#e9931c]" />
+                      Meter Photos (Start & End)
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {selectedShift.speedometerImage && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Starting Meter</p>
+                          <div className="aspect-square bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 overflow-hidden flex items-center justify-center">
+                            <img
+                              src={getShiftPhotoSrc(selectedShift.speedometerImage)}
+                              alt="Starting Meter"
+                              className="w-full h-full object-contain cursor-zoom-in hover:scale-105 transition-transform"
+                              onClick={() => window.open(getShiftPhotoSrc(selectedShift.speedometerImage), '_blank')}
+                              onError={(e) => {
+                                if (selectedShift.speedometerImage.startsWith('/')) e.target.src = selectedShift.speedometerImage
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {selectedShift.endingMeterImage && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Ending Meter</p>
+                          <div className="aspect-square bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 overflow-hidden flex items-center justify-center">
+                            <img
+                              src={getShiftPhotoSrc(selectedShift.endingMeterImage)}
+                              alt="Ending Meter"
+                              className="w-full h-full object-contain cursor-zoom-in hover:scale-105 transition-transform"
+                              onClick={() => window.open(getShiftPhotoSrc(selectedShift.endingMeterImage), '_blank')}
+                              onError={(e) => {
+                                if (selectedShift.endingMeterImage.startsWith('/')) e.target.src = selectedShift.endingMeterImage
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {/* Section 2: Visited Area Photos */}
                 {(() => {
                   const modalUniqueImages = Array.isArray(selectedShift.visitedAreaImages) ? [...new Set(selectedShift.visitedAreaImages)] : []
                   const hasModalVisitImages = modalUniqueImages.length >= 1 || selectedShift.visitedAreaImage
-                  return hasModalVisitImages ? (
-                    <div>
-                      <h4 className="font-medium mb-2">
-                        Visited Area Photo{modalUniqueImages.length > 1 ? 's' : ''}:
+                  if (!hasModalVisitImages) return null
+
+                  return (
+                    <div className="space-y-4">
+                      <h4 className="flex items-center gap-2 font-bold text-gray-800 border-b pb-2">
+                        <FaMapMarkerAlt className="text-[#e9931c]" />
+                        Visited Area Photos
                       </h4>
-                      {modalUniqueImages.length >= 1 ? (
-                        <div className="space-y-2">
-                          <p className="text-sm text-gray-600">Total: {modalUniqueImages.length} image{modalUniqueImages.length > 1 ? 's' : ''}</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <div>
+                        {modalUniqueImages.length >= 1 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {modalUniqueImages.map((img, idx) => (
-                              <div key={`${selectedShift._id}-modal-visitimg-${idx}`} className="relative">
+                              <div key={`${selectedShift._id}-modal-visitimg-${idx}`} className="group relative aspect-square bg-gray-50 rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
                                 <img
-                                  src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`}
+                                  src={getShiftPhotoSrc(img)}
                                   alt={`Visited area ${idx + 1}`}
-                                  className="w-full h-auto rounded-lg object-cover border border-gray-200"
+                                  className="w-full h-full object-cover cursor-zoom-in group-hover:scale-110 transition-transform duration-300"
+                                  onClick={() => window.open(getShiftPhotoSrc(img), '_blank')}
                                   onError={(e) => {
-                                    if (!img.startsWith('data:')) {
-                                      e.target.src = img
-                                    }
+                                    if (img.startsWith('/')) e.target.src = img
                                   }}
                                 />
-                                <div className="absolute top-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-                                  {idx + 1}
+                                <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                  Img {idx + 1}
                                 </div>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      ) : (
-                        <img
-                          src={(selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])).startsWith('data:') ? (selectedShift.visitedAreaImage || selectedShift.visitedAreaImages[0]) : `data:image/jpeg;base64,${selectedShift.visitedAreaImage || selectedShift.visitedAreaImages[0]}`}
-                          alt="Visited area"
-                          className="w-full h-auto rounded-lg"
-                          onError={(e) => {
-                            const src = selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])
-                            if (src && !src.startsWith('data:')) {
-                              e.target.src = src
-                            }
-                          }}
-                        />
-                      )}
+                        ) : (
+                          <div className="aspect-video bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                            <img
+                              src={getShiftPhotoSrc(selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0]))}
+                              alt="Visited area"
+                              className="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform duration-300"
+                              onClick={() => {
+                                const raw = selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])
+                                window.open(getShiftPhotoSrc(raw), '_blank')
+                              }}
+                              onError={(e) => {
+                                const raw = selectedShift.visitedAreaImage || (selectedShift.visitedAreaImages && selectedShift.visitedAreaImages[0])
+                                if (raw && raw.startsWith('/')) e.target.src = raw
+                              }}
+                            />
+                          </div>
+                        )}
+                        {modalUniqueImages.length > 0 && (
+                          <p className="mt-3 text-xs text-gray-500 italic">Total {modalUniqueImages.length} area captures reported</p>
+                        )}
+                      </div>
                     </div>
-                  ) : null
+                  )
                 })()}
               </div>
-              {selectedShift.endingMeterImage && (
-                <div className="mt-4">
-                  <h4 className="font-medium mb-2">Ending Meter:</h4>
-                  <img
-                    src={selectedShift.endingMeterImage.startsWith('data:') ? selectedShift.endingMeterImage : `data:image/jpeg;base64,${selectedShift.endingMeterImage}`}
-                    alt="Ending meter"
-                    className="w-full h-auto rounded-lg"
-                    onError={(e) => {
-                      if (!selectedShift.endingMeterImage.startsWith('data:')) {
-                        e.target.src = selectedShift.endingMeterImage
-                      }
-                    }}
-                  />
-                </div>
-              )}
               <div className="mt-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <FaUser className="w-4 h-4 text-gray-500" />

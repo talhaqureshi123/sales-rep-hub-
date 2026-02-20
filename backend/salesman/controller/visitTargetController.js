@@ -2,6 +2,7 @@ const VisitTarget = require("../../database/models/VisitTarget");
 const FollowUp = require("../../database/models/FollowUp");
 const hubspotService = require("../../services/hubspotService");
 const Customer = require("../../database/models/Customer");
+const { saveShiftPhotoToFolder } = require("../../utils/shiftPhotoStorage");
 
 // ================= HELPER =================
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -361,15 +362,20 @@ const updateVisitTargetStatus = async (req, res) => {
     }
     if (meterImage !== undefined) update.meterImage = meterImage;
 
+    const isBase64Like = (v) => typeof v === "string" && v && (v.startsWith("data:") || !v.startsWith("/"));
+    const visitId = "visit-" + String(existing._id);
+
     if (visitedAreaImages !== undefined && Array.isArray(visitedAreaImages)) {
       const filtered = visitedAreaImages.filter((img) => img && img.trim() !== "");
-      update.visitedAreaImages = [...new Set(filtered)];
+      const paths = filtered.map((img, i) => isBase64Like(img) ? saveShiftPhotoToFolder(img, visitId, "visited", i) || img : img);
+      update.visitedAreaImages = [...new Set(paths)];
       update.visitedAreaImage = update.visitedAreaImages[0] || null;
     } else if (visitedAreaImage !== undefined) {
-      update.visitedAreaImage = visitedAreaImage;
+      const path = isBase64Like(visitedAreaImage) ? saveShiftPhotoToFolder(visitedAreaImage, visitId, "visited", 0) || visitedAreaImage : visitedAreaImage;
+      update.visitedAreaImage = path;
       const prevArr = existing.visitedAreaImages || [];
-      if (visitedAreaImage && !prevArr.includes(visitedAreaImage)) {
-        update.visitedAreaImages = [visitedAreaImage, ...prevArr.filter((img) => img !== visitedAreaImage)];
+      if (path && !prevArr.includes(path)) {
+        update.visitedAreaImages = [path, ...prevArr.filter((img) => img !== path)];
       }
     }
 

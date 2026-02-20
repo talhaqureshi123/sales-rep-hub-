@@ -165,15 +165,15 @@ const VisitedTargets = () => {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0 overflow-x-hidden">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 flex-shrink-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Visited Targets</h1>
         <p className="text-gray-600">View all completed visit targets</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg p-4 mb-6 border border-gray-200 shadow-sm">
+      <div className="bg-white rounded-lg p-4 mb-6 border border-gray-200 shadow-sm flex-shrink-0">
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">Select Date</label>
           <div className="relative">
@@ -189,7 +189,7 @@ const VisitedTargets = () => {
         </div>
 
         {/* Status Filter Pills */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <div className="flex items-center gap-2 mb-4 flex-wrap min-w-0">
           <FaFilter className="text-gray-500" />
           {['All', 'Completed', 'Pending', 'In Progress', 'Cancelled'].map((status) => (
             <button
@@ -206,8 +206,8 @@ const VisitedTargets = () => {
         </div>
 
         {/* Additional Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
+          <div className="relative min-w-0">
             <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
@@ -310,8 +310,8 @@ const VisitedTargets = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+        <div className="space-y-4 min-w-0">
+          <p className="text-sm text-gray-600 flex-shrink-0">
             {selectedDate ? (
               <>Showing {visitTargets.length} visit target{visitTargets.length !== 1 ? 's' : ''} for <strong>{new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong></>
             ) : (
@@ -321,7 +321,7 @@ const VisitedTargets = () => {
           {visitTargets.map((target) => (
             <div
               key={target._id}
-              className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+              className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow min-w-0"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
@@ -340,7 +340,7 @@ const VisitedTargets = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 min-w-0">
                 <div className="flex items-start gap-2">
                   <FaMapMarkerAlt className="w-5 h-5 text-[#e9931c] mt-1 flex-shrink-0" />
                   <div>

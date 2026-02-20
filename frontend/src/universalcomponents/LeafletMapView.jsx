@@ -47,6 +47,7 @@ const LeafletMapView = ({
   isTracking = false,
   selectedTarget = null,
   onRouteInfoChange = null,
+  visitMarkerStyle = 'pin', // 'pin' | 'circle' – circle = rounded circle (e.g. for live tracking)
 }) => {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -242,12 +243,28 @@ const LeafletMapView = ({
     valid.forEach((target) => {
       const lat = parseFloat(target.latitude)
       const lng = parseFloat(target.longitude)
-      const visitIcon = L.divIcon({
-        className: 'leaflet-visit-marker',
-        html: `<img src="/visit-icon.png" alt="Visit" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));" />`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-      })
+      const isCircle = visitMarkerStyle === 'circle'
+      const status = (target.status || '').toString()
+      const circleColor = isCircle
+        ? (status === 'Online' ? '#22c55e'
+          : status === 'Offline' ? '#94a3b8'
+          : status === 'Completed' || status === 'completed' ? '#22c55e'
+          : status === 'In Progress' || status === 'in progress' ? '#3b82f6'
+          : '#e9931c') // Pending / default: orange
+        : null
+      const visitIcon = isCircle && circleColor
+        ? L.divIcon({
+            className: 'leaflet-visit-marker leaflet-visit-marker-circle',
+            html: `<div style="width:20px;height:20px;border-radius:50%;background:${circleColor};border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          })
+        : L.divIcon({
+            className: 'leaflet-visit-marker',
+            html: `<img src="/visit-icon.png" alt="Visit" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));" />`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+          })
       const marker = L.marker([lat, lng], { icon: visitIcon }).addTo(map)
       const content = `
         <div style="padding:8px;min-width:200px;">
@@ -265,7 +282,7 @@ const LeafletMapView = ({
       })
       markersRef.current.push({ type: 'visitTarget', marker })
     })
-  }, [visitTargets, onMarkerClick])
+  }, [visitTargets, onMarkerClick, visitMarkerStyle])
 
   // Milestone markers
   useEffect(() => {

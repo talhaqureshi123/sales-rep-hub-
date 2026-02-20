@@ -594,10 +594,10 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
 
       {/* Add Customer Modal */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(2.75rem,calc(1rem+env(safe-area-inset-top)))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
-            {/* Extra top padding on mobile so title not cut off */}
-            <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 pt-5 pb-3 sm:py-4 border-b-2 border-gray-200">
+        <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
+          <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl shadow-xl overflow-hidden flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
+            {/* Header */}
+            <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 py-4 border-b-2 border-gray-200">
               <div>
                 <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Customer will be visible to you. Admin approval is required for the company list.</p>

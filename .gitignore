@@ -8,3 +8,7 @@ node_modules/
 
 # Do not push config (env/secret references)
 backend/config.js
+
+# Uploaded shift photos (stored on server; folder kept via .gitkeep)
+backend/shift-photos/*
+!backend/shift-photos/.gitkeep

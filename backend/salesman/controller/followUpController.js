@@ -256,6 +256,32 @@ const updateMyFollowUp = async (req, res) => {
   }
 };
 
+// Parse date from CSV/Excel (multiple formats)
+function parseTaskDueDate(val) {
+  if (val == null || String(val).trim() === "") return null;
+  const s = String(val).trim();
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) return d;
+  const parts = s.split(/[/\-.]/);
+  if (parts.length === 3) {
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10) - 1;
+    const p2 = parseInt(parts[2], 10);
+    if (p0 > 31) return new Date(p0, p1, p2);
+    if (p2 > 31) return new Date(p2, p1, p0);
+    const asDDMM = new Date(p2, p1, p0);
+    if (!isNaN(asDDMM.getTime())) return asDDMM;
+    return new Date(p0, p1, p2);
+  }
+  const num = parseInt(s, 10);
+  if (!isNaN(num) && num > 0) {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + num * 86400000);
+    if (!isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
 // @desc    Import tasks from Excel/CSV (bulk – all assigned to logged-in salesman)
 // @route   POST /api/salesman/follow-ups/import
 // @access  Private/Salesman
@@ -274,6 +300,7 @@ const importMyFollowUps = async (req, res) => {
     const created = [];
     const skipped = [];
     const salesmanId = req.user._id;
+    const myEmail = (req.user.email && String(req.user.email).trim().toLowerCase()) || "";
 
     for (let i = 0; i < rawTasks.length; i++) {
       const row = rawTasks[i];
@@ -283,12 +310,24 @@ const importMyFollowUps = async (req, res) => {
         continue;
       }
 
+      // Kisi aur salesman ke task is salesman ke account mein import na hon
+      const rowEmail = (row.salesmanEmail || row.salesman_email || "").trim().toLowerCase();
+      const rowId = row.salesmanId || row.salesman_id;
+      if (rowEmail && myEmail && rowEmail !== myEmail) {
+        skipped.push({ row: i + 1, reason: "This task is for another salesman; you can only import your own tasks" });
+        continue;
+      }
+      if (rowId && String(rowId) !== String(salesmanId)) {
+        skipped.push({ row: i + 1, reason: "This task is for another salesman; you can only import your own tasks" });
+        continue;
+      }
+
       const typeRaw = (row.type || row.taskType || "").trim();
       const type = validTypes.includes(typeRaw) ? typeRaw : "Call";
       const dueDateRaw = row.dueDate || row.due_date || row.date;
-      const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+      const dueDate = parseTaskDueDate(dueDateRaw);
       if (!dueDate || isNaN(dueDate.getTime())) {
-        skipped.push({ row: i + 1, reason: "Missing or invalid due date" });
+        skipped.push({ row: i + 1, reason: "Missing or invalid due date (use YYYY-MM-DD or DD/MM/YYYY)" });
         continue;
       }
 
