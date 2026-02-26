@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { testHubSpotConnection, syncHubSpotData, importHubSpotCustomersToDb, importHubSpotTasksToDb, pushSalesOrdersToHubSpot, pushCustomersToHubSpot, pushTasksToHubSpot, pushQuotationsToHubSpot } from '../../services/adminservices/hubspotService'
-import { FaCheckCircle, FaUsers, FaCloud, FaSync, FaSpinner, FaBell, FaShoppingCart, FaLink, FaTasks, FaUserPlus, FaFileInvoice } from 'react-icons/fa'
+import { FaCheckCircle, FaUsers, FaCloud, FaSync, FaSpinner, FaBell, FaLink } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const HubSpotConnect = () => {
@@ -339,27 +339,37 @@ const HubSpotConnect = () => {
 
   // Order linking is auto-retried inside the backend push-orders endpoint now.
 
+  const btnBase =
+    'flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-white whitespace-nowrap min-w-[180px] sm:min-w-[200px] font-hubspot ' +
+    'bg-gradient-to-b from-[#e9931c] to-[#d8820a] shadow-md hover:shadow-xl hover:scale-[1.02] hover:from-[#d8820a] hover:to-[#c77209] ' +
+    'active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[#e9931c] focus:ring-offset-2 ' +
+    'transition-all duration-300 ease-out disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-md disabled:hover:scale-100 disabled:active:scale-100 border border-amber-600/20';
+
   return (
-    <div className="flex flex-col min-h-[100dvh] sm:min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+    <div className="font-hubspot flex flex-col min-h-[100dvh] sm:min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50/30 antialiased">
       {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6" style={{ WebkitOverflowScrolling: 'touch' }}>
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">HubSpot Connect</h1>
-          <p className="text-gray-600">Manage your HubSpot integration and sync data</p>
+        <div className="mb-8 transition-all duration-300">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2 tracking-tight">
+            HubSpot Connect
+          </h1>
+          <p className="text-gray-600 text-base sm:text-lg font-medium tracking-wide">
+            Manage your HubSpot integration and sync data
+          </p>
         </div>
 
         {/* Connection Status */}
       {connectionStatus === 'connected' && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-          <FaCheckCircle className="text-green-500 text-2xl mt-1" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-green-800 mb-1">Successfully Connected</h3>
-            <p className="text-green-700 text-sm">
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all duration-300 ease-out">
+          <FaCheckCircle className="text-green-500 text-3xl mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-green-800 mb-1 text-lg">Successfully Connected</h3>
+            <p className="text-green-700 text-sm font-medium leading-relaxed">
               HubSpot integration is configured at the platform level.
             </p>
             {testResult?.directApiTest && (
-              <div className="mt-2 text-sm text-green-600">
+              <div className="mt-3 text-sm text-green-600 font-medium">
                 <p>API Status: {testResult.directApiTest.success ? '✅ Working' : '❌ Failed'}</p>
                 {testResult.testResults && (
                   <p className="mt-1">
@@ -374,27 +384,27 @@ const HubSpotConnect = () => {
       )}
 
       {connectionStatus === 'disconnected' && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-          <FaCheckCircle className="text-red-500 text-2xl mt-1 flex-shrink-0" />
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-all duration-300 ease-out">
+          <FaCheckCircle className="text-red-500 text-3xl mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-red-800 mb-1">Connection Failed</h3>
-            <p className="text-red-700 text-sm">
+            <h3 className="font-bold text-red-800 mb-1 text-lg">Connection Failed</h3>
+            <p className="text-red-700 text-sm font-medium leading-relaxed">
               {testResult?.message || 'Unable to connect to HubSpot. Please check your configuration.'}
             </p>
             {testResult?.config?.hint && (
-              <p className="mt-2 text-sm text-red-600">{testResult.config.hint}</p>
+              <p className="mt-2 text-sm text-red-600 font-medium">{testResult.config.hint}</p>
             )}
             {testResult?.config?.authMode === 'oauth' && (
               <a
                 href="/api/hubspot/authorize"
-                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-[#ff7a59] text-white rounded-lg font-medium hover:bg-[#e66a4a] transition-colors text-sm"
+                className="inline-flex items-center gap-2 mt-3 px-5 py-2.5 bg-[#ff7a59] text-white rounded-xl font-semibold hover:bg-[#e66a4a] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-md hover:shadow-lg text-sm"
               >
                 <FaLink className="w-4 h-4" />
                 Connect with HubSpot
               </a>
             )}
             {testResult?.directApiTest?.error && (
-              <div className="mt-2 text-sm text-red-600">
+              <div className="mt-2 text-sm text-red-600 font-medium">
                 <p>Error: {testResult.directApiTest.error.message || 'Unknown error'}</p>
               </div>
             )}
@@ -403,19 +413,19 @@ const HubSpotConnect = () => {
       )}
 
         {/* Actions Section - options only; buttons in sticky footer below */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4 hover:shadow-md transition-shadow duration-300">
           {/* My Contacts Only Toggle */}
           <div className="mb-4 pb-4 border-b border-gray-200">
-            <label className="flex items-center gap-3 cursor-pointer">
+            <label className="flex items-center gap-3 cursor-pointer group">
               <input
                 type="checkbox"
                 checked={myContactsOnly}
                 onChange={(e) => setMyContactsOnly(e.target.checked)}
-                className="w-5 h-5 text-[#e9931c] rounded focus:ring-[#e9931c]"
+                className="w-5 h-5 text-[#e9931c] rounded focus:ring-2 focus:ring-[#e9931c] transition-transform checked:scale-110"
               />
               <div>
-                <span className="text-sm font-semibold text-gray-800">My Contacts Only</span>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <span className="text-sm font-bold text-gray-800 group-hover:text-gray-900 transition-colors">My Contacts Only</span>
+                <p className="text-xs text-gray-500 mt-0.5 font-medium leading-relaxed">
                   Import/export only contacts assigned to you in HubSpot
                 </p>
               </div>
@@ -423,7 +433,7 @@ const HubSpotConnect = () => {
           </div>
 
           {/* Info Text */}
-          <div className="text-sm text-gray-600 flex items-start gap-2">
+          <div className="text-sm text-gray-600 flex items-start gap-2 font-medium leading-relaxed">
             <FaLink className="mt-0.5 text-gray-500 flex-shrink-0" />
             <p>
               Orders are automatically linked to the matching HubSpot Contact (by email). If a link fails, it auto-retries on the next &quot;Push Orders&quot;.
@@ -432,158 +442,81 @@ const HubSpotConnect = () => {
         </div>
       </div>
 
-      {/* Sticky footer - always visible on mobile */}
-      <div className="flex-shrink-0 border-t-2 border-gray-200 bg-white p-4 sm:p-6 pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
-        <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
-          {/* Test Connection Button */}
+      {/* Sticky footer - 4 buttons centered */}
+      <div className="flex-shrink-0 border-t border-gray-200/80 bg-white/95 backdrop-blur-sm p-5 sm:p-6 pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
+        <div className="flex flex-wrap gap-4 sm:gap-6 justify-center max-w-3xl mx-auto">
+          {/* Test Connection */}
           <button
             onClick={handleTestConnection}
             disabled={loading}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+            className={btnBase}
           >
             {loading ? (
               <>
-                <FaSpinner className="animate-spin" />
+                <FaSpinner className="animate-spin w-4 h-4" />
                 Testing...
               </>
             ) : (
               <>
-                <FaCloud />
+                <FaCloud className="w-4 h-4 opacity-90" />
                 Test Connection
               </>
             )}
           </button>
 
-          {/* Sync Data Button */}
+          {/* Sync Data */}
           <button
             onClick={handleSyncData}
             disabled={syncing || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+            className={btnBase}
           >
             {syncing ? (
               <>
-                <FaSpinner className="animate-spin" />
+                <FaSpinner className="animate-spin w-4 h-4" />
                 Syncing...
               </>
             ) : (
               <>
-                <FaSync />
+                <FaSync className="w-4 h-4 opacity-90" />
                 Sync Data
               </>
             )}
           </button>
 
-          {/* Import Customers Button */}
+          {/* Import Customers */}
           <button
             onClick={handleImportCustomers}
             disabled={importing || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+            className={btnBase}
           >
             {importing ? (
               <>
-                <FaSpinner className="animate-spin" />
+                <FaSpinner className="animate-spin w-4 h-4" />
                 Importing...
               </>
             ) : (
               <>
-                <FaUsers />
+                <FaUsers className="w-4 h-4 opacity-90" />
                 Import Customers
               </>
             )}
           </button>
 
-          {/* Import Tasks Button */}
+          {/* Import Tasks */}
           <button
             onClick={handleImportTasks}
             disabled={importingTasks || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
+            className={btnBase}
           >
             {importingTasks ? (
               <>
-                <FaSpinner className="animate-spin" />
+                <FaSpinner className="animate-spin w-4 h-4" />
                 Importing Tasks...
               </>
             ) : (
               <>
-                <FaBell />
+                <FaBell className="w-4 h-4 opacity-90" />
                 Import Tasks
-              </>
-            )}
-          </button>
-
-          {/* Push Existing Orders Button */}
-          <button
-            onClick={handlePushOrders}
-            disabled={pushingOrders || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
-          >
-            {pushingOrders ? (
-              <>
-                <FaSpinner className="animate-spin" />
-                Pushing Orders...
-              </>
-            ) : (
-              <>
-                <FaShoppingCart />
-                Push Orders (Auto-Link)
-              </>
-            )}
-          </button>
-
-          {/* Push Customers Button */}
-          <button
-            onClick={handlePushCustomers}
-            disabled={pushingCustomers || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
-          >
-            {pushingCustomers ? (
-              <>
-                <FaSpinner className="animate-spin" />
-                Pushing Customers...
-              </>
-            ) : (
-              <>
-                <FaUserPlus />
-                Push Customers
-              </>
-            )}
-          </button>
-
-          {/* Push Tasks Button */}
-          <button
-            onClick={handlePushTasks}
-            disabled={pushingTasks || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
-          >
-            {pushingTasks ? (
-              <>
-                <FaSpinner className="animate-spin" />
-                Pushing Tasks...
-              </>
-            ) : (
-              <>
-                <FaTasks />
-                Push Tasks
-              </>
-            )}
-          </button>
-
-          {/* Push Quotes Button */}
-          <button
-            onClick={handlePushQuotations}
-            disabled={pushingQuotations || connectionStatus !== 'connected'}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap min-w-[190px]"
-            title="Push quotations (quotes) to HubSpot"
-          >
-            {pushingQuotations ? (
-              <>
-                <FaSpinner className="animate-spin" />
-                Pushing Quotes...
-              </>
-            ) : (
-              <>
-                <FaFileInvoice />
-                Push Quotes
               </>
             )}
           </button>
