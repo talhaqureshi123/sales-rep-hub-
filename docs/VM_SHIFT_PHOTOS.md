@@ -1,39 +1,45 @@
-# Shift photos on VM – not showing
+# Shift photos – folder only (upload & fetch)
 
-## 1. Frontend and API on different origin
+- **Save:** Shift complete hone par saari images **sirf** `backend/shift-photos/` folder mein save hoti hain (DB mein sirf path).
+- **Fetch:** Admin Shift Photos page images **sirf** isi folder se load karta hai (`/api/shift-photos/files/...`).
 
-If the app (frontend) and API run on different domains (e.g. `https://app.example.com` and `https://api.example.com`), set this when **building** the frontend:
+## 404 on VM (salesrephub.iotfiysolutions.com)
+
+VM par yeh URLs 404 isliye de rahe hain kyunki **VM par `backend/shift-photos` mein woh image files hain hi nahi**.  
+Code sahi hai – problem sirf yeh hai ke production server par yeh folder (aur andar wali files) copy nahi ki gayi.
+
+### Fix: VM par shift-photos folder copy karo
+
+1. **Local** pe tumhare paas `backend/shift-photos` mein sab images hain (e.g. `697d0bc7.../start.jpg`, `visit-6980bad9.../visited.jpg`).
+2. **Poora folder** VM pe same path pe copy karo: jahan pe Node app run hoti hai, wahan `backend/shift-photos` (aur andar ke saare subfolders) hona chahiye.
+
+**Copy kaise karein (example):**
+
+- **SCP (PowerShell / Git Bash):**
+  ```bash
+  scp -r "C:\Users\Pc\OneDrive\Desktop\SALES RAP HUB\backend\shift-photos" user@salesrephub.iotfiysolutions.com:/path/to/your/app/backend/
+  ```
+  Replace `user` and `/path/to/your/app/backend/` with your VM user and actual backend path.
+
+- **Hostinger File Manager:**  
+  `backend/shift-photos` ka poora folder (saari subfolders ke saath) zip karke upload karo, phir VM pe unzip karke `backend/` ke andar rakh do taake final path ho: `backend/shift-photos/TRACKING_ID/start.jpg` etc.
+
+3. **Nginx (agar use ho):**  
+  Ensure `/api` requests VM pe Node app ko ja rahe hain (proxy pass), taake `GET /api/shift-photos/files/...` backend tak pahunche.
+
+Iske baad same URLs (e.g. `https://salesrephub.iotfiysolutions.com/api/shift-photos/files/6980e19930e51d903cb10d37/start.jpg`) VM se images serve karenge.
+
+## New uploads on VM
+
+Jab salesmen **VM wali site** se shift complete karke photo upload karenge, tab images VM ke `backend/shift-photos` mein hi save hongi aur wahi se fetch bhi hongi – koi extra step nahi.
+
+## Frontend base URL
+
+Production build ke liye frontend ko pata hona chahiye API domain (image URLs ke liye):
 
 ```env
-VITE_API_BASE_URL=https://your-api-domain.com
+# frontend/.env.production (or .env)
+VITE_API_BASE_URL=https://salesrephub.iotfiysolutions.com
 ```
 
-Example: in `frontend/.env.production`:
-
-```
-VITE_API_BASE_URL=https://api.yourvm.com
-```
-
-Then rebuild: `npm run build`. Shift photo image URLs will use this base URL so they load from the API server.
-
-## 2. Image files missing on VM
-
-Shift photos are stored as **files** in `backend/shift-photos/`. That folder is **not** in git (only `.gitkeep` is). So:
-
-- **New uploads on VM**  
-  When users upload from the app on VM, photos are saved in `backend/shift-photos` on the VM. Ensure that folder exists and the Node process has **write** permission.
-
-- **Photos that were migrated on your PC**  
-  If you ran `node backend/scripts/migrateShiftPhotosToFolder.js` only on your **local** machine, the image files exist only there. The DB has paths like `/api/shift-photos/files/TRACKING_ID/start.jpg`, but on the VM that path points to a file that doesn’t exist yet.
-
-  **Fix:** Copy the **contents** of `backend/shift-photos` from your local machine to the VM (same path: `backend/shift-photos/`), keeping the same subfolder structure (e.g. `697d0bc7.../start.jpg`, `visit-xxx/visited_0.jpg`). Use rsync, scp, or your deploy script.
-
-## 3. Backend serving the folder
-
-The backend serves `backend/shift-photos` at:
-
-- `GET /api/shift-photos/files/:trackingId/start.jpg`
-- `GET /api/shift-photos/files/:trackingId/end.jpg`
-- etc.
-
-On the VM, ensure your reverse proxy (e.g. nginx) forwards `/api` to the Node app so these URLs hit the same server that has the `shift-photos` folder.
+Phir `npm run build`. Image URL banega: `https://salesrephub.iotfiysolutions.com` + `/api/shift-photos/files/...`

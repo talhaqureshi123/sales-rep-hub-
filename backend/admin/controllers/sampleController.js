@@ -2,6 +2,7 @@ const Sample = require("../../database/models/Sample");
 const User = require("../../database/models/User");
 const Customer = require("../../database/models/Customer");
 const Product = require("../../database/models/Product");
+const { notifyUser } = require("../../sockets/notificationSocket");
 
 // @desc    Get all samples (admin-created only; salesman-created show in salesman Sample Tracker)
 // @route   GET /api/admin/samples
@@ -169,6 +170,7 @@ const createSample = async (req, res) => {
       .populate("product", "name productCode price")
       .populate("visitTarget", "name address");
 
+    notifyUser(sample.salesman);
     res.status(201).json({
       success: true,
       message: "Sample created successfully",
@@ -261,6 +263,7 @@ const updateSample = async (req, res) => {
 
     await sample.save();
 
+    notifyUser(sample.salesman);
     const populatedSample = await Sample.findById(sample._id)
       .populate("salesman", "name email")
       .populate("customer", "name email phone")
@@ -332,6 +335,7 @@ const approveSample = async (req, res) => {
     sample.approvalStatus = approvalStatus;
     await sample.save();
 
+    notifyUser(sample.salesman);
     const populatedSample = await Sample.findById(sample._id)
       .populate("salesman", "name email")
       .populate("customer", "name email phone")

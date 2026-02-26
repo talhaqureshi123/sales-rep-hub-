@@ -59,7 +59,7 @@ const salesOrderSchema = new mongoose.Schema(
     salesPerson: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false, // optional when admin creates order
     },
     salesPersonEmail: {
       type: String,
@@ -159,7 +159,7 @@ const salesOrderSchema = new mongoose.Schema(
     balanceRemaining: {
       type: Number,
       default: 0,
-      min: 0,
+      // Allow negative when amountPaid > grandTotal (overpayment / credit)
     },
 
     // Section F: Status & Workflow

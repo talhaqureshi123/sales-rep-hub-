@@ -92,6 +92,55 @@ export const createCustomer = async (customerData) => {
   }
 }
 
+// Update customer (salesman can update only customers they created)
+export const updateCustomer = async (id, customerData) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(customerData),
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error updating customer:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
+// Delete customer (salesman can delete only customers they created)
+export const deleteCustomer = async (id) => {
+  try {
+    const token = getAuthToken()
+    if (!token) {
+      return { success: false, message: 'Authentication token not found.' }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error deleting customer:', error)
+    return { success: false, message: 'Network error or server is down.' }
+  }
+}
+
 // Import customers (bulk – from Excel)
 export const importCustomers = async (customers) => {
   try {
@@ -121,6 +170,8 @@ export default {
   getMyCustomers,
   getCustomer,
   createCustomer,
+  updateCustomer,
+  deleteCustomer,
   importCustomers,
 }
 

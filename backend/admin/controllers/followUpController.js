@@ -4,6 +4,7 @@ const User = require("../../database/models/User");
 const Customer = require("../../database/models/Customer");
 const Sample = require("../../database/models/Sample");
 const hubspotService = require("../../services/hubspotService");
+const { notifyUser } = require("../../sockets/notificationSocket");
 
 // @desc    Get all follow-ups
 // @route   GET /api/admin/follow-ups
@@ -289,6 +290,7 @@ const createFollowUp = async (req, res) => {
       .populate("relatedQuotation", "quotationNumber total")
       .populate("relatedSample", "sampleNumber productName");
 
+    notifyUser(followUp.salesman);
     res.status(201).json({
       success: true,
       message: "Follow-up created successfully",
@@ -477,6 +479,7 @@ const updateFollowUp = async (req, res) => {
       .populate("relatedQuotation", "quotationNumber total")
       .populate("relatedSample", "sampleNumber productName");
 
+    notifyUser(followUp.salesman);
     res.status(200).json({
       success: true,
       message: "Follow-up updated successfully",
@@ -625,6 +628,7 @@ const approveFollowUp = async (req, res) => {
       .populate("approvedBy", "name email")
       .populate("createdBy", "name email role");
 
+    notifyUser(followUp.salesman);
     res.status(200).json({
       success: true,
       message:

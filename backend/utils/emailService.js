@@ -9,15 +9,15 @@ const createTransporter = () => {
   // Remove spaces from App Password (Gmail App Passwords sometimes have spaces)
   const cleanPassword = config.EMAIL_PASS ? config.EMAIL_PASS.replace(/\s/g, '') : '';
   
+  const secure = config.EMAIL_SECURE ?? (config.EMAIL_PORT === 465);
   return nodemailer.createTransport({
     host: config.EMAIL_HOST,
     port: config.EMAIL_PORT,
-    secure: false, // true for 465, false for other ports
+    secure, // true for 465 (GoDaddy), false for 587
     auth: {
       user: config.EMAIL_USER,
       pass: cleanPassword,
     },
-    // Add debug option for troubleshooting
     debug: process.env.NODE_ENV === 'development',
     logger: process.env.NODE_ENV === 'development',
   });
@@ -274,30 +274,69 @@ const sendOTPEmail = async (email, name, otp) => {
   }
 };
 
-// Create transporter for order approval emails - uses .env (EMAIL_USER, EMAIL_PASS) if set, else fallback
+// Create transporter for order approval emails (Admin login option)
+// Gmail (@gmail.com) must use Gmail SMTP; other emails use EMAIL_HOST (e.g. GoDaddy)
 const createApprovalEmailTransporter = () => {
-  // Use .env first (user can set EMAIL_USER and EMAIL_PASS in backend/.env)
-  const APPROVAL_EMAIL_USER = config.EMAIL_USER || 'talhaabid400@gmail.com';
-  const APPROVAL_EMAIL_PASS = config.EMAIL_PASS || 'your-app-password-here';
+  const APPROVAL_EMAIL_USER = config.EMAIL_USER || '';
+  const APPROVAL_EMAIL_PASS = config.EMAIL_PASS || '';
   const cleanPass = (APPROVAL_EMAIL_PASS || '').replace(/\s/g, '');
-  
+  const isGmail = (APPROVAL_EMAIL_USER || '').toLowerCase().includes('@gmail.com');
+  const host = isGmail ? 'smtp.gmail.com' : (config.EMAIL_HOST || 'smtp.gmail.com');
+  const port = isGmail ? 587 : (config.EMAIL_PORT || 587);
+  const secure = config.EMAIL_SECURE ?? (port === 465);
   return nodemailer.createTransport({
-    host: config.EMAIL_HOST || 'smtp.gmail.com',
-    port: config.EMAIL_PORT || 587,
-    secure: false,
-    auth: {
-      user: APPROVAL_EMAIL_USER,
-      pass: cleanPass,
-    },
+    host,
+    port,
+    secure,
+    auth: { user: APPROVAL_EMAIL_USER, pass: cleanPass },
     debug: process.env.NODE_ENV === 'development',
     logger: process.env.NODE_ENV === 'development',
   });
 };
 
+// When sending from INFO_PROCO / SALES_ORDER_FROM_EMAIL, use INFO_PROCO_* (set in .env)
+const getOrderEmailTransporter = (fromEmailOverride) => {
+  const infoEmail = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim().toLowerCase();
+  const from = (fromEmailOverride || '').trim().toLowerCase();
+  if (from === infoEmail && config.INFO_PROCO_EMAIL && config.INFO_PROCO_PASS) {
+    const cleanPass = (config.INFO_PROCO_PASS || '').replace(/\s/g, '').trim();
+    const user = (config.INFO_PROCO_EMAIL || '').trim();
+    const host = (config.INFO_PROCO_HOST || config.EMAIL_HOST || 'smtp.office365.com').trim();
+    const port = config.INFO_PROCO_PORT ? Number(config.INFO_PROCO_PORT) : (config.EMAIL_PORT || 587);
+    const isOutlook = host.includes('office365.com');
+    const secure = port === 465;
+    const transportOptions = {
+      host,
+      port,
+      secure,
+      auth: { user, pass: cleanPass },
+      debug: process.env.NODE_ENV === 'development',
+      logger: process.env.NODE_ENV === 'development',
+    };
+    if (port === 587) {
+      transportOptions.requireTLS = true;
+      transportOptions.tls = { rejectUnauthorized: true };
+    }
+    if (port === 465) transportOptions.secure = true;
+    console.log('📧 Order/quotation transporter:', isOutlook ? 'Outlook' : host, { host, port });
+    return nodemailer.createTransport(transportOptions);
+  }
+  return createApprovalEmailTransporter();
+};
+
 // Send order approval notification to admin
-const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
+// fromEmailOverride: optional; if set, use as "From" (info@parco.co.uk uses INFO_PROCO_EMAIL+PASS)
+const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromEmailOverride) => {
+  const toEmail = (adminEmail || '').trim();
+  const fromEmail = (fromEmailOverride && fromEmailOverride.trim()) ? fromEmailOverride.trim() : (config.EMAIL_USER || '');
+  let mailOptions = null;
+  console.log('📤 Sending order email → To:', toEmail, '| From:', fromEmail || '(default)');
+  if (!toEmail) {
+    console.error('❌ Order email skipped: no receiver (ORDER_NOTIFY_EMAIL)');
+    return { success: false, error: 'No receiver email configured' };
+  }
   try {
-    const transporter = createApprovalEmailTransporter();
+    const transporter = getOrderEmailTransporter(fromEmailOverride);
     const {
       soNumber,
       orderDate,
@@ -322,8 +361,6 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
       amountPaid = 0,
       balanceRemaining = 0,
     } = orderDetails;
-    const fromEmail = config.EMAIL_USER || 'talhaabid400@gmail.com';
-
     const orderDateStr = orderDate
       ? new Date(orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -347,10 +384,10 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
       }
     ).join('');
 
-    const mailOptions = {
-      from: `"Sales Rep Hub" <${fromEmail}>`,
-      to: adminEmail,
-      subject: `Sales Order ${soNumber} - ${customerName || 'Order'}`,
+    mailOptions = {
+      from: `"Proco Sales" <${fromEmail}>`,
+      to: toEmail,
+      subject: `Proco Sales — Order ${soNumber} - ${customerName || 'Order'}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -394,16 +431,17 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
           <div class="doc">
             <table class="head-row" width="100%" cellpadding="0" cellspacing="0"><tr>
               <td width="38%" class="head-left" style="vertical-align:top">
-                <div class="company">Sales Rep Hub</div>
+                <div class="company">Proco Sales</div>
+                <div class="tagline" style="font-size:12px;color:#6b7280">Proco Supplies</div>
                 <div>Report date: ${reportDateStr}</div>
                 <div>${fromEmail}</div>
               </td>
               <td width="24%" style="text-align:center;vertical-align:top">
-                <div class="head-mid"><div class="order-num">Sales Order ${soNumber || 'N/A'}</div></div>
+                <div class="head-mid"><div class="order-num">Order ${soNumber || 'N/A'}</div></div>
               </td>
               <td width="38%" style="text-align:right;vertical-align:top" class="head-right">
-                <div class="logo">SALES REP HUB</div>
-                <div class="tagline">Order Report</div>
+                <div class="logo">PROCO SALES</div>
+                <div class="tagline">Proco Supplies — Order Report</div>
               </td>
             </tr></table>
             <div class="divider"></div>
@@ -457,7 +495,7 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails) => {
         </html>
       `,
       text: `
-Sales Rep Hub — Sales Order Report
+Proco Sales — Proco Supplies — Order Report
 
 Order Information
 SO Number: ${soNumber || 'N/A'}
@@ -489,45 +527,63 @@ Amount Paid: £${Number(amountPaid).toFixed(2)}
 Balance: £${Number(balanceRemaining).toFixed(2)}
 
 —
-Sales Rep Hub
-© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.
+Proco Sales & Proco Supplies
+© ${new Date().getFullYear()} Proco Sales / Proco Supplies. All rights reserved.
       `,
     };
 
-    // Verify transporter before sending
     try {
       await transporter.verify();
-      console.log('✅ Approval email transporter verified successfully');
+      console.log('✅ Order email: SMTP verified');
     } catch (verifyError) {
-      console.error('❌ Email transporter verification failed:', verifyError.message);
-      if (verifyError.code === 'EAUTH') {
-        console.error('🔐 Authentication failed. Please update APPROVAL_EMAIL_PASS in emailService.js with correct Gmail App Password');
-      }
+      console.error('❌ Order email SMTP verify failed:', verifyError.message);
+      console.error('   Code:', verifyError.code, '| Full:', verifyError.toString());
       throw verifyError;
     }
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Order approval email sent to admin: ${adminEmail}`);
-    console.log('📧 Message ID:', info.messageId);
+    console.log(`✅ Order email received by server → To: ${toEmail}, MessageID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('❌ Error sending order approval email:', error.message);
+    if (error.code === 'EAUTH' && config.EMAIL_USER && config.EMAIL_PASS && fromEmailOverride && mailOptions) {
+      console.warn('⚠️ info@ login failed (535). Retrying with EMAIL_USER (Gmail)...');
+      try {
+        const fallbackTransporter = createApprovalEmailTransporter();
+        const fallbackFrom = config.EMAIL_USER.trim();
+        const fallbackOptions = { ...mailOptions, from: `"Proco Sales" <${fallbackFrom}>` };
+        const info = await fallbackTransporter.sendMail(fallbackOptions);
+        console.log(`✅ Order email sent via fallback → To: ${toEmail}, From: ${fallbackFrom}`);
+        return { success: true, messageId: info.messageId };
+      } catch (fallbackErr) {
+        console.error('❌ Fallback also failed:', fallbackErr.message);
+        return { success: false, error: fallbackErr.message };
+      }
+    }
+    console.error('❌ Order approval email failed:', error.message);
+    console.error('   To:', toEmail, '| From:', fromEmail);
     if (error.code === 'EAUTH') {
-      console.error('🔐 Authentication failed. Please update APPROVAL_EMAIL_PASS in emailService.js');
-      console.error('💡 For Gmail: Enable 2FA and generate App Password from Google Account settings');
+      console.error('   Fix: Set INFO_PROCO_EMAIL + INFO_PROCO_PASS in .env, or fix GoDaddy password / SMTP.');
     }
     return { success: false, error: error.message };
   }
 };
 
-// Send quotation to customer/salesman by email
-const sendQuotationEmail = async (toEmail, quotationDetails) => {
+// Send quotation — uses INFO_PROCO_* from .env; on 535 fallback to EMAIL_USER (Gmail)
+const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, fromName = '') => {
+  const infoSender = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim();
+  const useInfo = infoSender && config.INFO_PROCO_EMAIL && config.INFO_PROCO_PASS;
+  const useFallback = config.EMAIL_USER && config.EMAIL_PASS;
+  if (!useInfo && !useFallback) {
+    console.warn('Quotation email: Set INFO_PROCO_* or EMAIL_USER+EMAIL_PASS in .env');
+    return { success: false, message: 'Email not configured. Set INFO_PROCO_EMAIL and INFO_PROCO_PASS (or EMAIL_USER and EMAIL_PASS) in .env' };
+  }
+  if (!useInfo) {
+    // No info@ configured, use EMAIL_USER (Gmail uses its own SMTP)
+    const transporter = createApprovalEmailTransporter();
+    return sendQuotationEmailWithTransporter(transporter, config.EMAIL_USER.trim(), toEmail, quotationDetails);
+  }
   try {
-    if (!config.EMAIL_USER || !config.EMAIL_PASS) {
-      console.warn('Email not configured. Skipping quotation email.');
-      return { success: false, message: 'Email not configured. Set EMAIL_USER and EMAIL_PASS in .env' };
-    }
-    const transporter = createTransporter();
+    const transporter = getOrderEmailTransporter(infoSender);
     const {
       quotationNumber = '',
       customerName = '',
@@ -582,7 +638,7 @@ const sendQuotationEmail = async (toEmail, quotationDetails) => {
       </html>`;
 
     const mailOptions = {
-      from: `"Sales Rep Hub" <${config.EMAIL_USER}>`,
+      from: `"Proco Sales" <${infoSender}>`,
       to: toEmail,
       subject: `Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
       html,
@@ -590,10 +646,80 @@ const sendQuotationEmail = async (toEmail, quotationDetails) => {
     const info = await transporter.sendMail(mailOptions);
     return { success: true, messageId: info.messageId };
   } catch (error) {
+    if (error.code === 'EAUTH' && useFallback) {
+      console.warn('⚠️ Quotation: info@ login failed (535). Retrying with EMAIL_USER (Gmail)...');
+      try {
+        const fallbackTransporter = createApprovalEmailTransporter();
+        return await sendQuotationEmailWithTransporter(fallbackTransporter, config.EMAIL_USER.trim(), toEmail, quotationDetails);
+      } catch (fallbackErr) {
+        console.error('Error sending quotation email (fallback failed):', fallbackErr);
+        return { success: false, error: fallbackErr.message };
+      }
+    }
     console.error('Error sending quotation email:', error);
     return { success: false, error: error.message };
   }
 };
+
+function sendQuotationEmailWithTransporter(transporter, fromEmail, toEmail, quotationDetails) {
+  const {
+    quotationNumber = '',
+    customerName = '',
+    total = 0,
+    validUntil = '',
+    items = [],
+    notes = '',
+  } = quotationDetails;
+  const validUntilStr = validUntil
+    ? new Date(validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'N/A';
+  const itemsRows = (Array.isArray(items) ? items : []).map(
+    (item) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #ddd">${item.productName || item.productCode || '-'}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${item.quantity || 0}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.price || 0).toFixed(2)}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.total || 0).toFixed(2)}</td>
+      </tr>`
+  ).join('');
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><style>
+      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
+      .header { background: #e9931c; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+      .content { padding: 24px; background: #f9f9f9; }
+      table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; }
+      th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+      th { background: #f0f0f0; }
+      .total { font-size: 18px; font-weight: bold; color: #e9931c; margin-top: 16px; }
+      .footer { text-align: center; margin-top: 24px; color: #666; font-size: 12px; }
+    </style></head>
+    <body>
+      <div class="header"><h1>Sales Rep Hub – Quotation</h1></div>
+      <div class="content">
+        <p>Dear ${customerName || 'Customer'},</p>
+        <p>Please find your quotation below.</p>
+        <p><strong>Quotation #:</strong> ${quotationNumber}</p>
+        <p><strong>Valid until:</strong> ${validUntilStr}</p>
+        <table>
+          <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+          <tbody>${itemsRows}</tbody>
+        </table>
+        <p class="total">Total: £${Number(total).toFixed(2)}</p>
+        ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+      </div>
+      <div class="footer">This is an automated email from Sales Rep Hub.</div>
+    </body>
+    </html>`;
+  const mailOptions = {
+    from: `"Proco Sales" <${fromEmail}>`,
+    to: toEmail,
+    subject: `Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
+    html,
+  };
+  return transporter.sendMail(mailOptions).then((info) => ({ success: true, messageId: info.messageId }));
+}
 
 module.exports = {
   sendPasswordSetupEmail,

@@ -682,17 +682,32 @@ const Quotation = () => {
 
   // Handle view quotation
   const handleViewQuotation = async (quotation) => {
+    const id = String(quotation?.id || quotation?._id || '')
+    if (!id) {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Quotation ID missing.', confirmButtonColor: '#e9931c' })
+      return
+    }
     try {
-      const result = await getQuotation(quotation.id || quotation._id)
+      const result = await getQuotation(id)
       if (result.success && result.data) {
         setViewingQuotation(result.data)
         setShowViewModal(true)
       } else {
-        alert(result.message || 'Failed to load quotation details')
+        Swal.fire({
+          icon: 'error',
+          title: 'Could not load quotation',
+          text: result.message || 'Quotation not found or you don\'t have access.',
+          confirmButtonColor: '#e9931c'
+        })
       }
     } catch (error) {
       console.error('Error loading quotation:', error)
-      alert('Error loading quotation details')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error loading quotation details. Please try again.',
+        confirmButtonColor: '#e9931c'
+      })
     }
   }
 
@@ -902,16 +917,63 @@ const Quotation = () => {
     URL.revokeObjectURL(url)
   }
 
+  // Build WhatsApp message text for a quote (shared for send or copy)
+  const getQuoteWhatsAppMessage = (quote) => {
+    const qNum = quote.quotationNumber || quote.quoteNumber || ''
+    return `Hello, your quotation #${qNum} is ready. Total: £${Number(quote.total || 0).toFixed(2)}. Please contact us for details.`
+  }
+
   // Open WhatsApp with customer number and pre-filled message (anchor click avoids popup blocker)
   const handleSendQuoteWhatsApp = (quote) => {
     const raw = (quote.customerPhone || quote.phone || (quote.customer && (quote.customer.phone || quote.customer.contactPhone)) || '').trim()
     const phone = raw.replace(/\D/g, '')
     if (!phone || phone.length < 10) {
+      const msg = getQuoteWhatsAppMessage(quote)
+      const copyToClipboard = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(msg)
+        }
+        const ta = document.createElement('textarea')
+        ta.value = msg
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        try {
+          document.execCommand('copy')
+          return Promise.resolve()
+        } finally {
+          document.body.removeChild(ta)
+        }
+      }
       Swal.fire({
         icon: 'warning',
         title: 'Phone number missing',
-        text: 'Customer phone number is required to send via WhatsApp. Please edit the quote and add customer phone.',
-        confirmButtonColor: '#e9931c'
+        html: 'Customer phone number is required to open WhatsApp directly. You can add the phone in the quote, or copy the message and paste it in WhatsApp after choosing a contact.',
+        showCancelButton: true,
+        confirmButtonText: 'Copy message',
+        cancelButtonText: 'OK',
+        confirmButtonColor: '#e9931c',
+        cancelButtonColor: '#6b7280'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          copyToClipboard().then(() => {
+            Swal.fire({
+              icon: 'success',
+              title: 'Copied!',
+              html: 'Quote message copied. <a href="https://web.whatsapp.com" target="_blank" rel="noopener noreferrer" style="color:#e9931c;text-decoration:underline;">Open WhatsApp</a> and paste in your chat.',
+              confirmButtonColor: '#e9931c'
+            })
+          }).catch(() => {
+            Swal.fire({
+              icon: 'info',
+              title: 'Quote message',
+              html: `<p class="mb-2">Copy this and paste in WhatsApp:</p><textarea readonly class="w-full p-2 border rounded text-sm" rows="3">${String(msg).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</textarea>`,
+              confirmButtonColor: '#e9931c'
+            })
+          })
+        }
       })
       return
     }
@@ -923,8 +985,7 @@ const Quotation = () => {
     } else if (phone.length >= 11 && (phone.startsWith('44') || phone.startsWith('92'))) {
       num = phone
     }
-    const qNum = quote.quotationNumber || quote.quoteNumber || ''
-    const msg = `Hello, your quotation #${qNum} is ready. Total: £${Number(quote.total || 0).toFixed(2)}. Please contact us for details.`
+    const msg = getQuoteWhatsAppMessage(quote)
     const url = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
     const a = document.createElement('a')
     a.href = url
@@ -946,8 +1007,13 @@ const Quotation = () => {
       })
       return
     }
+    const id = String(quote?.id || quote?._id || '')
+    if (!id) {
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Quotation ID missing.', confirmButtonColor: '#e9931c' })
+      return
+    }
     try {
-      const result = await sendQuotationEmail(quote.id || quote._id)
+      const result = await sendQuotationEmail(id)
       if (result.success) {
         Swal.fire({
           icon: 'success',
@@ -1145,7 +1211,7 @@ const Quotation = () => {
       tax: formData.tax,
       total: formData.total,
       notes: '',
-      status: 'Sent',
+      status: 'Draft',
     }
     try {
       const result = await createQuotation(quotationData)
@@ -1158,32 +1224,29 @@ const Quotation = () => {
         })
         return
       }
-      const quotationId = result.data?._id || result.data?.id
-      if (!quotationId) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Quotation Created!',
-          text: 'Quotation created. Could not send email (missing quote id).',
-          confirmButtonColor: '#e9931c'
-        })
-        setShowCreateModal(false)
-        resetForm()
-        loadQuotations()
-        return
-      }
-      const sendResult = await sendQuotationEmail(quotationId)
-      if (sendResult.success) {
-        Swal.fire({
-          icon: 'success',
-          title: 'Sent to customer email!',
-          text: 'Quotation created and sent to customer email successfully.',
-          confirmButtonColor: '#e9931c'
-        })
+      const createdId = result.data?._id || result.data?.id
+      if (createdId) {
+        const sendResult = await sendQuotationEmail(String(createdId))
+        if (sendResult.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Created & sent',
+            text: 'Quotation created and sent to customer email.',
+            confirmButtonColor: '#e9931c'
+          })
+        } else {
+          Swal.fire({
+            icon: 'success',
+            title: 'Quotation created',
+            text: 'Quotation saved. Email could not be sent: ' + (sendResult.message || 'Unknown error') + '. You can send from the list.',
+            confirmButtonColor: '#e9931c'
+          })
+        }
       } else {
         Swal.fire({
-          icon: 'warning',
+          icon: 'success',
           title: 'Quotation created',
-          text: sendResult.message || 'Quotation created but email could not be sent. You can send from the list.',
+          text: 'Quotation saved. You can send it from the list.',
           confirmButtonColor: '#e9931c'
         })
       }
@@ -1191,11 +1254,11 @@ const Quotation = () => {
       resetForm()
       loadQuotations()
     } catch (error) {
-      console.error('Error create and send:', error)
+      console.error('Error creating quotation:', error)
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: 'Error creating or sending quotation. Please try again.',
+        text: 'Error creating quotation. Please try again.',
         confirmButtonColor: '#e9931c'
       })
     }
@@ -1214,6 +1277,24 @@ const Quotation = () => {
       default:
         return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  // Format date for display (YYYY-MM-DD or Date → DD/MM/YYYY), empty → "—"
+  const formatDate = (val) => {
+    if (!val) return '—'
+    const d = typeof val === 'string' ? new Date(val) : val
+    if (isNaN(d.getTime())) return '—'
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  // Valid Until: use saved value, or fallback to Created + 15 days for old quotes
+  const getValidUntilDisplay = (quote) => {
+    if (quote.validUntil) return formatDate(quote.validUntil)
+    const created = quote.createdAt ? new Date(quote.createdAt) : new Date()
+    if (isNaN(created.getTime())) return '—'
+    const until = new Date(created)
+    until.setDate(until.getDate() + 15)
+    return formatDate(until)
   }
 
   return (
@@ -1290,11 +1371,11 @@ const Quotation = () => {
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 text-xs sm:text-sm">
                     <div>
                       <p className="text-gray-600 text-[10px] sm:text-xs">Valid Until</p>
-                      <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.validUntil}</p>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">{getValidUntilDisplay(quote)}</p>
                     </div>
                     <div>
                       <p className="text-gray-600 text-[10px] sm:text-xs">Created</p>
-                      <p className="font-medium text-gray-800 text-xs sm:text-sm">{quote.createdAt}</p>
+                      <p className="font-medium text-gray-800 text-xs sm:text-sm">{formatDate(quote.createdAt)}</p>
                     </div>
                   </div>
 
@@ -1352,42 +1433,42 @@ const Quotation = () => {
               ))}
             </div>
 
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto w-full">
-              <table className="w-full min-w-full">
+            {/* Desktop Table View – proper column widths and layout */}
+            <div className="hidden md:block w-full overflow-x-auto rounded-lg border border-gray-200 bg-white">
+              <table className="w-full min-w-[900px] table-fixed">
                 <thead>
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Quote Number</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Customer</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Valid Until</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Total</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Created</th>
-                    <th className="text-left py-3 px-4 text-gray-700 font-semibold">Actions</th>
+                  <tr className="border-b-2 border-gray-200 bg-gray-50">
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold w-[140px]">Quote Number</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold min-w-0">Customer</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold w-[100px]">Valid Until</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold w-[90px]">Status</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold w-[90px]">Total</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold w-[100px]">Created</th>
+                    <th className="text-left py-3 px-4 text-gray-700 font-semibold w-[200px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {quotations.map((quote) => (
-                    <tr key={quote.id} className="border-b border-gray-100 hover:bg-orange-50 transition-colors">
-                      <td className="py-4 px-4">
-                        <div className="font-semibold text-gray-800">{quote.quoteNumber}</div>
+                    <tr key={quote.id || quote._id} className="border-b border-gray-100 hover:bg-orange-50/50 transition-colors">
+                      <td className="py-3 px-4 align-middle">
+                        <span className="font-semibold text-gray-800 whitespace-nowrap">{quote.quoteNumber || quote.quotationNumber || '—'}</span>
                       </td>
-                      <td className="py-4 px-4">
-                        <div className="font-medium text-gray-800">{quote.customerName}</div>
-                        <div className="text-sm text-gray-500">{quote.customerEmail}</div>
+                      <td className="py-3 px-4 align-middle min-w-0">
+                        <div className="font-medium text-gray-800 truncate" title={quote.customerName}>{quote.customerName || '—'}</div>
+                        <div className="text-sm text-gray-500 truncate" title={quote.customerEmail}>{quote.customerEmail || ''}</div>
                       </td>
-                      <td className="py-4 px-4 text-gray-700">{quote.validUntil}</td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(quote.status)}`}>
+                      <td className="py-3 px-4 align-middle text-gray-700 whitespace-nowrap">{getValidUntilDisplay(quote)}</td>
+                      <td className="py-3 px-4 align-middle">
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusColor(quote.status)}`}>
                           {quote.status}
                         </span>
                       </td>
-                      <td className="py-4 px-4">
-                        <div className="font-semibold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</div>
+                      <td className="py-3 px-4 align-middle whitespace-nowrap">
+                        <span className="font-semibold text-[#e9931c]">£{Number(quote.total || 0).toFixed(2)}</span>
                       </td>
-                      <td className="py-4 px-4 text-gray-700">{quote.createdAt}</td>
-                      <td className="py-4 px-4">
-                        <div className="flex gap-2">
+                      <td className="py-3 px-4 align-middle text-gray-700 whitespace-nowrap">{formatDate(quote.createdAt)}</td>
+                      <td className="py-3 px-4 align-middle">
+                        <div className="flex flex-wrap gap-1">
                           <button
                             onClick={() => handleDownloadQuote(quote)}
                             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -1468,20 +1549,15 @@ const Quotation = () => {
       {showCreateModal && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden sm:overflow-y-auto min-h-[100dvh]">
           <div className="bg-white w-full h-[100dvh] sm:h-auto sm:max-w-[95vw] lg:max-w-4xl sm:max-h-[90vh] sm:rounded-2xl shadow-xl flex flex-col pt-[env(safe-area-inset-top)] sm:pt-0 pb-[env(safe-area-inset-bottom)] sm:pb-0">
-            {/* Modal Header */}
-            <div className="flex-shrink-0 bg-white border-b-2 border-gray-200 px-4 md:px-6 py-4 flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800">
-                  {editingQuotation ? 'Edit Quotation' : 'Create New Quote'}
-                </h3>
-                <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                  {editingQuotation ? 'Update quotation details' : 'Fill in the quote details and send to customer'}
-                </p>
-              </div>
+            {/* Modal Header – same style as Sales Order Form */}
+            <div className="flex-shrink-0 flex items-center justify-between p-6 border-b bg-white">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                {editingQuotation ? 'Edit Quotation' : 'Quotation Form'}
+              </h1>
               <button
                 onClick={() => setShowCreateModal(false)}
                 type="button"
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
+                className="text-gray-500 hover:text-gray-700 p-1"
                 aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1490,82 +1566,74 @@ const Quotation = () => {
               </button>
             </div>
 
-            {/* Modal Body – scrollable so buttons stay visible at bottom */}
+            {/* Modal Body – same section layout as Sales Order */}
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-                {/* Customer & Salesman Section */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer *
-                    </label>
-                    <select
-                      name="customer"
-                      value={formData.customer}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                    >
-                      <option value="">Select customer...</option>
-                      {customers.length === 0 ? (
-                        <option value="" disabled>No customers available. Customers will appear after allocation.</option>
-                      ) : (
-                        customers.map((customer) => (
-                          <option key={customer._id || customer.id} value={customer._id || customer.id}>
-                            {customer.name} {customer.email ? `(${customer.email})` : ''}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Salesman
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'You'}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-default"
-                      title="Quote will be created under your name"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer email <span className="text-gray-500">(for sending quote link)</span>
-                    </label>
-                    <input
-                      type="email"
-                      name="customerEmail"
-                      value={formData.customerEmail || ''}
-                      onChange={handleInputChange}
-                      placeholder="customer@example.com"
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Valid Until
-                    </label>
-                    <input
-                      type="date"
-                      name="validUntil"
-                      value={formData.validUntil}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                    />
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8" style={{ WebkitOverflowScrolling: 'touch' }}>
+                {/* Section A: Quote & Customer */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Section A: Quote & Customer</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Customer <span className="text-red-500">*</span></label>
+                      <select
+                        name="customer"
+                        value={formData.customer}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      >
+                        <option value="">Select customer...</option>
+                        {customers.length === 0 ? (
+                          <option value="" disabled>No customers available. Customers will appear after allocation.</option>
+                        ) : (
+                          customers.map((customer) => (
+                            <option key={customer._id || customer.id} value={customer._id || customer.id}>
+                              {customer.name} {customer.email ? `(${customer.email})` : ''}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Salesman</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'You'}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-default"
+                        title="Quote will be created under your name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Customer email <span className="text-gray-500">(for sending quote)</span></label>
+                      <input
+                        type="email"
+                        name="customerEmail"
+                        value={formData.customerEmail || ''}
+                        onChange={handleInputChange}
+                        placeholder="customer@example.com"
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Valid Until</label>
+                      <input
+                        type="date"
+                        name="validUntil"
+                        value={formData.validUntil}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Line Items Section */}
-                <div>
+                {/* Section B: Line Items */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Section B: Line Items</h2>
                   <div className="flex items-center justify-between mb-4">
                     <label className="block text-sm font-medium text-gray-700">
-                      Line Items *
+                      Products <span className="text-red-500">*</span>
                     </label>
                     <div className="flex gap-2">
                       <button
@@ -1705,9 +1773,10 @@ const Quotation = () => {
                   </div>
                 </div>
 
-                {/* Summary Section */}
-                <div className="border-t-2 border-gray-200 pt-4">
-                  <div className="space-y-2">
+                {/* Section C: Summary – same as Sales Order */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Section C: Summary</h2>
+                  <div className="space-y-2 max-w-sm">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-700">Subtotal:</span>
                       <span className="font-semibold">£{formData.subtotal.toFixed(2)}</span>
@@ -1716,18 +1785,16 @@ const Quotation = () => {
                       <span className="text-gray-700">Tax (20%):</span>
                       <span className="font-semibold">£{formData.tax.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
+                    <div className="flex justify-between text-lg pt-2 border-t-2 border-gray-200">
                       <span className="font-bold text-gray-800">Total:</span>
-                      <span className="font-bold" style={{ color: '#e9931c' }}>
-                        £{formData.total.toFixed(2)}
-                      </span>
+                      <span className="font-bold text-[#e9931c]">£{formData.total.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
 
               </div>
-              {/* Modal Footer – always visible at bottom */}
-              <div className="flex-shrink-0 flex flex-wrap gap-2 sm:gap-3 p-4 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl sm:rounded-b-2xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
+              {/* Modal Footer – same as Sales Order */}
+              <div className="flex-shrink-0 flex flex-wrap gap-2 sm:gap-3 p-6 border-t-2 border-gray-200 bg-white pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={handleSaveDraft}
@@ -1807,8 +1874,8 @@ const Quotation = () => {
               </button>
             </div>
 
-            {/* Modal Body – scrollable on mobile */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6">
+            {/* Modal Body – scrollable on mobile, touch-friendly after QR scan */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
               {/* Customer Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1817,7 +1884,7 @@ const Quotation = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Customer Email</p>
-                  <p className="font-semibold text-gray-800">{viewingQuotation.customerEmail || 'N/A'}</p>
+                  <p className="font-semibold text-gray-800 break-all">{viewingQuotation.customerEmail || 'N/A'}</p>
                 </div>
                 {viewingQuotation.customerPhone && (
                   <div>
@@ -1833,51 +1900,66 @@ const Quotation = () => {
                 )}
               </div>
 
-              {/* Items Table */}
+              {/* Items: cards on mobile (after QR scan), table on desktop */}
               <div>
                 <h4 className="text-lg font-semibold text-gray-800 mb-4">Items</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold text-gray-700">Product</th>
-                        <th className="border border-gray-300 px-4 py-2 text-center text-sm font-semibold text-gray-700">Quantity</th>
-                        <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Unit Price</th>
-                        <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Discount</th>
-                        <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewingQuotation.items && viewingQuotation.items.length > 0 ? (
-                        viewingQuotation.items.map((item, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-gray-800">
-                              {item.productName || item.name || 'N/A'}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2 text-center text-sm text-gray-800">
-                              {item.quantity}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2 text-right text-sm text-gray-800">
-                              £{item.unitPrice || item.price || 0}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2 text-right text-sm text-gray-800">
-                              {item.discount || 0}%
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-800">
-                              £{item.lineTotal || item.total || 0}
-                            </td>
+                {viewingQuotation.items && viewingQuotation.items.length > 0 ? (
+                  <>
+                    {/* Mobile: card list – no horizontal scroll, easy to read after QR scan */}
+                    <div className="md:hidden space-y-3">
+                      {viewingQuotation.items.map((item, index) => (
+                        <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                          <p className="font-semibold text-gray-800">{item.productName || item.name || 'N/A'}</p>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                            <span className="text-gray-500">Qty:</span>
+                            <span className="text-gray-800 font-medium">{item.quantity}</span>
+                            <span className="text-gray-500">Unit price:</span>
+                            <span className="text-gray-800">£{item.unitPrice != null ? Number(item.unitPrice).toFixed(2) : (item.price != null ? Number(item.price).toFixed(2) : '0.00')}</span>
+                            <span className="text-gray-500">Total:</span>
+                            <span className="font-semibold text-[#e9931c]">£{item.lineTotal != null ? Number(item.lineTotal).toFixed(2) : (item.total != null ? Number(item.total).toFixed(2) : '0.00')}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Desktop: table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-300 px-4 py-2 text-left text-sm font-semibold text-gray-700">Product</th>
+                            <th className="border border-gray-300 px-4 py-2 text-center text-sm font-semibold text-gray-700">Quantity</th>
+                            <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Unit Price</th>
+                            <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Discount</th>
+                            <th className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-700">Total</th>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="5" className="border border-gray-300 px-4 py-4 text-center text-gray-500">
-                            No items found
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody>
+                          {viewingQuotation.items.map((item, index) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="border border-gray-300 px-4 py-2 text-sm text-gray-800">
+                                {item.productName || item.name || 'N/A'}
+                              </td>
+                              <td className="border border-gray-300 px-4 py-2 text-center text-sm text-gray-800">
+                                {item.quantity}
+                              </td>
+                              <td className="border border-gray-300 px-4 py-2 text-right text-sm text-gray-800">
+                                £{item.unitPrice || item.price || 0}
+                              </td>
+                              <td className="border border-gray-300 px-4 py-2 text-right text-sm text-gray-800">
+                                {item.discount || 0}%
+                              </td>
+                              <td className="border border-gray-300 px-4 py-2 text-right text-sm font-semibold text-gray-800">
+                                £{item.lineTotal || item.total || 0}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-gray-500 py-4 text-center">No items found</p>
+                )}
               </div>
 
               {/* Summary */}
@@ -1934,13 +2016,13 @@ const Quotation = () => {
             </div>
 
             {/* Modal Footer – extra bottom padding on mobile so buttons sit above bottom navbar */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3 pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-4">
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 py-4 flex justify-end gap-3 pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-4">
               <button
                 onClick={() => {
                   setShowViewModal(false)
                   setViewingQuotation(null)
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                className="min-h-[44px] px-5 py-2.5 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors touch-manipulation"
               >
                 Close
               </button>

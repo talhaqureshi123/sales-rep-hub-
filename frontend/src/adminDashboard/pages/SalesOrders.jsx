@@ -3,6 +3,7 @@ import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCir
 import { getSalesOrders, getSalesOrder, deleteSalesOrder, approveSalesOrder, rejectSalesOrder } from '../../services/adminservices/salesOrderService'
 import SalesOrderForm from './SalesOrderForm'
 import Swal from 'sweetalert2'
+import { NOTIFICATION_UPDATE_EVENT } from '../../salemanDsahboard/hooks/useNotificationSocket'
 
 const SalesOrders = () => {
   const [orders, setOrders] = useState([])
@@ -47,6 +48,13 @@ const SalesOrders = () => {
       localStorage.removeItem('editSalesOrderId')
     }
 
+  }, [])
+
+  // Real-time: when server sends notification-update (e.g. order approved), refetch list so salesman sees update at that time
+  useEffect(() => {
+    const onUpdate = () => loadOrders()
+    window.addEventListener(NOTIFICATION_UPDATE_EVENT, onUpdate)
+    return () => window.removeEventListener(NOTIFICATION_UPDATE_EVENT, onUpdate)
   }, [])
 
   useEffect(() => {
@@ -206,8 +214,17 @@ const SalesOrders = () => {
   const isSalesman = user.role === 'salesman'
 
   const handleApproveOrder = async (orderId) => {
+    const confirmResult = await Swal.fire({
+      title: 'Approve order',
+      html: `<p class="text-left">Order email <strong>${import.meta.env.VITE_ORDER_NOTIFY_EMAIL || '—'}</strong> ko jayegi, sender <strong>${import.meta.env.VITE_SALES_ORDER_FROM_EMAIL || '—'}</strong>.</p>`,
+      showCancelButton: true,
+      confirmButtonText: 'Approve',
+      confirmButtonColor: '#e9931c',
+      cancelButtonColor: '#6c757d',
+    })
+    if (!confirmResult.isConfirmed) return
     try {
-      const result = await approveSalesOrder(orderId)
+      const result = await approveSalesOrder(orderId, { sendFromEmail: 'info' })
       if (result.success) {
         Swal.fire({ icon: 'success', title: 'Approved', text: 'Sales order approved successfully.', confirmButtonColor: '#e9931c' })
         loadOrders()
@@ -255,9 +272,9 @@ const SalesOrders = () => {
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <FaShoppingCart className="w-8 h-8 text-[#e9931c]" />
-          <h1 className="text-3xl font-bold text-gray-900">{isSalesman ? 'My Sales Orders' : 'Sales Orders'}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{isSalesman ? 'My Sales Orders' : 'Proco Sales — Orders'}</h1>
         </div>
-        <p className="text-gray-600">{isSalesman ? 'View and manage your sales orders' : 'Create and manage customer orders'}</p>
+        <p className="text-gray-600">{isSalesman ? 'View and manage your sales orders' : 'Proco Supplies — Create and manage customer orders'}</p>
       </div>
 
       {/* Create Order Button - opens full SalesOrderForm */}
@@ -476,9 +493,9 @@ const SalesOrders = () => {
       {/* View Sales Order Modal */}
       {viewOrderId && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" aria-modal="true">
-          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
+          <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl md:max-w-4xl lg:max-w-5xl sm:min-h-0 sm:max-h-[90vh] md:max-h-[92vh] lg:max-h-[94vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             <div className="flex-shrink-0 flex items-center justify-between p-4 border-b bg-white">
-              <h3 className="text-xl font-semibold text-gray-800">View Sales Order</h3>
+              <h3 className="text-xl font-semibold text-gray-800">View Order — Proco Sales</h3>
               <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -580,9 +597,9 @@ const SalesOrders = () => {
         </div>
       )}
 
-      {/* Sales Order Form - Inline */}
+      {/* Sales Order Form - Inline; wider on tablet/iPad */}
       {showForm && (
-        <div className="mb-6">
+        <div className="mb-6 w-full max-w-full md:max-w-5xl lg:max-w-6xl mx-auto">
           <SalesOrderForm
             orderId={editingOrderId}
             onClose={() => {

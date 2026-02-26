@@ -3,6 +3,7 @@ const Customer = require('../../database/models/Customer');
 const Product = require('../../database/models/Product');
 const VisitTarget = require('../../database/models/VisitTarget');
 const FollowUp = require('../../database/models/FollowUp');
+const { notifyUser } = require('../../sockets/notificationSocket');
 
 // @desc    Get all samples for logged-in salesman
 // @route   GET /api/salesman/samples
@@ -223,6 +224,7 @@ const createSample = async (req, res) => {
       .populate('product', 'name productCode price')
       .populate('visitTarget', 'name address');
 
+    notifyUser(req.user._id);
     res.status(201).json({
       success: true,
       message: 'Sample created successfully',
@@ -271,6 +273,7 @@ const updateSample = async (req, res) => {
 
     await sample.save();
 
+    notifyUser(sample.salesman);
     const populatedSample = await Sample.findById(sample._id)
       .populate('customer', 'name email phone')
       .populate('product', 'name productCode price')

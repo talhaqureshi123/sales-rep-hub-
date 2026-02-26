@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getMyCustomers, createCustomer, importCustomers } from '../../services/salemanservices/customerService'
-import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner, FaFileExcel, FaCheckCircle, FaTimes } from 'react-icons/fa'
+import { getMyCustomers, createCustomer, updateCustomer, deleteCustomer, importCustomers } from '../../services/salemanservices/customerService'
+import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner, FaFileExcel, FaCheckCircle, FaTimes, FaEdit, FaTrash } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
@@ -14,6 +14,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [importExcelFile, setImportExcelFile] = useState(null)
   const [importExcelPreview, setImportExcelPreview] = useState([])
   const [importExcelLoading, setImportExcelLoading] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState(null)
 
   // Map Excel header (any case, with spaces) to customer field name
   const excelHeaderToField = (header) => {
@@ -211,11 +212,154 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     }
   }, [openAddForm])
 
+  // Whether this customer was created by the logged-in salesman (only they can edit/delete)
+  const isCreatedByMe = (customer) => {
+    const myId = localStorage.getItem('userId') || ''
+    const createdById = (customer?.createdBy?._id || customer?.createdBy)?.toString?.() || (customer?.createdBy || '').toString()
+    return !!myId && !!createdById && myId === createdById
+  }
+
   // Handle form close
   const handleCloseForm = () => {
     setShowAddForm(false)
+    setEditingCustomer(null)
     if (onAddFormClose) {
       onAddFormClose()
+    }
+  }
+
+  const handleEditCustomer = (customer) => {
+    setEditingCustomer(customer)
+    setFormData({
+      firstName: customer.firstName || customer.name || '',
+      contactPerson: customer.contactPerson || '',
+      company: customer.company || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      postcode: customer.postcode || customer.pincode || '',
+      latitude: customer.latitude != null ? String(customer.latitude) : '',
+      longitude: customer.longitude != null ? String(customer.longitude) : '',
+      orderPotential: customer.orderPotential || '',
+      monthlySpend: customer.monthlySpend ?? 0,
+      status: customer.status || 'Not Visited',
+      notes: customer.notes || '',
+      competitorInfo: customer.competitorInfo || '',
+      associatedContactName: customer.associatedContactName || '',
+      associatedCompanyName: customer.associatedCompanyName || '',
+      lastContact: customer.lastContact ? (typeof customer.lastContact === 'string' ? customer.lastContact.slice(0, 10) : customer.lastContact?.toISOString?.()?.slice(0, 10)) : '',
+      lastEngagement: customer.lastEngagement ? (typeof customer.lastEngagement === 'string' ? customer.lastEngagement.slice(0, 10) : customer.lastEngagement?.toISOString?.()?.slice(0, 10)) : '',
+      view: customer.view || 'admin_salesman',
+    })
+    setShowAddForm(true)
+  }
+
+  const handleUpdateCustomer = async (e) => {
+    e.preventDefault()
+    if (!editingCustomer) return
+    setLoading(true)
+    try {
+      const customerData = {
+        firstName: formData.firstName,
+        name: formData.firstName,
+        contactPerson: formData.contactPerson,
+        company: formData.company,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+        postcode: formData.postcode,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
+        orderPotential: formData.orderPotential,
+        monthlySpend: formData.monthlySpend || 0,
+        status: formData.status,
+        notes: formData.notes,
+        competitorInfo: formData.competitorInfo,
+        associatedContactName: formData.associatedContactName,
+        associatedCompanyName: formData.associatedCompanyName,
+        lastContact: formData.lastContact || undefined,
+        lastEngagement: formData.lastEngagement || undefined,
+        view: formData.view || 'admin_salesman',
+      }
+      const result = await updateCustomer(editingCustomer._id, customerData)
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Updated!',
+          text: 'Customer updated successfully.',
+          confirmButtonColor: '#e9931c',
+        })
+        setEditingCustomer(null)
+        handleCloseForm()
+        loadCustomers()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Failed to update customer',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (error) {
+      console.error('Error updating customer:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error updating customer',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteCustomer = async (customer) => {
+    const id = customer._id || customer.id
+    if (!id) return
+    const confirmResult = await Swal.fire({
+      icon: 'warning',
+      title: 'Delete Customer?',
+      text: `Are you sure you want to delete "${customer.name || customer.firstName}"? This cannot be undone.`,
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+    })
+    if (!confirmResult.isConfirmed) return
+    setLoading(true)
+    try {
+      const result = await deleteCustomer(id)
+      if (result.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Deleted!',
+          text: 'Customer deleted successfully.',
+          confirmButtonColor: '#e9931c',
+        })
+        loadCustomers()
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed',
+          text: result.message || 'Could not delete customer',
+          confirmButtonColor: '#e9931c',
+        })
+      }
+    } catch (error) {
+      console.error('Error deleting customer:', error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Error deleting customer',
+        confirmButtonColor: '#e9931c',
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -488,7 +632,33 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
             <span className="whitespace-nowrap">Import Excel</span>
           </button>
           <button
-            onClick={() => setShowAddForm(true)}
+            onClick={() => {
+              setEditingCustomer(null)
+              setFormData({
+                firstName: '',
+                contactPerson: '',
+                company: '',
+                email: '',
+                phone: '',
+                address: '',
+                city: '',
+                state: '',
+                postcode: '',
+                latitude: '',
+                longitude: '',
+                orderPotential: '',
+                monthlySpend: 0,
+                status: 'Not Visited',
+                notes: '',
+                competitorInfo: '',
+                associatedContactName: '',
+                associatedCompanyName: '',
+                lastContact: '',
+                lastEngagement: '',
+                view: 'admin_salesman',
+              })
+              setShowAddForm(true)
+            }}
             className="flex-1 px-4 sm:px-6 py-2 bg-[#e9931c] text-white rounded-lg hover:bg-[#d8820a] transition-colors text-sm sm:text-base font-semibold flex items-center justify-center gap-2"
           >
             <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -599,8 +769,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
             {/* Header */}
             <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 py-4 border-b-2 border-gray-200">
               <div>
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800">Add New Customer</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Customer will be visible to you. Admin approval is required for the company list.</p>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800">{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{editingCustomer ? 'Update details of your customer.' : 'Customer will be visible to you. Admin approval is required for the company list.'}</p>
               </div>
               <button
                 onClick={handleCloseForm}
@@ -613,7 +783,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
               </button>
             </div>
 
-            <form onSubmit={handleAddCustomer} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <form onSubmit={editingCustomer ? handleUpdateCustomer : handleAddCustomer} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
@@ -928,7 +1098,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                   disabled={loading}
                   className="px-3 py-1.5 text-sm sm:px-6 sm:py-2 sm:text-base bg-[#e9931c] text-white rounded-lg font-semibold hover:bg-[#d8820a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Processing...' : 'Add Customer'}
+                  {loading ? 'Processing...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
                 </button>
               </div>
             </form>
@@ -1032,6 +1202,26 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     <FaEnvelope />
                     Email
                   </a>
+                  {isCreatedByMe(customer) && (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleEditCustomer(customer)}
+                        className="p-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors"
+                        title="Edit"
+                      >
+                        <FaEdit className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomer(customer)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <FaTrash className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -1048,6 +1238,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1119,6 +1310,30 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {isCreatedByMe(customer) ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditCustomer(customer)}
+                              className="p-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors"
+                              title="Edit Customer"
+                            >
+                              <FaEdit className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomer(customer)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete Customer"
+                            >
+                              <FaTrash className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}

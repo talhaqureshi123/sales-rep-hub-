@@ -895,16 +895,61 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     }
   }
 
+  const getQuoteWhatsAppMessage = (quote) => {
+    return `Hello, your quotation #${quote.quotationNumber || quote.quoteNumber || ''} is ready. Total: £${Number(quote.total || 0).toFixed(2)}. Please contact us for details.`
+  }
+
   // Open WhatsApp with customer number and pre-filled message (anchor click avoids popup blocker)
   const handleSendQuoteWhatsApp = (quote) => {
     const raw = (quote.customerPhone || quote.phone || (quote.customer && (quote.customer.phone || quote.customer.contactPhone)) || '').trim()
     const phone = raw.replace(/\D/g, '')
     if (!phone || phone.length < 10) {
+      const msg = getQuoteWhatsAppMessage(quote)
+      const copyToClipboard = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(msg)
+        }
+        const ta = document.createElement('textarea')
+        ta.value = msg
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        try {
+          document.execCommand('copy')
+          return Promise.resolve()
+        } finally {
+          document.body.removeChild(ta)
+        }
+      }
       Swal.fire({
         icon: 'warning',
         title: 'Phone number missing',
-        text: 'Customer phone number is required to send via WhatsApp. Please edit the quote and add customer phone.',
-        confirmButtonColor: '#e9931c'
+        html: 'Customer phone number is required to open WhatsApp directly. You can add the phone in the quote, or copy the message and paste it in WhatsApp after choosing a contact.',
+        showCancelButton: true,
+        confirmButtonText: 'Copy message',
+        cancelButtonText: 'OK',
+        confirmButtonColor: '#e9931c',
+        cancelButtonColor: '#6b7280'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          copyToClipboard().then(() => {
+            Swal.fire({
+              icon: 'success',
+              title: 'Copied!',
+              html: 'Quote message copied. <a href="https://web.whatsapp.com" target="_blank" rel="noopener noreferrer" style="color:#e9931c;text-decoration:underline;">Open WhatsApp</a> and paste in your chat.',
+              confirmButtonColor: '#e9931c'
+            })
+          }).catch(() => {
+            Swal.fire({
+              icon: 'info',
+              title: 'Quote message',
+              html: `<p class="mb-2">Copy this and paste in WhatsApp:</p><textarea readonly class="w-full p-2 border rounded text-sm" rows="3">${String(msg).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</textarea>`,
+              confirmButtonColor: '#e9931c'
+            })
+          })
+        }
       })
       return
     }
@@ -917,7 +962,7 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
     } else if (phone.length >= 11 && (phone.startsWith('44') || phone.startsWith('92'))) {
       num = phone
     }
-    const msg = `Hello, your quotation #${quote.quotationNumber || quote.quoteNumber || ''} is ready. Total: £${Number(quote.total || 0).toFixed(2)}. Please contact us for details.`
+    const msg = getQuoteWhatsAppMessage(quote)
     const url = `https://wa.me/${num}?text=${encodeURIComponent(msg)}`
     const a = document.createElement('a')
     a.href = url
@@ -1291,23 +1336,18 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
       {showCreateModal && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
           <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-[95vw] lg:max-w-4xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
-            {/* Modal Header */}
-            <div className="flex-shrink-0 bg-white border-b-2 border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between rounded-t-2xl sm:rounded-t-2xl">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-bold text-gray-800">
-                  {editingQuotation ? 'Edit Quotation' : 'Create New Quote'}
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {editingQuotation ? 'Update quotation details' : 'Fill in the quote details and send to customer'}
-                </p>
-              </div>
+            {/* Modal Header – same style as Sales Order Form */}
+            <div className="flex-shrink-0 flex items-center justify-between p-6 border-b bg-white">
+              <h1 className="text-3xl font-bold text-gray-900">
+                {editingQuotation ? 'Edit Quotation' : 'Quotation Form'}
+              </h1>
               <button
                 type="button"
                 onClick={() => {
                   setShowCreateModal(false)
                   resetForm()
                 }}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
+                className="text-gray-500 hover:text-gray-700 p-1"
                 aria-label="Close"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1316,72 +1356,65 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
               </button>
             </div>
 
-            {/* Modal Body – scrollable so buttons stay visible at bottom */}
+            {/* Modal Body – scrollable, same section layout as Sales Order */}
             <form onSubmit={editingQuotation ? handleUpdateQuote : handleCreateQuote} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-                {/* Customer & Salesman Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer *
-                    </label>
-                    <select
-                      name="customer"
-                      value={formData.customer}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                    >
-                      <option value="">Search customers...</option>
-                      {customers.map((customer) => (
-                        <option key={customer.id || customer._id} value={customer.id || customer._id}>
-                          {customer.name} {customer.email ? `(${customer.email})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Salesman *
-                    </label>
-                    <select
-                      name="salesman"
-                      value={formData.salesman}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                    >
-                      <option value="">Select salesman...</option>
-                      {salesmen.map((s) => (
-                        <option key={s._id || s.id} value={s._id || s.id}>
-                          {s.name || s.email} {s.email ? `(${s.email})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Valid Until
-                    </label>
-                    <input
-                      type="date"
-                      name="validUntil"
-                      value={formData.validUntil}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
-                    />
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8" style={{ WebkitOverflowScrolling: 'touch' }}>
+                {/* Section A: Quote & Customer – same as Sales Order section style */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Section A: Quote & Customer</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Customer <span className="text-red-500">*</span></label>
+                      <select
+                        name="customer"
+                        value={formData.customer}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      >
+                        <option value="">Search customers...</option>
+                        {customers.map((customer) => (
+                          <option key={customer.id || customer._id} value={customer.id || customer._id}>
+                            {customer.name} {customer.email ? `(${customer.email})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Salesman <span className="text-gray-500 text-xs font-normal">(Optional for admin)</span></label>
+                      <select
+                        name="salesman"
+                        value={formData.salesman}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      >
+                        <option value="">None (admin quote)</option>
+                        {salesmen.map((s) => (
+                          <option key={s._id || s.id} value={s._id || s.id}>
+                            {s.name || s.email} {s.email ? `(${s.email})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Valid Until</label>
+                      <input
+                        type="date"
+                        name="validUntil"
+                        value={formData.validUntil}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c] bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Line Items Section */}
-                <div>
+                {/* Section B: Line Items – same heading style as Sales Order */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Section B: Line Items</h2>
                   <div className="flex items-center justify-between mb-4">
                     <label className="block text-sm font-medium text-gray-700">
-                      Line Items *
+                      Products <span className="text-red-500">*</span>
                     </label>
                     <div className="flex gap-2">
                       <button
@@ -1520,9 +1553,10 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
                   </div>
                 </div>
 
-                {/* Summary Section */}
-                <div className="border-t-2 border-gray-200 pt-4">
-                  <div className="space-y-2">
+                {/* Section C: Summary – same as Sales Order totals style */}
+                <div className="border-b pb-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Section C: Summary</h2>
+                  <div className="space-y-2 max-w-sm">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-700">Subtotal:</span>
                       <span className="font-semibold">£{formData.subtotal.toFixed(2)}</span>
@@ -1531,18 +1565,16 @@ const Quotes = ({ initialFilter, onFilterConsumed }) => {
                       <span className="text-gray-700">Tax (20%):</span>
                       <span className="font-semibold">£{formData.tax.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
+                    <div className="flex justify-between text-lg pt-2 border-t-2 border-gray-200">
                       <span className="font-bold text-gray-800">Total:</span>
-                      <span className="font-bold" style={{ color: '#e9931c' }}>
-                        £{formData.total.toFixed(2)}
-                      </span>
+                      <span className="font-bold text-[#e9931c]">£{formData.total.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
 
               </div>
-              {/* Modal Footer – always visible at bottom */}
-              <div className="flex-shrink-0 flex flex-wrap gap-2 sm:gap-3 p-3 sm:p-6 border-t-2 border-gray-200 bg-gray-50 rounded-b-2xl sm:rounded-b-2xl pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
+              {/* Modal Footer – same padding as Sales Order */}
+              <div className="flex-shrink-0 flex flex-wrap gap-2 sm:gap-3 p-6 border-t-2 border-gray-200 bg-white pb-[calc(1rem+64px+env(safe-area-inset-bottom))] sm:pb-6">
                 <button
                   type="button"
                   onClick={handleSaveDraft}

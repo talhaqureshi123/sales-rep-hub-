@@ -14,10 +14,12 @@ import Notifications from '../components/Notifications'
 import SampleTracker from '../components/SampleTracker'
 import SalesmanSidebar from '../components/SalesmanSidebar'
 import BottomNavbar from '../components/BottomNavbar'
+import { useNotificationSocket } from '../hooks/useNotificationSocket'
 
 const SalesmanDashboard = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [openAddCustomer, setOpenAddCustomer] = useState(false)
+  useNotificationSocket()
 
   const handleLogout = () => {
     logoutService()

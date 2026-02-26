@@ -1,21 +1,38 @@
 import { useEffect, useState, useRef } from 'react'
 
+const SLIDE_IN_DURATION = 250
+const SLIDE_OUT_DURATION = 220
+
 const NotificationToast = ({ message, type = 'info', onClose, duration = 5000 }) => {
-  const [isVisible, setIsVisible] = useState(true)
-  const hasAnimatedRef = useRef(false)
+  const [phase, setPhase] = useState('visible') // 'visible' | 'exiting'
+  const hasAnimatedInRef = useRef(false)
+  const closeTimeoutRef = useRef(null)
+
+  // Auto-dismiss after duration (real-time pop then leave)
+  useEffect(() => {
+    if (duration <= 0 || phase !== 'visible') return
+    const t = setTimeout(() => {
+      setPhase('exiting')
+    }, duration)
+    return () => clearTimeout(t)
+  }, [duration, phase])
+
+  // After slide-out animation, remove from list (mobile/tablet friendly)
+  useEffect(() => {
+    if (phase !== 'exiting') return
+    closeTimeoutRef.current = setTimeout(() => {
+      if (onClose) onClose()
+    }, SLIDE_OUT_DURATION)
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
+    }
+  }, [phase, onClose])
 
   useEffect(() => {
-    if (duration > 0) {
-      const timer = setTimeout(() => {
-        setIsVisible(false)
-        setTimeout(() => {
-          if (onClose) onClose()
-        }, 200)
-      }, duration)
-
-      return () => clearTimeout(timer)
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
     }
-  }, [duration, onClose])
+  }, [])
 
   const getTypeStyles = () => {
     switch (type) {
@@ -43,21 +60,20 @@ const NotificationToast = ({ message, type = 'info', onClose, duration = 5000 })
     }
   }
 
-  if (!isVisible) return null
-
-  // One-time slide-in only on mount; no animation on re-renders so toast stays stable (no blink)
-  const animationStyle = hasAnimatedRef.current ? {} : { animation: 'notificationSlideIn 0.25s ease-out forwards' }
-  if (!hasAnimatedRef.current) hasAnimatedRef.current = true
+  const isExiting = phase === 'exiting'
+  const animationName = isExiting ? 'notificationSlideOut' : (hasAnimatedInRef.current ? 'none' : 'notificationSlideIn')
+  const animationDuration = isExiting ? SLIDE_OUT_DURATION / 1000 : SLIDE_IN_DURATION / 1000
+  if (!hasAnimatedInRef.current && !isExiting) hasAnimatedInRef.current = true
 
   return (
     <div
-      className={`px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 min-w-[300px] max-w-md ${getTypeStyles()}`}
+      className={`px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md ${getTypeStyles()}`}
       style={{
         zIndex: 9999,
         pointerEvents: 'auto',
         transform: 'translateZ(0)',
-        willChange: 'auto',
-        ...animationStyle,
+        WebkitTransform: 'translateZ(0)',
+        animation: animationName !== 'none' ? `${animationName} ${animationDuration}s ease-out forwards` : undefined,
       }}
     >
       <style>{`
@@ -65,15 +81,20 @@ const NotificationToast = ({ message, type = 'info', onClose, duration = 5000 })
           from { opacity: 0; transform: translateX(100%); }
           to { opacity: 1; transform: translateX(0); }
         }
+        @keyframes notificationSlideOut {
+          from { opacity: 1; transform: translateX(0); }
+          to { opacity: 0; transform: translateX(100%); }
+        }
       `}</style>
       <span className="text-xl font-bold flex-shrink-0">{getIcon()}</span>
       <p className="flex-1 text-sm font-medium break-words">{message}</p>
       <button
+        type="button"
         onClick={() => {
-          setIsVisible(false)
-          setTimeout(() => { if (onClose) onClose() }, 200)
+          if (phase === 'exiting') return
+          setPhase('exiting')
         }}
-        className="text-white hover:text-gray-200 transition-colors flex-shrink-0 ml-2"
+        className="text-white hover:text-gray-200 active:opacity-80 transition-colors flex-shrink-0 ml-2 touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center -my-1 -mr-1"
         aria-label="Close notification"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

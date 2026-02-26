@@ -3,6 +3,7 @@ const FollowUp = require("../../database/models/FollowUp");
 const hubspotService = require("../../services/hubspotService");
 const Customer = require("../../database/models/Customer");
 const { saveShiftPhotoToFolder } = require("../../utils/shiftPhotoStorage");
+const { notifyUser } = require("../../sockets/notificationSocket");
 
 // ================= HELPER =================
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -125,6 +126,7 @@ const createVisitRequest = async (req, res) => {
       .populate("salesman", "name email")
       .populate("createdBy", "name email");
 
+    notifyUser(req.user._id);
     return res.status(201).json({
       success: true,
       message: "Visit request submitted. Waiting for admin approval.",

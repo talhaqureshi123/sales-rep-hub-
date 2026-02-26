@@ -18,6 +18,7 @@ import { getVisitTargets } from '../../services/salemanservices/visitTargetServi
 import { getMySamples } from '../../services/salemanservices/sampleService'
 import { markAllNotificationsAsSeen } from '../hooks/useNotificationCount'
 import { useNotificationCount } from '../hooks/useNotificationCount'
+import { NOTIFICATION_UPDATE_EVENT } from '../hooks/useNotificationSocket'
 
 const Notifications = () => {
   const [loading, setLoading] = useState(true)
@@ -31,6 +32,13 @@ const Notifications = () => {
 
   useEffect(() => {
     loadAllNotifications()
+  }, [])
+
+  // Real-time: refetch list when server pushes notification-update
+  useEffect(() => {
+    const onUpdate = () => loadAllNotifications()
+    window.addEventListener(NOTIFICATION_UPDATE_EVENT, onUpdate)
+    return () => window.removeEventListener(NOTIFICATION_UPDATE_EVENT, onUpdate)
   }, [])
 
   // Mark all current notifications as seen when component mounts (user opened notifications page)
@@ -205,9 +213,9 @@ const Notifications = () => {
       })
     })
 
-    // Process Samples
+    // Process Samples (match count hook: exclude converted)
     samples.forEach(sample => {
-      if (sample.status === 'Converted') return
+      if ((sample.status || '').toLowerCase() === 'converted') return
       
       const visitDate = sample.visitDate ? new Date(sample.visitDate) : null
       const expectedDate = sample.expectedDate ? new Date(sample.expectedDate) : null

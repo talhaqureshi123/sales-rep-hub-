@@ -3187,8 +3187,15 @@ const SalesTracking = () => {
           </div>
         </div>
 
-        {/* Notifications */}
-        <div className="fixed top-4 right-4 z-[9998] space-y-2" style={{ pointerEvents: 'none' }}>
+        {/* Notifications - real-time pop, auto dismiss; mobile & tablet friendly */}
+        <div
+          className="fixed top-4 right-4 z-[9998] space-y-2 pl-4"
+          style={{
+            pointerEvents: 'none',
+            top: 'max(0.5rem, env(safe-area-inset-top, 0.5rem))',
+            right: 'max(0.5rem, env(safe-area-inset-right, 0.5rem))',
+          }}
+        >
           {notifications.map((notification, index) => (
             <div
               key={notification.id}

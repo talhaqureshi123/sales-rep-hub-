@@ -47,7 +47,6 @@ const startTracking = async (req, res) => {
     if (isBase64 && tracking._id) {
       const filePath = saveShiftPhotoToFolder(speedometerImage, String(tracking._id), "start");
       if (filePath) {
-        tracking.speedometerImage = filePath;
         tracking.speedometerImagePath = filePath;
         await tracking.save();
       }
@@ -119,25 +118,21 @@ const stopTracking = async (req, res) => {
 
     tracking.endingKilometers = endingKmNum;
 
-    // Save to shift-photos folder only; DB stores path only (no base64)
+    // Save to shift-photos folder; DB keeps path (Path field) + base64 (main field) so admin can fetch from folder or DB fallback
     const tid = String(tracking._id);
     const isBase64Like = (v) => typeof v === "string" && v && (v.startsWith("data:") || !v.startsWith("/"));
     if (endingMeterImage && isBase64Like(endingMeterImage)) {
       const filePath = saveShiftPhotoToFolder(endingMeterImage, tid, "end");
-      if (filePath) {
-        tracking.endingMeterImagePath = filePath;
-        tracking.endingMeterImage = filePath;
-      }
+      if (filePath) tracking.endingMeterImagePath = filePath;
+      tracking.endingMeterImage = endingMeterImage;
     } else if (endingMeterImage !== undefined) {
       tracking.endingMeterImage = endingMeterImage;
     }
     if (visitedAreaImage !== undefined) {
       if (isBase64Like(visitedAreaImage)) {
         const filePath = saveShiftPhotoToFolder(visitedAreaImage, tid, "visited");
-        if (filePath) {
-          tracking.visitedAreaImagePath = filePath;
-          tracking.visitedAreaImage = filePath;
-        }
+        if (filePath) tracking.visitedAreaImagePath = filePath;
+        tracking.visitedAreaImage = visitedAreaImage;
       } else {
         tracking.visitedAreaImage = visitedAreaImage;
       }

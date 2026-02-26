@@ -3,25 +3,27 @@ const config = require("../config");
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(config.MONGODB_URI, {
-      serverSelectionTimeoutMS: 60000, // 60 seconds – slow networks / Atlas
-      socketTimeoutMS: 60000, // 60 seconds
-      connectTimeoutMS: 60000, // 60 seconds
+    const uri = config.MONGODB_URI || "";
+    const isAtlas = uri.includes("mongodb+srv") || uri.includes("atlas.");
+    const options = {
+      serverSelectionTimeoutMS: 60000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 60000,
       retryWrites: true,
       retryReads: true,
-      // Use primary only – avoids timeouts to replica secondaries (e.g. 159.41.181.27)
-      readPreference: "primary",
-      // MongoDB Atlas specific options
-      tls: true,
-      tlsAllowInvalidCertificates: false,
-      // Smaller pool – fewer connections to replica members
       maxPoolSize: 10,
       minPoolSize: 1,
-      // Heartbeat to keep connection alive
       heartbeatFrequencyMS: 10000,
-    });
+    };
+    if (isAtlas) {
+      options.readPreference = "primary";
+      options.tls = true;
+      options.tlsAllowInvalidCertificates = false;
+    }
+    const conn = await mongoose.connect(uri, options);
 
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    const isLocal = uri.includes("localhost") || uri.includes("127.0.0.1");
+    console.log(`MongoDB Connected: ${conn.connection.host}${isLocal ? " (local)" : " (Atlas)"}`);
   } catch (error) {
     console.error(`\n❌ MongoDB Connection Error: ${error.message}`);
 
@@ -43,6 +45,22 @@ const connectDB = async () => {
       );
       console.error("   • Wait 1-2 minutes for changes to propagate");
       console.error("   • Check your firewall/antivirus settings");
+      console.error("\n💡 Or use local MongoDB (no Atlas needed):");
+      console.error("   • Install MongoDB locally, then in backend .env add:");
+      console.error("     USE_LOCAL_MONGO=1");
+      console.error("   • Optional: MONGODB_URI_LOCAL=mongodb://localhost:27017/salesraphub");
+      console.error("   • (Same fix if you see PoolClearedError/ETIMEDOUT at runtime.)");
+    } else if (
+      error.message.includes("ECONNREFUSED") &&
+      (error.message.includes("127.0.0.1") || error.message.includes("localhost") || error.message.includes("::1"))
+    ) {
+      console.error("\n⚠️  Local MongoDB is not running (connection refused).");
+      console.error("\n📋 To fix this:");
+      console.error("   • Start MongoDB: run 'mongod' in a terminal, or");
+      console.error("   • Windows: Services → start 'MongoDB Server', or");
+      console.error("     Run as Admin: net start MongoDB");
+      console.error("   • If MongoDB is not installed: https://www.mongodb.com/try/download/community");
+      console.error("\n💡 Or use Atlas instead: in backend .env remove or comment out USE_LOCAL_MONGO=1");
     } else if (error.message.includes("authentication failed")) {
       console.error(
         "\n⚠️  Authentication failed. Check your MongoDB credentials."

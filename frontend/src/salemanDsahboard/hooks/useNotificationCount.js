@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getMyFollowUps } from "../../services/salemanservices/followUpService";
 import { getVisitTargets } from "../../services/salemanservices/visitTargetService";
 import { getMySamples } from "../../services/salemanservices/sampleService";
+import { NOTIFICATION_UPDATE_EVENT } from "./useNotificationSocket";
 
 // Mark all current notifications as seen
 export const markAllNotificationsAsSeen = () => {
@@ -26,14 +27,7 @@ export const useNotificationCount = () => {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadNotificationCount();
-    // Refresh every 60 seconds to reduce server load
-    const interval = setInterval(loadNotificationCount, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadNotificationCount = async () => {
+  const loadNotificationCount = useCallback(async () => {
     try {
       setLoading(true);
       // Load all 3 in parallel so one round trip instead of 3 sequential
@@ -107,7 +101,23 @@ export const useNotificationCount = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadNotificationCount();
+    const onUpdate = () => loadNotificationCount();
+    window.addEventListener(NOTIFICATION_UPDATE_EVENT, onUpdate);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadNotificationCount();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    const interval = setInterval(loadNotificationCount, 60000);
+    return () => {
+      window.removeEventListener(NOTIFICATION_UPDATE_EVENT, onUpdate);
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(interval);
+    };
+  }, [loadNotificationCount]);
 
   return { count, loading, refresh: loadNotificationCount };
 };

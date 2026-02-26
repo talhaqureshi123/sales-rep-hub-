@@ -139,8 +139,8 @@ export const deleteSalesOrder = async (orderId) => {
   }
 }
 
-// Approve sales order
-export const approveSalesOrder = async (orderId) => {
+// Approve sales order (options.sendFromEmail: 'login' = admin email, else = info@parco.co.uk)
+export const approveSalesOrder = async (orderId, options = {}) => {
   try {
     const token = getAuthToken()
     if (!token) {
@@ -153,6 +153,7 @@ export const approveSalesOrder = async (orderId) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
+      body: JSON.stringify({ sendFromEmail: options.sendFromEmail || 'info' }),
     })
 
     const data = await response.json()

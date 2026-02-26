@@ -121,6 +121,8 @@ const Tasks = () => {
       customeremail: 'customerEmail', 'customer email': 'customerEmail', customer_email: 'customerEmail',
       customerphone: 'customerPhone', 'customer phone': 'customerPhone', customer_phone: 'customerPhone',
       notes: 'notes',
+      salesmanemail: 'salesmanEmail', 'salesman email': 'salesmanEmail', salesman_email: 'salesmanEmail',
+      salesmanid: 'salesmanId', 'salesman id': 'salesmanId', salesman_id: 'salesmanId',
     }
     return map[key] || null
   }
@@ -190,7 +192,7 @@ const Tasks = () => {
       Swal.fire({
         icon: 'warning',
         title: 'No data',
-        text: 'No valid rows. Use headers: customerName, dueDate. Optional: type, description, priority, customerEmail, notes.',
+        text: 'No valid rows. Use headers: customerName, dueDate. Optional: type, description, priority, customerEmail, notes, salesmanEmail (must match your login email).',
         confirmButtonColor: '#e9931c',
       })
       return
@@ -2267,7 +2269,7 @@ const Tasks = () => {
               </button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto">
-              <p className="text-sm text-gray-600">Upload a CSV from your device. Tasks will be assigned to you. First row = headers: <strong>customerName</strong>, <strong>dueDate</strong>. Optional: type, description, priority, customerEmail, notes.</p>
+              <p className="text-sm text-gray-600">Upload a CSV from your device. Tasks will be assigned to you. First row = headers: <strong>customerName</strong>, <strong>dueDate</strong>. Optional: type, description, priority, customerEmail, notes, <strong>salesmanEmail</strong>. Rows with a different <strong>salesmanEmail</strong> (another salesman) will not be imported—only your own tasks are allowed.</p>
               <label className="block">
                 <span className="sr-only">Choose file</span>
                 <input

@@ -100,6 +100,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
 
     // Section G: Internal Flags
     sendToAdmin: false,
+    sendFromEmail: 'info', // 'info' = info@parco.co.uk sender, 'login' = admin's email
     stockDeducted: false,
     sendToWarehouse: false,
     creditLimitCheck: false,
@@ -451,7 +452,8 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
           orderDate: order.orderDate ? getLocalDateString(new Date(order.orderDate)) : getLocalDateString(),
           expectedDispatchDate: order.expectedDispatchDate ? new Date(order.expectedDispatchDate).toISOString().split('T')[0] : '',
           actualDispatchDate: order.actualDispatchDate ? new Date(order.actualDispatchDate).toISOString().split('T')[0] : '',
-          _previousStatus: previousStatus
+          _previousStatus: previousStatus,
+          sendFromEmail: prev.sendFromEmail || 'info',
         }))
         if (order.customerSignature) {
           setTimeout(() => {
@@ -468,14 +470,18 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
 
   const calculateTotals = () => {
     const subtotal = formData.items.reduce((sum, item) => {
-      const lineTotal = (item.unitPrice || 0) * (item.quantity || 0)
+      const lineTotal = (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0)
       return sum + lineTotal
     }, 0)
 
+    const discountNum = Number(formData.discount) || 0
+    const deliveryNum = Number(formData.deliveryCharges) || 0
+    const amountPaidNum = Number(formData.amountPaid) || 0
+
     const vatRate = 20 // 20%
-    const vat = (subtotal - (formData.discount || 0) + (formData.deliveryCharges || 0)) * (vatRate / 100)
-    const grandTotal = subtotal - (formData.discount || 0) + (formData.deliveryCharges || 0) + vat
-    const balanceRemaining = grandTotal - (formData.amountPaid || 0)
+    const vat = (subtotal - discountNum + deliveryNum) * (vatRate / 100)
+    const grandTotal = subtotal - discountNum + deliveryNum + vat
+    const balanceRemaining = grandTotal - amountPaidNum
 
     setFormData(prev => ({
       ...prev,
@@ -494,11 +500,14 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
     }))
   }
 
+  const getCustomerDisplayName = (c) => (c?.firstName || c?.name || c?.company || '').trim() || 'Customer'
+
   const handleCustomerSelect = (customer) => {
+    const displayName = getCustomerDisplayName(customer)
     setFormData(prev => ({
       ...prev,
       customer: customer._id || customer.id,
-      customerName: customer.firstName || customer.name || '',
+      customerName: displayName,
       contactPerson: customer.contactPerson || '',
       phoneNumber: customer.phone || '',
       emailAddress: customer.email || '',
@@ -506,7 +515,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
       deliveryAddress: customer.address || '',
     }))
     setShowCustomerDropdown(false)
-    setCustomerSearch('')
+    setCustomerSearch(displayName)
   }
 
   const handleProductSelect = (product, itemIndex) => {
@@ -619,12 +628,13 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
   const handleSubmit = async (e, saveAsDraft = false) => {
     e.preventDefault()
     
-    // Validation
-    if (!formData.customer || !formData.customerName) {
+    // Validation: customer name required (can type manually or select from list)
+    const customerName = (formData.customerName || '').trim()
+    if (!customerName) {
       Swal.fire({
         icon: 'warning',
         title: 'Customer Required',
-        text: 'Please select a customer',
+        text: 'Please enter or select a customer',
         confirmButtonColor: '#e9931c'
       })
       return
@@ -640,7 +650,8 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
       return
     }
 
-    if (!formData.salesPerson) {
+    const currentUserRole = localStorage.getItem('userRole') || 'admin'
+    if (currentUserRole === 'salesman' && !formData.salesPerson) {
       Swal.fire({
         icon: 'warning',
         title: 'Sales Person Required',
@@ -655,10 +666,13 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
     try {
       const orderData = {
         ...formData,
+        customerName: (formData.customerName || '').trim(),
+        customer: formData.customer || undefined,
         orderStatus: saveAsDraft ? 'Draft' : formData.orderStatus,
         orderDate: new Date(formData.orderDate),
         expectedDispatchDate: formData.expectedDispatchDate ? new Date(formData.expectedDispatchDate) : null,
         actualDispatchDate: formData.actualDispatchDate ? new Date(formData.actualDispatchDate) : null,
+        sendFromEmail: formData.sendFromEmail || 'info',
         // Ensure items have required fields
         items: formData.items.map(item => ({
           ...item,
@@ -745,7 +759,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
 
   const filteredCustomers = customers.filter(c => {
     const searchTerm = customerSearch.toLowerCase()
-    const name = (c.firstName || c.name || '').toLowerCase()
+    const name = (c.firstName || c.name || c.company || '').toLowerCase()
     const email = (c.email || '').toLowerCase()
     const phone = (c.phone || '').toLowerCase()
     return name.includes(searchTerm) || email.includes(searchTerm) || phone.includes(searchTerm)
@@ -783,7 +797,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
   return (
     <div className="w-full bg-white rounded-lg shadow-lg">
       <div className="flex items-center justify-between p-6 border-b bg-white">
-        <h1 className="text-3xl font-bold text-gray-900">Sales Order Form</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Proco Sales — Order Form</h1>
         {onClose && (
           <button
             onClick={onClose}
@@ -824,7 +838,9 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sales Person <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Sales Person {localStorage.getItem('userRole') !== 'admin' ? <span className="text-red-500">*</span> : <span className="text-gray-500 text-xs">(Optional for admin)</span>}
+              </label>
               <select
                 name="salesPerson"
                 value={formData.salesPerson}
@@ -837,9 +853,9 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                   }))
                 }}
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
-                required
+                required={localStorage.getItem('userRole') === 'salesman'}
               >
-                <option value="">Select sales person</option>
+                <option value="">{localStorage.getItem('userRole') === 'admin' ? 'None (admin order)' : 'Select sales person'}</option>
                 {salesPersons.map(person => (
                   <option key={person._id || person.id} value={person._id || person.id}>
                     {person.name} ({person.email})
@@ -890,8 +906,11 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                 type="text"
                 value={customerSearch || formData.customerName}
                 onChange={(e) => {
-                  setCustomerSearch(e.target.value)
+                  const v = e.target.value
+                  setCustomerSearch(v)
                   setShowCustomerDropdown(true)
+                  // Allow typing customer name without selecting from list (customer ref stays empty)
+                  setFormData(prev => ({ ...prev, customerName: v, customer: prev.customer && !v ? prev.customer : (v ? '' : prev.customer) }))
                 }}
                 onFocus={() => {
                   setShowCustomerDropdown(true)
@@ -900,10 +919,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                   }
                 }}
                 onBlur={() => {
-                  // Delay hiding dropdown to allow click
-                  setTimeout(() => {
-                    setShowCustomerDropdown(false)
-                  }, 200)
+                  setTimeout(() => setShowCustomerDropdown(false), 200)
                 }}
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#e9931c]"
                 placeholder={initialLoading ? "Loading customers..." : "Search customers by name, email, or phone..."}
@@ -916,10 +932,14 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                     filteredCustomers.map(customer => (
                       <div
                         key={customer._id || customer.id}
-                        onClick={() => handleCustomerSelect(customer)}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleCustomerSelect(customer)
+                        }}
                         className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
                       >
-                        <p className="font-medium text-gray-800">{customer.firstName || customer.name}</p>
+                        <p className="font-medium text-gray-800">{getCustomerDisplayName(customer)}</p>
                         <p className="text-sm text-gray-600">
                           {customer.email && `Email: ${customer.email}`}
                           {customer.phone && ` | Phone: ${customer.phone}`}
@@ -1164,7 +1184,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                       </select>
                     </td>
                     <td className="px-4 py-2">
-                      <span className="font-semibold">£{item.lineTotal.toFixed(2)}</span>
+                      <span className="font-semibold">£{(Number(item.lineTotal) || 0).toFixed(2)}</span>
                     </td>
                     <td className="px-4 py-2">
                       {formData.items.length > 1 && (
@@ -1183,19 +1203,19 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
             </table>
           </div>
           <div className="mt-4 text-right">
-            <p className="text-lg font-semibold">Line Total: £{formData.items.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2)}</p>
+            <p className="text-lg font-semibold">Line Total: £{formData.items.reduce((sum, item) => sum + (Number(item.lineTotal) || 0), 0).toFixed(2)}</p>
           </div>
         </div>
 
         {/* Section D: Order Totals */}
         <div className="border-b pb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Section D: Order Totals</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl md:max-w-4xl">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Subtotal</label>
               <input
                 type="text"
-                value={`£${formData.subtotal.toFixed(2)}`}
+                value={`£${(Number(formData.subtotal) || 0).toFixed(2)}`}
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50"
                 readOnly
               />
@@ -1228,7 +1248,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
               <label className="block text-sm font-medium text-gray-700 mb-2">VAT (20%)</label>
               <input
                 type="text"
-                value={`£${formData.vat.toFixed(2)}`}
+                value={`£${(Number(formData.vat) || 0).toFixed(2)}`}
                 className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50"
                 readOnly
               />
@@ -1237,7 +1257,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
               <label className="block text-sm font-medium text-gray-700 mb-2">Grand Total</label>
               <input
                 type="text"
-                value={`£${formData.grandTotal.toFixed(2)}`}
+                value={`£${(Number(formData.grandTotal) || 0).toFixed(2)}`}
                 className="w-full px-4 py-2 border-2 border-[#e9931c] rounded-lg bg-orange-50 text-2xl font-bold text-[#e9931c]"
                 readOnly
               />
@@ -1291,7 +1311,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
               <label className="block text-sm font-medium text-gray-700 mb-2">Balance Remaining</label>
               <input
                 type="text"
-                value={`£${formData.balanceRemaining.toFixed(2)}`}
+                value={`£${(Number(formData.balanceRemaining) || 0).toFixed(2)}`}
                 className="w-full px-4 py-2 border-2 border-green-200 rounded-lg bg-green-50 text-green-700 font-semibold"
                 readOnly
               />
@@ -1329,6 +1349,10 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
                 {formData.orderStatus === 'Delivered' && 'Order delivered to customer'}
                 {formData.orderStatus === 'Cancelled' && 'Order has been cancelled'}
               </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Send notification email</label>
+              <p className="text-xs text-gray-500">To (receiver): <strong>{import.meta.env.VITE_ORDER_NOTIFY_EMAIL || 'Set VITE_ORDER_NOTIFY_EMAIL in .env'}</strong></p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Number</label>
@@ -1514,7 +1538,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
       {productModalForIndex !== null && (
         <div className="fixed inset-0 bg-white sm:bg-black/60 flex items-start sm:items-center justify-center z-[9999] p-0 sm:p-4 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" onClick={() => setProductModalForIndex(null)}>
           <div
-            className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-lg sm:min-h-0 sm:max-h-[85vh] sm:rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto"
+            className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-lg md:max-w-xl lg:max-w-2xl sm:min-h-0 sm:max-h-[85vh] md:max-h-[88vh] sm:rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden flex-shrink-0 self-start sm:static my-0 sm:my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b border-gray-200">

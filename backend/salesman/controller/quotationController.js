@@ -113,7 +113,7 @@ const getQuotation = async (req, res) => {
 // @access  Private/Salesman
 const createQuotation = async (req, res) => {
   try {
-    const { customerName, customerEmail, customerPhone, customerAddress, items, tax, discount, notes } = req.body;
+    const { customerName, customerEmail, customerPhone, customerAddress, validUntil, items, tax, discount, notes } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({
@@ -163,6 +163,7 @@ const createQuotation = async (req, res) => {
       customerEmail,
       customerPhone,
       customerAddress,
+      validUntil: validUntil ? new Date(validUntil) : undefined,
       items: processedItems,
       subtotal,
       tax: taxAmount,
@@ -256,13 +257,14 @@ const updateQuotation = async (req, res) => {
       });
     }
 
-    const { customerName, customerEmail, customerPhone, customerAddress, items, tax, discount, notes, status } = req.body;
+    const { customerName, customerEmail, customerPhone, customerAddress, validUntil, items, tax, discount, notes, status } = req.body;
 
     // Update customer info
     if (customerName) quotation.customerName = customerName;
     if (customerEmail !== undefined) quotation.customerEmail = customerEmail;
     if (customerPhone !== undefined) quotation.customerPhone = customerPhone;
     if (customerAddress !== undefined) quotation.customerAddress = customerAddress;
+    if (validUntil !== undefined) quotation.validUntil = validUntil ? new Date(validUntil) : null;
     if (notes !== undefined) quotation.notes = notes;
     if (status) quotation.status = status;
 
@@ -395,6 +397,8 @@ const sendQuotationByEmail = async (req, res) => {
       total: item.total || 0,
     }));
 
+    const fromEmail = (req.user && req.user.email) ? req.user.email : null;
+    const fromName = (req.user && req.user.name) ? req.user.name : 'Sales Rep';
     const result = await sendQuotationEmail(toEmail, {
       quotationNumber: quotation.quotationNumber || '',
       customerName: quotation.customerName || '',
@@ -402,7 +406,7 @@ const sendQuotationByEmail = async (req, res) => {
       validUntil: quotation.validUntil || '',
       items,
       notes: quotation.notes || '',
-    });
+    }, fromEmail, fromName);
 
     if (!result.success) {
       return res.status(500).json({

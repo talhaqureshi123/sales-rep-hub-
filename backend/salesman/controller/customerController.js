@@ -266,10 +266,158 @@ const createCustomer = async (req, res) => {
   }
 };
 
+// @desc    Update customer (salesman can update only customers they created)
+// @route   PUT /api/salesman/customers/:id
+// @access  Private/Salesman
+const updateCustomer = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    const createdById = (customer.createdBy && customer.createdBy.toString) ? customer.createdBy.toString() : (customer.createdBy || '').toString();
+    if (createdById !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only edit customers you created',
+      });
+    }
+
+    const {
+      firstName,
+      name,
+      contactPerson,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      pincode,
+      postcode,
+      latitude,
+      longitude,
+      company,
+      orderPotential,
+      monthlySpend,
+      status,
+      notes,
+      competitorInfo,
+      associatedContactName,
+      associatedCompanyName,
+      lastContact,
+      lastEngagement,
+      view,
+    } = req.body;
+
+    const customerName = firstName || name;
+    if (customerName) {
+      customer.firstName = customerName;
+      customer.name = customerName;
+    }
+    if (contactPerson !== undefined) customer.contactPerson = contactPerson;
+    if (email !== undefined) customer.email = email;
+    if (phone !== undefined) customer.phone = phone;
+    if (address !== undefined) customer.address = address;
+    if (city !== undefined) customer.city = city;
+    if (state !== undefined) customer.state = state;
+    if (pincode !== undefined) customer.pincode = pincode;
+    if (postcode !== undefined) customer.postcode = postcode;
+    if (latitude !== undefined) customer.latitude = latitude != null && !isNaN(parseFloat(latitude)) ? parseFloat(latitude) : null;
+    if (longitude !== undefined) customer.longitude = longitude != null && !isNaN(parseFloat(longitude)) ? parseFloat(longitude) : null;
+    if (company !== undefined) customer.company = company;
+    if (orderPotential !== undefined) customer.orderPotential = orderPotential;
+    if (monthlySpend !== undefined) customer.monthlySpend = monthlySpend;
+    if (status !== undefined) customer.status = status;
+    if (notes !== undefined) customer.notes = notes;
+    if (competitorInfo !== undefined) customer.competitorInfo = competitorInfo;
+    if (associatedContactName !== undefined) customer.associatedContactName = associatedContactName;
+    if (associatedCompanyName !== undefined) customer.associatedCompanyName = associatedCompanyName;
+    if (lastContact !== undefined) customer.lastContact = lastContact ? new Date(lastContact) : undefined;
+    if (lastEngagement !== undefined) customer.lastEngagement = lastEngagement ? new Date(lastEngagement) : undefined;
+    if (view !== undefined) customer.view = view;
+
+    await customer.save();
+
+    const populatedCustomer = await Customer.findById(customer._id)
+      .populate('createdBy', 'name email');
+
+    hubspotService.createOrUpdateContact({
+      name: populatedCustomer.firstName || populatedCustomer.name,
+      email: populatedCustomer.email,
+      phone: populatedCustomer.phone,
+      address: populatedCustomer.address,
+      city: populatedCustomer.city,
+      state: populatedCustomer.state,
+      pincode: populatedCustomer.postcode || populatedCustomer.pincode,
+      company: populatedCustomer.company,
+      status: populatedCustomer.status,
+      notes: populatedCustomer.notes,
+      contactPerson: populatedCustomer.contactPerson,
+      orderPotential: populatedCustomer.orderPotential,
+      monthlySpend: populatedCustomer.monthlySpend,
+      competitorInfo: populatedCustomer.competitorInfo,
+    }).catch(err => console.error('HubSpot sync error (non-blocking):', err.message));
+
+    res.status(200).json({
+      success: true,
+      message: 'Customer updated successfully',
+      data: populatedCustomer,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error updating customer',
+    });
+  }
+};
+
+// @desc    Delete customer (salesman can delete only customers they created)
+// @route   DELETE /api/salesman/customers/:id
+// @access  Private/Salesman
+const deleteCustomer = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Customer not found',
+      });
+    }
+
+    const createdById = (customer.createdBy && customer.createdBy.toString) ? customer.createdBy.toString() : (customer.createdBy || '').toString();
+    if (createdById !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only delete customers you created',
+      });
+    }
+
+    await customer.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: 'Customer deleted successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error deleting customer',
+    });
+  }
+};
+
 module.exports = {
   getMyCustomers,
   getCustomer,
   createCustomer,
+  updateCustomer,
+  deleteCustomer,
 };
 
 

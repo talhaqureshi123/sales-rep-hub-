@@ -3,6 +3,7 @@ const User = require("../../database/models/User");
 const hubspotService = require("../../services/hubspotService");
 const Customer = require("../../database/models/Customer");
 const FollowUp = require("../../database/models/FollowUp");
+const { notifyUser } = require("../../sockets/notificationSocket");
 
 // @desc    Get all visit targets
 // @route   GET /api/admin/visit-targets
@@ -311,6 +312,7 @@ const createVisitTarget = async (req, res) => {
       }
     })();
 
+    notifyUser(visitTarget.salesman);
     res.status(201).json({
       success: true,
       message: "Visit target created successfully",
@@ -535,6 +537,7 @@ const updateVisitTarget = async (req, res) => {
       })();
     }
 
+    notifyUser(visitTarget.salesman);
     res.status(200).json({
       success: true,
       message: "Visit target updated successfully",

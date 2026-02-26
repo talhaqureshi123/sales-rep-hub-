@@ -1,6 +1,7 @@
 const FollowUp = require("../../database/models/FollowUp");
 const VisitTarget = require("../../database/models/VisitTarget");
 const hubspotService = require("../../services/hubspotService");
+const { notifyUser } = require("../../sockets/notificationSocket");
 
 // @desc    Get follow-ups assigned to logged-in salesman
 // @route   GET /api/salesman/follow-ups
@@ -193,6 +194,7 @@ const createMyFollowUp = async (req, res) => {
       .populate("relatedQuotation", "quotationNumber total")
       .populate("relatedSample", "sampleNumber productName");
 
+    notifyUser(req.user._id);
     res.status(201).json({
       success: true,
       message: "Follow-up created successfully.",
@@ -243,6 +245,7 @@ const updateMyFollowUp = async (req, res) => {
 
     await followUp.save();
 
+    notifyUser(followUp.salesman);
     res.status(200).json({
       success: true,
       message: "Follow-up updated successfully",
@@ -381,6 +384,7 @@ const importMyFollowUps = async (req, res) => {
       }
     }
 
+    if (created.length > 0) notifyUser(req.user._id);
     res.status(200).json({
       success: true,
       message: `Imported ${created.length} task(s)`,

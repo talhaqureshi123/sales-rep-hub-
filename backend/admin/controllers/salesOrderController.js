@@ -2,7 +2,9 @@ const SalesOrder = require("../../database/models/SalesOrder");
 const SalesTarget = require("../../database/models/SalesTarget");
 const User = require("../../database/models/User");
 const hubspotService = require("../../services/hubspotService");
+const config = require("../../config");
 const { sendOrderApprovalEmail } = require("../../utils/emailService");
+const { notifyUser } = require("../../sockets/notificationSocket");
 
 // @desc    Get all sales orders
 // @route   GET /api/admin/sales-orders
@@ -121,6 +123,16 @@ const createSalesOrder = async (req, res) => {
   try {
     const orderData = req.body;
 
+    // Customer ref is optional: allow orders with only customerName (no selection from list)
+    if (!orderData.customer || orderData.customer === "") {
+      orderData.customer = undefined;
+    }
+
+    // Sales person is optional when admin creates order
+    if (!orderData.salesPerson || orderData.salesPerson === "") {
+      orderData.salesPerson = undefined;
+    }
+
     // Generate SO Number if not provided
     if (!orderData.soNumber) {
       let soNumber;
@@ -195,6 +207,8 @@ const createSalesOrder = async (req, res) => {
     }
 
     orderData.createdBy = req.user._id;
+    const sendFromEmailChoice = orderData.sendFromEmail;
+    delete orderData.sendFromEmail; // do not store in DB
 
     // Salesman-created orders require admin approval; admin-created orders are auto-approved
     const isSalesman = req.user.role === "salesman";
@@ -238,6 +252,7 @@ const createSalesOrder = async (req, res) => {
     ) {
       (async () => {
         try {
+          const fromEmailForNotification = config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL;
           const populatedOrder = await SalesOrder.findById(order._id)
             .populate("salesPerson", "name email")
             .populate("customer", "firstName lastName email phone")
@@ -268,13 +283,15 @@ const createSalesOrder = async (req, res) => {
             balanceRemaining: populatedOrder.balanceRemaining,
           };
 
-          const APPROVAL_EMAIL = "iotfiy.solution@gmail.com";
-          await sendOrderApprovalEmail(APPROVAL_EMAIL, "Admin", orderDetails);
-          console.log("✅ Order creation email sent to", APPROVAL_EMAIL);
+          const toEmail = config.ORDER_NOTIFY_EMAIL;
+          if (toEmail) await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
+          console.log("✅ Order creation email sent to", toEmail);
         } catch (emailError) {
-          console.error("Error sending order creation email:", emailError);
+          console.error("Order creation email failed:", emailError?.message || emailError);
+          console.error("  To:", config.ORDER_NOTIFY_EMAIL, "| Code:", emailError?.code);
         }
       })();
+      if (order.salesPerson) notifyUser(order.salesPerson);
     }
 
     // Update monthly sales targets when order is confirmed (non-blocking)
@@ -438,6 +455,16 @@ const updateSalesOrder = async (req, res) => {
         success: false,
         message: "Sales order not found",
       });
+    }
+
+    // Customer ref optional: allow empty so order can have only customerName
+    if (req.body.hasOwnProperty("customer") && (!req.body.customer || req.body.customer === "")) {
+      req.body.customer = undefined;
+    }
+
+    // Sales person optional when admin updates order
+    if (req.body.hasOwnProperty("salesPerson") && (!req.body.salesPerson || req.body.salesPerson === "")) {
+      req.body.salesPerson = undefined;
     }
 
     // Generate Invoice Number if status changed to non-Draft and invoice number doesn't exist
@@ -653,8 +680,8 @@ const approveSalesOrder = async (req, res) => {
 
     // Sales targets are updated only when order is marked Delivered (see updateSalesOrder).
 
-    // Send email notification to talhaabid400@gmail.com (non-blocking)
-    const APPROVAL_EMAIL = "talhaabid400@gmail.com";
+    const fromEmailForNotification = config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL;
+    const toEmail = config.ORDER_NOTIFY_EMAIL;
     (async () => {
       try {
         const populatedOrder = await SalesOrder.findById(order._id)
@@ -687,12 +714,16 @@ const approveSalesOrder = async (req, res) => {
           balanceRemaining: populatedOrder.balanceRemaining,
         };
 
-        await sendOrderApprovalEmail(APPROVAL_EMAIL, "Admin", orderDetails);
-        console.log("✅ Order approval email sent to", APPROVAL_EMAIL);
+        if (toEmail) {
+          await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
+          console.log("✅ Order approval email sent to", toEmail);
+        }
       } catch (emailError) {
         console.error("Error sending order approval email:", emailError);
       }
     })();
+
+    if (order.salesPerson) notifyUser(order.salesPerson);
 
     const populatedOrder = await SalesOrder.findById(order._id)
       .populate("salesPerson", "name email")

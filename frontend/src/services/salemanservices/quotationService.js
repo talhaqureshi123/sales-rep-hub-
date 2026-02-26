@@ -40,7 +40,8 @@ export const getQuotations = async () => {
       return {
         success: true,
         data: data.data.map((quote) => ({
-          id: quote._id,
+          id: String(quote._id || quote.id || ''),
+          _id: quote._id,
           quoteNumber: quote.quotationNumber,
           customerName: quote.customerName,
           customerEmail: quote.customerEmail,

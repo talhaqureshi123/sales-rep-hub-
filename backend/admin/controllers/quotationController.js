@@ -2,13 +2,13 @@ const Quotation = require('../../database/models/Quotation');
 const User = require('../../database/models/User');
 const { sendQuotationEmail } = require('../../utils/emailService');
 
-// @desc    Get all quotations (admin view)
+// @desc    Get all quotations (admin view) – only admin-created quotations
 // @route   GET /api/admin/quotations
 // @access  Private/Admin
 const getQuotations = async (req, res) => {
   try {
     const { salesman, status, search, startDate, endDate, myQuotesOnly } = req.query;
-    const filter = {};
+    const filter = { createdBy: 'admin' };
 
     if (salesman) {
       filter.salesman = salesman;
@@ -57,12 +57,12 @@ const getQuotations = async (req, res) => {
   }
 };
 
-// @desc    Get single quotation
+// @desc    Get single quotation (only admin-created)
 // @route   GET /api/admin/quotations/:id
 // @access  Private/Admin
 const getQuotation = async (req, res) => {
   try {
-    const quotation = await Quotation.findById(req.params.id)
+    const quotation = await Quotation.findOne({ _id: req.params.id, createdBy: 'admin' })
       .populate('salesman', 'name email phone')
       .populate('items.product', 'name productCode price description')
       .populate('createdByUser', 'name email');
@@ -209,7 +209,7 @@ const updateQuotation = async (req, res) => {
   try {
     const { customerName, customerEmail, customerPhone, customerAddress, validUntil, items, tax, discount, notes, status, salesman } = req.body;
 
-    const quotation = await Quotation.findById(req.params.id);
+    const quotation = await Quotation.findOne({ _id: req.params.id, createdBy: 'admin' });
     if (!quotation) {
       return res.status(404).json({
         success: false,
@@ -302,7 +302,7 @@ const updateQuotation = async (req, res) => {
 // @access  Private/Admin
 const deleteQuotation = async (req, res) => {
   try {
-    const quotation = await Quotation.findById(req.params.id);
+    const quotation = await Quotation.findOne({ _id: req.params.id, createdBy: 'admin' });
     if (!quotation) {
       return res.status(404).json({
         success: false,
@@ -329,7 +329,7 @@ const deleteQuotation = async (req, res) => {
 // @access  Private/Admin
 const sendQuotationByEmail = async (req, res) => {
   try {
-    const quotation = await Quotation.findById(req.params.id)
+    const quotation = await Quotation.findOne({ _id: req.params.id, createdBy: 'admin' })
       .populate('salesman', 'name email');
 
     if (!quotation) {
@@ -355,6 +355,8 @@ const sendQuotationByEmail = async (req, res) => {
       total: item.total || 0,
     }));
 
+    const fromEmail = (req.user && req.user.email) ? req.user.email : null;
+    const fromName = (req.user && req.user.name) ? req.user.name : 'Admin';
     const result = await sendQuotationEmail(toEmail, {
       quotationNumber: quotation.quotationNumber || '',
       customerName: quotation.customerName || '',
@@ -362,7 +364,7 @@ const sendQuotationByEmail = async (req, res) => {
       validUntil: quotation.validUntil || '',
       items,
       notes: quotation.notes || '',
-    });
+    }, fromEmail, fromName);
 
     if (!result.success) {
       return res.status(500).json({
@@ -392,13 +394,15 @@ const sendQuotationByEmail = async (req, res) => {
 // @access  Private/Admin
 const getQuotationStats = async (req, res) => {
   try {
-    const totalQuotations = await Quotation.countDocuments();
-    const draftQuotations = await Quotation.countDocuments({ status: 'Draft' });
-    const sentQuotations = await Quotation.countDocuments({ status: 'Sent' });
-    const approvedQuotations = await Quotation.countDocuments({ status: 'Approved' });
-    const rejectedQuotations = await Quotation.countDocuments({ status: 'Rejected' });
+    const baseFilter = { createdBy: 'admin' };
+    const totalQuotations = await Quotation.countDocuments(baseFilter);
+    const draftQuotations = await Quotation.countDocuments({ ...baseFilter, status: 'Draft' });
+    const sentQuotations = await Quotation.countDocuments({ ...baseFilter, status: 'Sent' });
+    const approvedQuotations = await Quotation.countDocuments({ ...baseFilter, status: 'Approved' });
+    const rejectedQuotations = await Quotation.countDocuments({ ...baseFilter, status: 'Rejected' });
 
     const totalAmount = await Quotation.aggregate([
+      { $match: baseFilter },
       {
         $group: {
           _id: null,

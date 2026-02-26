@@ -11,6 +11,18 @@ export default defineConfig({
         target: 'http://127.0.0.1:4000',
         changeOrigin: true,
       },
+      // Socket.IO real-time notifications (same backend)
+      '/socket.io': {
+        target: 'http://127.0.0.1:4000',
+        changeOrigin: true,
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Expected when backend is stopped/restarting; socket client will reconnect
+            if (err.code !== 'ECONNABORTED' && err.code !== 'ECONNRESET') console.error('[socket.io proxy]', err.message);
+          });
+        },
+      },
     },
   },
 })
