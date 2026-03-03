@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getMyCustomers, createCustomer, updateCustomer, deleteCustomer, importCustomers } from '../../services/salemanservices/customerService'
-import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner, FaFileExcel, FaCheckCircle, FaTimes, FaEdit, FaTrash } from 'react-icons/fa'
+import { FaWhatsapp, FaEnvelope, FaMapMarkerAlt, FaSpinner, FaFileExcel, FaCheckCircle, FaTimes, FaEdit, FaTrash, FaCheckSquare } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
@@ -15,6 +15,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
   const [importExcelPreview, setImportExcelPreview] = useState([])
   const [importExcelLoading, setImportExcelLoading] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([])
 
   // Map Excel header (any case, with spaces) to customer field name
   const excelHeaderToField = (header) => {
@@ -361,6 +362,49 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSelectAllCustomers = () => {
+    if (selectedCustomerIds.length === customers.length && customers.length > 0) {
+      setSelectedCustomerIds([])
+    } else {
+      setSelectedCustomerIds(customers.map(c => c._id || c.id))
+    }
+  }
+
+  const handleBulkDeleteCustomers = async () => {
+    if (selectedCustomerIds.length === 0) return
+    const result = await Swal.fire({
+      title: 'Bulk Delete Customers?',
+      html: `Delete <strong>${selectedCustomerIds.length}</strong> selected customer(s)? This cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+    })
+    if (!result.isConfirmed) return
+    setLoading(true)
+    let deleted = 0
+    let failed = 0
+    for (const id of selectedCustomerIds) {
+      const res = await deleteCustomer(id)
+      if (res && res.success) deleted++
+      else failed++
+    }
+    setSelectedCustomerIds([])
+    await loadCustomers()
+    setLoading(false)
+    Swal.fire({
+      icon: failed ? (deleted ? 'warning' : 'error') : 'success',
+      title: failed ? (deleted ? 'Partially done' : 'Delete failed') : 'Deleted',
+      text: deleted ? `Deleted ${deleted} customer(s).${failed ? ` ${failed} failed.` : ''}` : 'Could not delete customers.',
+      confirmButtonColor: '#e9931c',
+    })
+  }
+
+  const toggleCustomerSelection = (id) => {
+    setSelectedCustomerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   // Reload when filters change
@@ -1122,13 +1166,46 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
         </div>
       ) : (
         <>
+          {/* Bulk actions */}
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSelectAllCustomers}
+              className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+            >
+              <FaCheckSquare className="w-4 h-4" />
+              <span>{selectedCustomerIds.length === customers.length ? 'Deselect All' : 'Select All'}</span>
+            </button>
+            {selectedCustomerIds.length > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkDeleteCustomers}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
+              >
+                <FaTrash className="w-4 h-4" />
+                <span>Bulk Delete ({selectedCustomerIds.length})</span>
+              </button>
+            )}
+          </div>
           {/* Mobile Card View */}
           <div className="md:hidden space-y-3">
-            {customers.map((customer) => (
-              <div key={customer._id || customer.id} className="bg-white rounded-lg shadow p-4 border border-gray-200">
+            {customers.map((customer) => {
+              const cid = customer._id || customer.id
+              const isSelected = selectedCustomerIds.includes(cid)
+              return (
+              <div key={cid} className={`bg-white rounded-lg shadow p-4 border ${isSelected ? 'border-[#e9931c] ring-2 ring-[#e9931c] ring-opacity-50' : 'border-gray-200'}`}>
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
+                  <div className="flex-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleCustomerSelection(cid)}
+                      className={`flex-shrink-0 p-1 rounded ${isSelected ? 'text-[#e9931c] bg-orange-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                      title={isSelected ? 'Deselect' : 'Select'}
+                    >
+                      <FaCheckSquare className="w-4 h-4" />
+                    </button>
                     <h3 className="text-base font-semibold text-gray-900 mb-1">{customer.name}</h3>
+                  </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${customer.status === 'Active'
                         ? 'bg-green-100 text-green-800'
@@ -1143,7 +1220,6 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                       )}
                     </div>
                   </div>
-                </div>
                 <div className="space-y-2 text-sm">
                   <div>
                     <p className="text-xs text-gray-500">Email</p>
@@ -1224,7 +1300,8 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                   )}
                 </div>
               </div>
-            ))}
+            )
+            })}
           </div>
 
           {/* Desktop Table View */}
@@ -1233,6 +1310,14 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={customers.length > 0 && selectedCustomerIds.length === customers.length}
+                        onChange={handleSelectAllCustomers}
+                        className="rounded border-gray-300"
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
@@ -1242,8 +1327,20 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {customers.map((customer) => (
-                    <tr key={customer._id || customer.id} className="hover:bg-gray-50">
+                  {customers.map((customer) => {
+                    const cid = customer._id || customer.id
+                    const isSelected = selectedCustomerIds.includes(cid)
+                    return (
+                    <tr key={cid} className={`hover:bg-gray-50 ${isSelected ? 'bg-orange-50' : ''}`}>
+                      <td className="px-4 py-4">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleCustomerSelection(cid)}
+                          className="rounded border-gray-300"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-gray-900">{customer.name}</div>
                       </td>
@@ -1336,7 +1433,7 @@ const CustomerManagement = ({ openAddForm = false, onAddFormClose }) => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  ); })}
                 </tbody>
               </table>
             </div>

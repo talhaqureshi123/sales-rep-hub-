@@ -35,12 +35,7 @@ const ProductCatalog = () => {
     'Office Supplies',
     'Packaging & Shipping',
     'Cleaning & Hygiene',
-    'Home & Kitchen',
-    'Catering Supplies',
-    'Electronics',
-    'Home & Living',
-    'Clothing',
-    'Food & Beverages'
+    'Catering Supplies'
   ]
 
   useEffect(() => {
@@ -510,6 +505,37 @@ const ProductCatalog = () => {
     }
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedProducts.length === 0) return
+    const result = await Swal.fire({
+      title: 'Bulk Delete',
+      html: `Delete <strong>${selectedProducts.length}</strong> selected product(s)? This cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+    })
+    if (!result.isConfirmed) return
+    setLoading(true)
+    let deleted = 0
+    let failed = 0
+    for (const id of selectedProducts) {
+      const res = await deleteProduct(id)
+      if (res && res.success) deleted++
+      else failed++
+    }
+    setSelectedProducts([])
+    await loadProducts()
+    setLoading(false)
+    Swal.fire({
+      icon: failed ? (deleted ? 'warning' : 'error') : 'success',
+      title: failed ? (deleted ? 'Partially done' : 'Delete failed') : 'Deleted',
+      text: deleted ? `Deleted ${deleted} product(s).${failed ? ` ${failed} failed.` : ''}` : 'Could not delete products.',
+      confirmButtonColor: '#e9931c',
+    })
+  }
+
   const productHeaderToField = (header) => {
     if (!header || typeof header !== 'string') return null
     const key = header.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -705,14 +731,24 @@ const ProductCatalog = () => {
         <p className="text-gray-600">
           Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleSelectAll}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
           >
             <FaCheckSquare className="w-4 h-4" />
-            <span>Select</span>
+            <span>{selectedProducts.length === filteredProducts.length && filteredProducts.length > 0 ? 'Deselect All' : 'Select All'}</span>
           </button>
+          {selectedProducts.length > 0 && (
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <FaTrash className="w-4 h-4" />
+              <span>Bulk Delete ({selectedProducts.length})</span>
+            </button>
+          )}
           <button
             onClick={() => setShowImportExcelModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"

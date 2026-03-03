@@ -6,14 +6,20 @@ const VisitTarget = require('../../database/models/VisitTarget');
 const Customer = require('../../database/models/Customer');
 const { sendQuotationEmail } = require('../../utils/emailService');
 
-// Helper function to generate quotation number
-const generateQuotationNumber = async () => {
-  const count = await Quotation.countDocuments();
+// Helper: next quotation number = max in this month + 1 + offset (offset used on retry to avoid same number)
+const generateQuotationNumber = async (offset = 0) => {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
-  const number = String(count + 1).padStart(4, '0');
-  return `QT-${year}${month}-${number}`;
+  const prefix = `QT-${year}${month}-`;
+  const last = await Quotation.findOne({ quotationNumber: new RegExp(`^${prefix}`) })
+    .sort({ quotationNumber: -1 })
+    .select('quotationNumber')
+    .lean();
+  const nextSeq = last
+    ? parseInt(last.quotationNumber.split('-')[2], 10) + 1 + offset
+    : 1 + offset;
+  return `${prefix}${String(nextSeq).padStart(4, '0')}`;
 };
 
 // Get customer names and emails that belong to this salesman (from tasks + visits)
@@ -153,11 +159,13 @@ const createQuotation = async (req, res) => {
     const discountAmount = discount || 0;
     const total = subtotal + taxAmount - discountAmount;
 
-    // Generate quotation number
-    const quotationNumber = await generateQuotationNumber();
-
-    const quotation = await Quotation.create({
-      quotationNumber,
+    // Generate quotation number; on duplicate key retry with next number (offset = attempt)
+    let quotation;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const quotationNumber = await generateQuotationNumber(attempt);
+      try {
+        quotation = await Quotation.create({
+          quotationNumber,
       salesman: req.user._id,
       customerName,
       customerEmail,
@@ -172,7 +180,16 @@ const createQuotation = async (req, res) => {
       notes,
       status: 'Draft',
       createdBy: 'salesman',
-    });
+        });
+        break;
+      } catch (err) {
+        const isDuplicate = err.code === 11000 || (err.code === 11001) || (err.message && err.message.includes('duplicate key'));
+        if (isDuplicate && attempt < 4) {
+          continue; // next attempt will use generateQuotationNumber(attempt+1) = max+2, max+3, etc.
+        }
+        throw err;
+      }
+    }
 
     const populatedQuotation = await Quotation.findById(quotation._id)
       .populate('salesman', 'name email')
@@ -200,7 +217,7 @@ const createQuotation = async (req, res) => {
         // Create deal in HubSpot
         if (contactId) {
           await hubspotService.createDeal({
-            quotationNumber: quotationNumber,
+            quotationNumber: quotation.quotationNumber,
             total: total,
             status: 'Draft',
             notes: notes,
@@ -210,7 +227,7 @@ const createQuotation = async (req, res) => {
           // Add note about quotation
           await hubspotService.createNote(
             contactId,
-            `Quotation ${quotationNumber} created. Amount: ${total}. Items: ${processedItems.length}`,
+            `Quotation ${quotation.quotationNumber} created. Amount: ${total}. Items: ${processedItems.length}`,
             'QUOTATION_CREATED'
           );
         }
@@ -402,6 +419,10 @@ const sendQuotationByEmail = async (req, res) => {
     const result = await sendQuotationEmail(toEmail, {
       quotationNumber: quotation.quotationNumber || '',
       customerName: quotation.customerName || '',
+      billingAddress: quotation.customerAddress || '',
+      deliveryAddress: quotation.customerAddress || '',
+      subtotal: quotation.subtotal ?? quotation.total ?? 0,
+      tax: quotation.tax ?? 0,
       total: quotation.total || 0,
       validUntil: quotation.validUntil || '',
       items,

@@ -398,10 +398,44 @@ const importMyFollowUps = async (req, res) => {
   }
 };
 
+// @desc    Delete own follow-up (task)
+// @route   DELETE /api/salesman/follow-ups/:id
+// @access  Private/Salesman
+const deleteMyFollowUp = async (req, res) => {
+  try {
+    const followUp = await FollowUp.findOne({
+      _id: req.params.id,
+      salesman: req.user._id,
+    });
+    if (!followUp) {
+      return res.status(404).json({
+        success: false,
+        message: "Follow-up not found",
+      });
+    }
+    const visitTargetId =
+      followUp.visitTarget && (followUp.visitTarget._id || followUp.visitTarget);
+    if (visitTargetId) {
+      await VisitTarget.findByIdAndDelete(visitTargetId);
+    }
+    await FollowUp.findByIdAndDelete(req.params.id);
+    res.status(200).json({
+      success: true,
+      message: "Task deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error deleting task",
+    });
+  }
+};
+
 module.exports = {
   getMyFollowUps,
   getMyFollowUp,
   createMyFollowUp,
   updateMyFollowUp,
   importMyFollowUps,
+  deleteMyFollowUp,
 };

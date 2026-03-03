@@ -114,7 +114,7 @@ const geocodeCustomerAddress = async (customer) => {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-      { headers: { Accept: 'application/json', 'User-Agent': 'SalesRepHub/1.0' } }
+      { headers: { Accept: 'application/json', 'User-Agent': 'PracoSupplies/1.0' } }
     )
     const data = await res.json()
     if (Array.isArray(data) && data[0]?.lat != null && data[0]?.lon != null) {
@@ -2065,6 +2065,46 @@ const Tasks = () => {
     )
   }
 
+  const handleBulkDeleteTasks = async () => {
+    if (selectedRows.length === 0) return
+    const result = await Swal.fire({
+      title: 'Bulk Delete Tasks?',
+      html: `Delete <strong>${selectedRows.length}</strong> selected task(s)? This cannot be undone. They will be removed from Admin Tasks, Salesman dashboard, and Sales Tracking.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+    })
+    if (!result.isConfirmed) return
+    let deleted = 0
+    let failed = 0
+    for (const taskId of selectedRows) {
+      const task = tasks.find(t => (t._id || t.id)?.toString() === String(taskId))
+      const isVisitTarget = task?.isVisitTarget || task?.visitTargetId
+      const idToDelete = isVisitTarget ? (task?.visitTargetId || taskId) : taskId
+      try {
+        const res = isVisitTarget ? await deleteVisitTarget(idToDelete) : await deleteFollowUp(idToDelete)
+        if (res?.success) deleted++
+        else failed++
+      } catch (_) {
+        failed++
+      }
+    }
+    setSelectedRows([])
+    if (selectedTask && selectedRows.some(id => (selectedTask._id || selectedTask.id)?.toString() === String(id))) {
+      setSelectedTask(null)
+      setShowTaskDetail(false)
+    }
+    await loadTasks()
+    Swal.fire({
+      icon: failed ? (deleted ? 'warning' : 'error') : 'success',
+      title: failed ? (deleted ? 'Partially done' : 'Delete failed') : 'Deleted',
+      text: deleted ? `Deleted ${deleted} task(s).${failed ? ` ${failed} failed.` : ''}` : 'Could not delete tasks.',
+      confirmButtonColor: '#e9931c',
+    })
+  }
+
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null
     return sortOrder === 'asc'
@@ -2739,9 +2779,19 @@ const Tasks = () => {
             Save view
           </button>
           {selectedRows.length > 0 && (
-            <button className="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
-              Start {selectedRows.length} tasks
-            </button>
+            <>
+              <button className="px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
+                Start {selectedRows.length} tasks
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDeleteTasks}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                <FaTrash className="w-3.5 h-3.5" />
+                Bulk Delete ({selectedRows.length})
+              </button>
+            </>
           )}
           <button className="text-sm text-gray-600 hover:text-gray-800 underline">
             Edit columns

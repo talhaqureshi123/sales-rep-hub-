@@ -52,7 +52,7 @@ const AdminSidebar = ({ activePage, setActivePage, onLogout }) => {
             </svg>
           </div>
           <div className="hidden md:block">
-            <h2 className="text-gray-800 font-bold text-sm">Sales Rep Hub</h2>
+            <h2 className="text-gray-800 font-bold text-sm">Praco Supplies</h2>
             <p className="text-gray-600 text-xs">Admin Dashboard</p>
           </div>
         </div>

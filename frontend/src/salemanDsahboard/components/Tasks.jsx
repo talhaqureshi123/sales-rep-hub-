@@ -27,7 +27,7 @@ import {
   FaVideo,
   FaFileExcel,
 } from 'react-icons/fa'
-import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp, importFollowUps } from '../../services/salemanservices/followUpService'
+import { getMyFollowUps, getMyFollowUp, createFollowUp, updateMyFollowUp, importFollowUps, deleteFollowUp } from '../../services/salemanservices/followUpService'
 import { getMyCustomers, getCustomer } from '../../services/salemanservices/customerService'
 import { getQuotations } from '../../services/salemanservices/quotationService'
 import { createSample } from '../../services/salemanservices/sampleService'
@@ -108,6 +108,7 @@ const Tasks = () => {
   const [importExcelFile, setImportExcelFile] = useState(null)
   const [importExcelPreview, setImportExcelPreview] = useState([])
   const [importExcelLoading, setImportExcelLoading] = useState(false)
+  const [selectedTaskIds, setSelectedTaskIds] = useState([])
 
   const taskHeaderToField = (header) => {
     if (!header || typeof header !== 'string') return null
@@ -1028,6 +1029,51 @@ const Tasks = () => {
     }
   }
 
+  const handleSelectAllTasks = () => {
+    if (selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0) {
+      setSelectedTaskIds([])
+    } else {
+      setSelectedTaskIds(paginatedTasks.map(t => t._id))
+    }
+  }
+
+  const handleSelectTaskRow = (id) => {
+    setSelectedTaskIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const handleBulkDeleteTasks = async () => {
+    if (selectedTaskIds.length === 0) return
+    const result = await Swal.fire({
+      title: 'Bulk Delete Tasks?',
+      html: `Delete <strong>${selectedTaskIds.length}</strong> selected task(s)? This cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+    })
+    if (!result.isConfirmed) return
+    let deleted = 0
+    let failed = 0
+    for (const id of selectedTaskIds) {
+      const res = await deleteFollowUp(id)
+      if (res?.success) deleted++
+      else failed++
+    }
+    setSelectedTaskIds([])
+    if (selectedTask && selectedTaskIds.includes(selectedTask._id)) {
+      setSelectedTask(null)
+      setShowTaskDetail(false)
+    }
+    await loadTasks()
+    Swal.fire({
+      icon: failed ? (deleted ? 'warning' : 'error') : 'success',
+      title: failed ? (deleted ? 'Partially done' : 'Delete failed') : 'Deleted',
+      text: deleted ? `Deleted ${deleted} task(s).${failed ? ` ${failed} failed.` : ''}` : 'Could not delete tasks.',
+      confirmButtonColor: '#e9931c',
+    })
+  }
+
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null
     return sortOrder === 'asc'
@@ -1455,10 +1501,47 @@ const Tasks = () => {
             </p>
           </div>
         ) : (
+          <>
+          {paginatedTasks.length > 0 && (
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <button
+                type="button"
+                onClick={handleSelectAllTasks}
+                className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0}
+                  readOnly
+                  className="rounded border-gray-300"
+                />
+                <span>{selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0 ? 'Deselect All' : 'Select All'}</span>
+              </button>
+              {selectedTaskIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteTasks}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
+                >
+                  <FaTrash className="w-3.5 h-3.5" />
+                  <span>Bulk Delete ({selectedTaskIds.length})</span>
+                </button>
+              )}
+            </div>
+          )}
           <div className="overflow-x-auto scrollbar-hide -mx-2 sm:mx-0 rounded-lg border border-gray-200" style={{ maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full border-collapse" style={{ minWidth: '1400px' }}>
               <thead className="bg-gray-50 border-b" style={{ borderColor: appTheme.border.light }}>
                 <tr>
+                  <th className="px-4 py-3 text-left w-10 sticky left-0 bg-gray-50 z-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskIds.length === paginatedTasks.length && paginatedTasks.length > 0}
+                      onChange={handleSelectAllTasks}
+                      className="rounded border-gray-300"
+                      style={{ accentColor: appTheme.primary?.main || '#e9931c' }}
+                    />
+                  </th>
                   <th
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap"
                     style={{ color: appTheme.text.secondary }}
@@ -1533,6 +1616,15 @@ const Tasks = () => {
                       onClick={() => handleTaskClick(task)}
                       className="hover:bg-blue-50 transition-colors border-b border-gray-100 cursor-pointer"
                     >
+                      <td className="px-4 py-3 sticky left-0 bg-white z-10" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedTaskIds.includes(task._id)}
+                          onChange={() => handleSelectTaskRow(task._id)}
+                          className="rounded border-gray-300"
+                          style={{ accentColor: appTheme.primary?.main || '#e9931c' }}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 whitespace-nowrap group relative">
                           <StatusIcon className="w-4 h-4" style={{ color: statusStyle.text }} />
@@ -1654,6 +1746,7 @@ const Tasks = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

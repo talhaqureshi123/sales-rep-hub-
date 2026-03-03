@@ -14,7 +14,8 @@ import {
   FaEye,
   FaEyeSlash,
   FaYoutube,
-  FaLink
+  FaLink,
+  FaCheckSquare
 } from 'react-icons/fa'
 import { getProductVideos, createProductVideo, updateProductVideo, deleteProductVideo } from '../../services/adminservices/productVideoService'
 import Swal from 'sweetalert2'
@@ -29,18 +30,14 @@ const ProductVideos = () => {
   const [selectedVideo, setSelectedVideo] = useState(null)
   const [showVideoPlayer, setShowVideoPlayer] = useState(false)
   const [playingVideo, setPlayingVideo] = useState(null)
+  const [selectedVideos, setSelectedVideos] = useState([])
 
   const categories = [
     'All',
-    'Pallet Wraps',
-    'Tapes',
-    'Till Rolls',
-    'Mailing Bags',
-    'Gloves',
-    'Bin Bags',
-    'Pizza Boxes',
-    'Thermal Labels',
-    'Other'
+    'Office Supplies',
+    'Packaging & Shipping',
+    'Cleaning & Hygiene',
+    'Catering Supplies'
   ]
 
   const [formData, setFormData] = useState({
@@ -323,6 +320,49 @@ const ProductVideos = () => {
     setShowVideoPlayer(true)
   }
 
+  const handleSelectAllVideos = () => {
+    if (selectedVideos.length === filteredVideos.length) {
+      setSelectedVideos([])
+    } else {
+      setSelectedVideos(filteredVideos.map(v => v._id || v.id))
+    }
+  }
+
+  const handleBulkDeleteVideos = async () => {
+    if (selectedVideos.length === 0) return
+    const result = await Swal.fire({
+      title: 'Bulk Delete',
+      html: `Delete <strong>${selectedVideos.length}</strong> selected video(s)? This cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+    })
+    if (!result.isConfirmed) return
+    setLoading(true)
+    let deleted = 0
+    let failed = 0
+    for (const id of selectedVideos) {
+      const res = await deleteProductVideo(id)
+      if (res && res.success) deleted++
+      else failed++
+    }
+    setSelectedVideos([])
+    await loadVideos()
+    setLoading(false)
+    Swal.fire({
+      icon: failed ? (deleted ? 'warning' : 'error') : 'success',
+      title: failed ? (deleted ? 'Partially done' : 'Delete failed') : 'Deleted',
+      text: deleted ? `Deleted ${deleted} video(s).${failed ? ` ${failed} failed.` : ''}` : 'Could not delete videos.',
+      confirmButtonColor: '#e9931c',
+    })
+  }
+
+  const toggleVideoSelection = (id) => {
+    setSelectedVideos(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   return (
     <div className="w-full">
       {/* Header */}
@@ -378,8 +418,8 @@ const ProductVideos = () => {
       </div>
 
       {/* Action Button and Video Count */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
             <FaVideo className="w-4 h-4 text-gray-600" />
             <span className="text-sm font-medium text-gray-700">
@@ -387,10 +427,30 @@ const ProductVideos = () => {
             </span>
           </div>
           {filteredVideos.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <FaCheckCircle className="w-4 h-4 text-green-500" />
-              <span>{filteredVideos.filter(v => v.isActive).length} Active</span>
-            </div>
+            <>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <FaCheckCircle className="w-4 h-4 text-green-500" />
+                <span>{filteredVideos.filter(v => v.isActive).length} Active</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSelectAllVideos}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <FaCheckSquare className="w-4 h-4" />
+                <span>{selectedVideos.length === filteredVideos.length && filteredVideos.length > 0 ? 'Deselect All' : 'Select All'}</span>
+              </button>
+              {selectedVideos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteVideos}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <FaTrash className="w-4 h-4" />
+                  <span>Bulk Delete ({selectedVideos.length})</span>
+                </button>
+              )}
+            </>
           )}
         </div>
         <button
@@ -429,16 +489,33 @@ const ProductVideos = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredVideos.map((video) => (
+          {filteredVideos.map((video) => {
+            const videoId = video._id || video.id
+            const isSelected = selectedVideos.includes(videoId)
+            return (
             <div
-              key={video._id || video.id}
-              className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-[#e9931c] transition-all duration-300 group"
+              key={videoId}
+              className={`bg-white border-2 rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 group ${isSelected ? 'border-[#e9931c] ring-2 ring-[#e9931c] ring-opacity-50' : 'border-gray-200 hover:border-[#e9931c]'}`}
             >
               {/* Video Thumbnail */}
               <div 
                 className="relative aspect-video bg-gradient-to-br from-gray-100 to-gray-200 cursor-pointer overflow-hidden"
                 onClick={() => handlePlayVideo(video)}
               >
+                {/* Checkbox for bulk select */}
+                <div
+                  className="absolute top-2 left-2 z-10 flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleVideoSelection(videoId)}
+                    className={`p-1.5 rounded-lg shadow-md transition-colors ${isSelected ? 'bg-[#e9931c] text-white' : 'bg-white/90 text-gray-600 hover:bg-gray-200'}`}
+                    title={isSelected ? 'Deselect' : 'Select'}
+                  >
+                    <FaCheckSquare className="w-4 h-4" />
+                  </button>
+                </div>
                 {video.thumbnailUrl ? (
                   <img
                     src={video.thumbnailUrl}
@@ -467,7 +544,7 @@ const ProductVideos = () => {
 
                 {/* Video Type Badge */}
                 {video.videoUrl && (
-                  <div className="absolute top-2 left-2">
+                  <div className="absolute top-2 left-12">
                     {video.videoUrl.includes('youtube.com') || video.videoUrl.includes('youtu.be') ? (
                       <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full flex items-center gap-1">
                         <FaYoutube className="w-3 h-3" />
@@ -564,7 +641,8 @@ const ProductVideos = () => {
                 </div>
               </div>
             </div>
-          ))}
+          )
+          })}
         </div>
       )}
 

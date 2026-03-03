@@ -24,15 +24,10 @@ const ProductVideos = () => {
 
   const categories = [
     'All',
-    'Pallet Wraps',
-    'Tapes',
-    'Till Rolls',
-    'Mailing Bags',
-    'Gloves',
-    'Bin Bags',
-    'Pizza Boxes',
-    'Thermal Labels',
-    'Other'
+    'Office Supplies',
+    'Packaging & Shipping',
+    'Cleaning & Hygiene',
+    'Catering Supplies'
   ]
 
   useEffect(() => {

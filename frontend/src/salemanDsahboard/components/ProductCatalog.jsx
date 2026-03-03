@@ -7,12 +7,7 @@ const categories = [
   'Office Supplies',
   'Packaging & Shipping',
   'Cleaning & Hygiene',
-  'Home & Kitchen',
-  'Catering Supplies',
-  'Electronics',
-  'Home & Living',
-  'Clothing',
-  'Food & Beverages'
+  'Catering Supplies'
 ]
 
 const ProductCatalog = () => {

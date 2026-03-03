@@ -40,9 +40,9 @@ const sendPasswordSetupEmail = async (email, name, token) => {
     const setupUrl = `${config.FRONTEND_URL}/setup-password?token=${token}`;
 
     const mailOptions = {
-      from: `"Sales Rep Hub" <${config.EMAIL_USER}>`,
+      from: `"Praco Supplies" <${config.EMAIL_USER}>`,
       to: email,
-      subject: 'Welcome to Sales Rep Hub - Set Your Password',
+      subject: 'Welcome to Praco Supplies - Set Your Password',
       html: `
         <!DOCTYPE html>
         <html>
@@ -95,7 +95,7 @@ const sendPasswordSetupEmail = async (email, name, token) => {
         <body>
           <div class="container">
             <div class="header">
-              <h1>Welcome to Sales Rep Hub!</h1>
+              <h1>Welcome to Praco Supplies!</h1>
             </div>
             <div class="content">
               <p>Hello ${name},</p>
@@ -113,14 +113,14 @@ const sendPasswordSetupEmail = async (email, name, token) => {
               <p>If you did not expect this email, please ignore it.</p>
             </div>
             <div class="footer">
-              <p>© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} Praco Supplies. All rights reserved.</p>
             </div>
           </div>
         </body>
         </html>
       `,
       text: `
-        Welcome to Sales Rep Hub!
+        Welcome to Praco Supplies!
         
         Hello ${name},
         
@@ -132,7 +132,7 @@ const sendPasswordSetupEmail = async (email, name, token) => {
         
         If you did not expect this email, please ignore it.
         
-        © ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.
+        © ${new Date().getFullYear()} Praco Supplies. All rights reserved.
       `,
     };
 
@@ -169,9 +169,9 @@ const sendOTPEmail = async (email, name, otp) => {
     const transporter = createTransporter();
 
     const mailOptions = {
-      from: `"Sales Rep Hub" <${config.EMAIL_USER}>`,
+      from: `"Praco Supplies" <${config.EMAIL_USER}>`,
       to: email,
-      subject: 'Sales Rep Hub - Password Setup OTP',
+      subject: 'Praco Supplies - Password Setup OTP',
       html: `
         <!DOCTYPE html>
         <html>
@@ -230,7 +230,7 @@ const sendOTPEmail = async (email, name, otp) => {
             </div>
             <div class="content">
               <p>Hello ${name},</p>
-              <p>You are setting up your password for Sales Rep Hub. Please use the OTP below to verify your email:</p>
+              <p>You are setting up your password for Praco Supplies. Please use the OTP below to verify your email:</p>
               
               <div class="otp-box">
                 <p style="margin: 0; color: #666; font-size: 14px;">Your OTP Code</p>
@@ -242,7 +242,7 @@ const sendOTPEmail = async (email, name, otp) => {
               <p>If you did not request this OTP, please ignore this email.</p>
             </div>
             <div class="footer">
-              <p>© ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} Praco Supplies. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -253,7 +253,7 @@ const sendOTPEmail = async (email, name, otp) => {
         
         Hello ${name},
         
-        You are setting up your password for Sales Rep Hub. Please use the OTP below to verify your email:
+        You are setting up your password for Praco Supplies. Please use the OTP below to verify your email:
         
         OTP: ${otp}
         
@@ -261,7 +261,7 @@ const sendOTPEmail = async (email, name, otp) => {
         
         If you did not request this OTP, please ignore this email.
         
-        © ${new Date().getFullYear()} Sales Rep Hub. All rights reserved.
+        © ${new Date().getFullYear()} Praco Supplies. All rights reserved.
       `,
     };
 
@@ -325,10 +325,11 @@ const getOrderEmailTransporter = (fromEmailOverride) => {
 };
 
 // Send order approval notification to admin
-// fromEmailOverride: optional; if set, use as "From" (info@parco.co.uk uses INFO_PROCO_EMAIL+PASS)
+// fromEmailOverride: optional; prefer Praco address (SALES_ORDER_FROM_EMAIL / INFO_PROCO_EMAIL) so From is always info@praco.co.uk
 const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromEmailOverride) => {
   const toEmail = (adminEmail || '').trim();
-  const fromEmail = (fromEmailOverride && fromEmailOverride.trim()) ? fromEmailOverride.trim() : (config.EMAIL_USER || '');
+  const pracoFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || config.EMAIL_USER || '').trim();
+  const fromEmail = pracoFrom || (fromEmailOverride && fromEmailOverride.trim()) || (config.EMAIL_USER || '');
   let mailOptions = null;
   console.log('📤 Sending order email → To:', toEmail, '| From:', fromEmail || '(default)');
   if (!toEmail) {
@@ -336,7 +337,7 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
     return { success: false, error: 'No receiver email configured' };
   }
   try {
-    const transporter = getOrderEmailTransporter(fromEmailOverride);
+    const transporter = getOrderEmailTransporter(fromEmail);
     const {
       soNumber,
       orderDate,
@@ -384,10 +385,16 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
       }
     ).join('');
 
+    // Company letterhead (Estimate-style: Praco Packaging Supplies Ltd.)
+    const companyName = 'Praco Packaging Supplies Ltd.';
+    const companyAddress = '15 Parker Drive\nLeicester\nLeicestershire\nLE4 0JP';
+    const companyEmail = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) ? config.ORDER_NOTIFY_EMAIL.trim() : 'accounts@praco.co.uk';
+    const companyReg = 'Company Registration No. 15112621';
+
     mailOptions = {
-      from: `"Proco Sales" <${fromEmail}>`,
+      from: `"Praco Sales" <${fromEmail}>`,
       to: toEmail,
-      subject: `Proco Sales — Order ${soNumber} - ${customerName || 'Order'}`,
+      subject: `Praco Sales — Order ${soNumber} - ${customerName || 'Order'}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -397,67 +404,76 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
           <style>
             body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 24px; background: #f9fafb; }
             .doc { max-width: 720px; margin: 0 auto; background: #fff; padding: 32px; }
-            .head-row { width: 100%; margin-bottom: 20px; }
-            .head-left { font-size: 14px; color: #374151; }
-            .head-left .company { font-weight: bold; font-size: 16px; color: #111; margin-bottom: 6px; }
-            .head-mid .order-num { font-size: 28px; font-weight: bold; color: #ea580c; }
-            .head-right .logo { font-size: 24px; font-weight: bold; color: #ea580c; }
-            .head-right .tagline { font-size: 12px; color: #6b7280; margin-top: 2px; }
-            .divider { height: 3px; background: #ea580c; margin: 20px 0; }
+            .head-row { width: 100%; margin-bottom: 16px; }
+            .head-left { font-size: 13px; color: #374151; line-height: 1.6; }
+            .head-left .company { font-weight: bold; font-size: 15px; color: #111; margin-bottom: 8px; }
+            .head-mid { text-align: center; }
+            .head-mid .order-label { font-size: 12px; color: #6b7280; margin-bottom: 2px; }
+            .head-mid .order-num { font-size: 28px; font-weight: bold; color: #e85d04; }
+            .head-right { text-align: right; }
+            .head-right .logo { font-size: 26px; font-weight: bold; color: #e85d04; letter-spacing: 0.5px; }
+            .head-right .tagline { font-size: 11px; color: #e85d04; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+            .divider { height: 1px; background: #d1d5db; margin: 16px 0 20px; }
             .col-addr { font-size: 13px; vertical-align: top; padding-right: 16px; }
-            .col-addr .title { font-weight: bold; font-size: 11px; color: #6b7280; margin-bottom: 6px; letter-spacing: 0.5px; }
+            .col-addr .title { font-weight: bold; font-size: 11px; color: #374151; margin-bottom: 6px; letter-spacing: 0.5px; }
             .col-addr .lines { color: #374151; white-space: pre-line; }
-            .box-date { display: inline-block; background: #fb923c; color: #fff; padding: 12px 20px; border-radius: 4px; margin-left: 8px; text-align: center; }
+            .box-date { display: inline-block; background: #ffedd5; color: #9a3412; padding: 12px 20px; border-radius: 4px; text-align: center; margin-bottom: 16px; }
             .box-date .label { font-size: 10px; letter-spacing: 0.5px; }
             .box-date .val { font-size: 14px; font-weight: bold; }
-            .box-total { display: inline-block; background: #ea580c; color: #fff; padding: 14px 24px; border-radius: 4px; margin-left: 8px; text-align: center; }
-            .box-total .label { font-size: 10px; letter-spacing: 0.5px; }
+            .box-total { display: inline-block; background: #ea580c; color: #fff; padding: 14px 24px; border-radius: 4px; text-align: center; margin-top: 4px; }
+            .box-total .label { font-size: 10px; letter-spacing: 0.5px; opacity: 0.95; }
             .box-total .val { font-size: 20px; font-weight: bold; }
-            .tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-            .tbl th { text-align: left; padding: 12px 10px; border-bottom: 2px solid #e5e7eb; font-weight: bold; color: #374151; font-size: 12px; }
+            .box-date-total-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+            .tbl { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+            .tbl th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151; font-size: 12px; }
             .tbl th:nth-child(3), .tbl th:nth-child(4) { text-align: center; }
             .tbl th:nth-child(5), .tbl th:nth-child(6) { text-align: right; }
-            .totals-wrap { text-align: right; margin-top: 24px; margin-bottom: 32px; }
+            .tbl td { border-bottom: 1px solid #e5e7eb; }
+            .totals-wrap { text-align: right; margin-top: 24px; margin-bottom: 28px; }
             .totals-wrap .row { padding: 4px 0; font-size: 14px; }
-            .totals-wrap .total-row { border-top: 2px solid #ea580c; margin-top: 8px; padding-top: 12px; }
+            .totals-wrap .total-row { border-top: 2px solid #ea580c; margin-top: 10px; padding-top: 12px; }
             .totals-wrap .total-row .label { font-weight: bold; color: #ea580c; font-size: 16px; }
             .totals-wrap .total-row .val { font-weight: bold; color: #ea580c; font-size: 20px; }
-            .thanks { font-size: 12px; color: #9ca3af; margin-top: 8px; }
-            .footer-row { margin-top: 40px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
-            .footer-row .under { border-bottom: 1px solid #333; display: inline-block; min-width: 120px; padding-bottom: 2px; }
+            .thanks { font-size: 14px; font-weight: bold; color: #374151; margin-top: 12px; }
+            .footer-row { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
+            .footer-row .under { border-bottom: 1px solid #333; display: inline-block; min-width: 140px; padding-bottom: 2px; margin-left: 4px; }
           </style>
         </head>
         <body>
           <div class="doc">
             <table class="head-row" width="100%" cellpadding="0" cellspacing="0"><tr>
               <td width="38%" class="head-left" style="vertical-align:top">
-                <div class="company">Proco Sales</div>
-                <div class="tagline" style="font-size:12px;color:#6b7280">Proco Supplies</div>
-                <div>Report date: ${reportDateStr}</div>
-                <div>${fromEmail}</div>
+                <div class="company">${companyName}</div>
+                <div style="white-space:pre-line">${companyAddress}</div>
+                <div style="margin-top:6px">${companyEmail}</div>
+                <div style="margin-top:4px;font-size:12px;color:#6b7280">${companyReg}</div>
               </td>
-              <td width="24%" style="text-align:center;vertical-align:top">
-                <div class="head-mid"><div class="order-num">Order ${soNumber || 'N/A'}</div></div>
+              <td width="24%" style="vertical-align:top" class="head-mid">
+                <div class="order-label">Order</div>
+                <div class="order-num">${soNumber || 'N/A'}</div>
               </td>
-              <td width="38%" style="text-align:right;vertical-align:top" class="head-right">
-                <div class="logo">PROCO SALES</div>
-                <div class="tagline">Proco Supplies — Order Report</div>
+              <td width="38%" style="vertical-align:top" class="head-right">
+                <div class="logo">PRACO</div>
+                <div class="tagline">Packaging Supplies</div>
               </td>
             </tr></table>
             <div class="divider"></div>
 
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border-bottom:1px solid #e5e7eb;padding-bottom:20px"><tr>
-              <td width="33%" class="col-addr">
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px"><tr>
+              <td width="30%" class="col-addr">
                 <div class="title">ADDRESS</div>
                 <div class="lines">${customerName || ''}\n${(billingAddress || 'N/A').replace(/\n/g, '\n')}</div>
               </td>
-              <td width="33%" class="col-addr">
+              <td width="30%" class="col-addr">
                 <div class="title">SHIP TO</div>
                 <div class="lines">${customerName || ''}\n${(shipToAddress || 'Same as address').replace(/\n/g, '\n')}</div>
               </td>
-              <td width="34%" style="vertical-align:top;text-align:right">
-                <span class="box-date"><div class="label">DATE</div><div class="val">${orderDateStr}</div></span>
-                <span class="box-total"><div class="label">TOTAL</div><div class="val">£${Number(grandTotal).toFixed(2)}</div></span>
+              <td width="40%" style="vertical-align:top;text-align:right">
+                <div class="box-date-total-wrap">
+                  <span class="box-date"><div class="label">DATE</div><div class="val">${orderDateStr}</div></span>
+                  <div style="height:12px;"></div>
+                  <span class="box-total"><div class="label">TOTAL</div><div class="val">£${Number(grandTotal).toFixed(2)}</div></span>
+                </div>
               </td>
             </tr></table>
 
@@ -495,7 +511,7 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
         </html>
       `,
       text: `
-Proco Sales — Proco Supplies — Order Report
+${companyName} — Order ${soNumber || 'N/A'}
 
 Order Information
 SO Number: ${soNumber || 'N/A'}
@@ -518,17 +534,19 @@ Address: ${billingAddress || 'N/A'}
 Line Items: (see HTML report for table)
 Financial Summary
 Subtotal: £${Number(subtotal).toFixed(2)}
-VAT: £${Number(vat).toFixed(2)}
-Total: £${Number(grandTotal).toFixed(2)}
+VAT TOTAL: £${Number(vat).toFixed(2)}
+TOTAL: £${Number(grandTotal).toFixed(2)}
 
 Payment
 Method: ${paymentMethod || 'N/A'}
 Amount Paid: £${Number(amountPaid).toFixed(2)}
 Balance: £${Number(balanceRemaining).toFixed(2)}
 
+THANK YOU.
+
 —
-Proco Sales & Proco Supplies
-© ${new Date().getFullYear()} Proco Sales / Proco Supplies. All rights reserved.
+${companyName}
+© ${new Date().getFullYear()} ${companyName}. All rights reserved.
       `,
     };
 
@@ -545,12 +563,12 @@ Proco Sales & Proco Supplies
     console.log(`✅ Order email received by server → To: ${toEmail}, MessageID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    if (error.code === 'EAUTH' && config.EMAIL_USER && config.EMAIL_PASS && fromEmailOverride && mailOptions) {
-      console.warn('⚠️ info@ login failed (535). Retrying with EMAIL_USER (Gmail)...');
+    if (error.code === 'EAUTH' && config.EMAIL_USER && config.EMAIL_PASS && fromEmail && mailOptions) {
+      console.warn('⚠️ Praco SMTP login failed (535). Retrying with EMAIL_USER...');
       try {
         const fallbackTransporter = createApprovalEmailTransporter();
         const fallbackFrom = config.EMAIL_USER.trim();
-        const fallbackOptions = { ...mailOptions, from: `"Proco Sales" <${fallbackFrom}>` };
+        const fallbackOptions = { ...mailOptions, from: `"Praco Sales" <${fallbackFrom}>` };
         const info = await fallbackTransporter.sendMail(fallbackOptions);
         console.log(`✅ Order email sent via fallback → To: ${toEmail}, From: ${fallbackFrom}`);
         return { success: true, messageId: info.messageId };
@@ -584,67 +602,7 @@ const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, f
   }
   try {
     const transporter = getOrderEmailTransporter(infoSender);
-    const {
-      quotationNumber = '',
-      customerName = '',
-      total = 0,
-      validUntil = '',
-      items = [],
-      notes = '',
-    } = quotationDetails;
-
-    const validUntilStr = validUntil
-      ? new Date(validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-      : 'N/A';
-    const itemsRows = (Array.isArray(items) ? items : []).map(
-      (item) => `
-        <tr>
-          <td style="padding:8px;border:1px solid #ddd">${item.productName || item.productCode || '-'}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${item.quantity || 0}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.price || 0).toFixed(2)}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.total || 0).toFixed(2)}</td>
-        </tr>`
-    ).join('');
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head><meta charset="utf-8"><style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-        .header { background: #e9931c; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { padding: 24px; background: #f9f9f9; }
-        table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; }
-        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-        th { background: #f0f0f0; }
-        .total { font-size: 18px; font-weight: bold; color: #e9931c; margin-top: 16px; }
-        .footer { text-align: center; margin-top: 24px; color: #666; font-size: 12px; }
-      </style></head>
-      <body>
-        <div class="header"><h1>Sales Rep Hub – Quotation</h1></div>
-        <div class="content">
-          <p>Dear ${customerName || 'Customer'},</p>
-          <p>Please find your quotation below.</p>
-          <p><strong>Quotation #:</strong> ${quotationNumber}</p>
-          <p><strong>Valid until:</strong> ${validUntilStr}</p>
-          <table>
-            <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
-            <tbody>${itemsRows}</tbody>
-          </table>
-          <p class="total">Total: £${Number(total).toFixed(2)}</p>
-          ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
-        </div>
-        <div class="footer">This is an automated email from Sales Rep Hub.</div>
-      </body>
-      </html>`;
-
-    const mailOptions = {
-      from: `"Proco Sales" <${infoSender}>`,
-      to: toEmail,
-      subject: `Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
-      html,
-    };
-    const info = await transporter.sendMail(mailOptions);
-    return { success: true, messageId: info.messageId };
+    return await sendQuotationEmailWithTransporter(transporter, infoSender, toEmail, quotationDetails);
   } catch (error) {
     if (error.code === 'EAUTH' && useFallback) {
       console.warn('⚠️ Quotation: info@ login failed (535). Retrying with EMAIL_USER (Gmail)...');
@@ -665,57 +623,154 @@ function sendQuotationEmailWithTransporter(transporter, fromEmail, toEmail, quot
   const {
     quotationNumber = '',
     customerName = '',
+    billingAddress = '',
+    deliveryAddress = '',
     total = 0,
+    subtotal = 0,
+    tax = 0,
     validUntil = '',
     items = [],
     notes = '',
   } = quotationDetails;
   const validUntilStr = validUntil
-    ? new Date(validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    ? new Date(validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : 'N/A';
+  const companyName = 'Praco Packaging Supplies Ltd.';
+  const companyAddress = '15 Parker Drive\nLeicester\nLeicestershire\nLE4 0JP';
+  const companyEmail = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) ? config.ORDER_NOTIFY_EMAIL.trim() : 'accounts@praco.co.uk';
+  const companyReg = 'Company Registration No. 15112621';
+  const shipToAddr = (deliveryAddress && String(deliveryAddress).trim()) ? deliveryAddress : billingAddress;
   const itemsRows = (Array.isArray(items) ? items : []).map(
-    (item) => `
+    (item) => {
+      const desc = item.productName || item.productCode || '-';
+      return `
       <tr>
-        <td style="padding:8px;border:1px solid #ddd">${item.productName || item.productCode || '-'}</td>
-        <td style="padding:8px;border:1px solid #ddd;text-align:center">${item.quantity || 0}</td>
-        <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.price || 0).toFixed(2)}</td>
-        <td style="padding:8px;border:1px solid #ddd;text-align:right">£${Number(item.total || 0).toFixed(2)}</td>
-      </tr>`
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${item.productCode || '-'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${desc}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">20.0% S</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">${item.quantity || 0}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.price || 0).toFixed(2)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.total || 0).toFixed(2)}</td>
+      </tr>`;
+    }
   ).join('');
   const html = `
     <!DOCTYPE html>
     <html>
-    <head><meta charset="utf-8"><style>
-      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; }
-      .header { background: #e9931c; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-      .content { padding: 24px; background: #f9f9f9; }
-      table { width: 100%; border-collapse: collapse; margin: 16px 0; background: white; }
-      th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-      th { background: #f0f0f0; }
-      .total { font-size: 18px; font-weight: bold; color: #e9931c; margin-top: 16px; }
-      .footer { text-align: center; margin-top: 24px; color: #666; font-size: 12px; }
-    </style></head>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 24px; background: #f9fafb; }
+        .doc { max-width: 720px; margin: 0 auto; background: #fff; padding: 32px; }
+        .head-row { width: 100%; margin-bottom: 16px; }
+        .head-left { font-size: 13px; color: #374151; line-height: 1.6; }
+        .head-left .company { font-weight: bold; font-size: 15px; color: #111; margin-bottom: 8px; }
+        .head-mid { text-align: center; }
+        .head-mid .order-label { font-size: 12px; color: #6b7280; margin-bottom: 2px; }
+        .head-mid .order-num { font-size: 28px; font-weight: bold; color: #e85d04; }
+        .head-right { text-align: right; }
+        .head-right .logo { font-size: 26px; font-weight: bold; color: #e85d04; letter-spacing: 0.5px; }
+        .head-right .tagline { font-size: 11px; color: #e85d04; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+        .divider { height: 1px; background: #d1d5db; margin: 16px 0 20px; }
+        .col-addr { font-size: 13px; vertical-align: top; padding-right: 16px; }
+        .col-addr .title { font-weight: bold; font-size: 11px; color: #374151; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .col-addr .lines { color: #374151; white-space: pre-line; }
+        .box-date { display: inline-block; background: #ffedd5; color: #9a3412; padding: 12px 20px; border-radius: 4px; text-align: center; margin-bottom: 16px; }
+        .box-date .label { font-size: 10px; letter-spacing: 0.5px; }
+        .box-date .val { font-size: 14px; font-weight: bold; }
+        .box-total { display: inline-block; background: #ea580c; color: #fff; padding: 14px 24px; border-radius: 4px; text-align: center; margin-top: 4px; }
+        .box-total .label { font-size: 10px; letter-spacing: 0.5px; opacity: 0.95; }
+        .box-total .val { font-size: 20px; font-weight: bold; }
+        .box-date-total-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+        .tbl { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+        .tbl th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151; font-size: 12px; }
+        .tbl th:nth-child(3), .tbl th:nth-child(4) { text-align: center; }
+        .tbl th:nth-child(5), .tbl th:nth-child(6) { text-align: right; }
+        .tbl td { border-bottom: 1px solid #e5e7eb; }
+        .totals-wrap { text-align: right; margin-top: 24px; margin-bottom: 28px; }
+        .totals-wrap .row { padding: 4px 0; font-size: 14px; }
+        .totals-wrap .total-row { border-top: 2px solid #ea580c; margin-top: 10px; padding-top: 12px; }
+        .totals-wrap .total-row .label { font-weight: bold; color: #ea580c; font-size: 16px; }
+        .totals-wrap .total-row .val { font-weight: bold; color: #ea580c; font-size: 20px; }
+        .thanks { font-size: 14px; font-weight: bold; color: #374151; margin-top: 12px; }
+        .footer-row { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
+        .footer-row .under { border-bottom: 1px solid #333; display: inline-block; min-width: 140px; padding-bottom: 2px; margin-left: 4px; }
+      </style>
+    </head>
     <body>
-      <div class="header"><h1>Sales Rep Hub – Quotation</h1></div>
-      <div class="content">
-        <p>Dear ${customerName || 'Customer'},</p>
-        <p>Please find your quotation below.</p>
-        <p><strong>Quotation #:</strong> ${quotationNumber}</p>
-        <p><strong>Valid until:</strong> ${validUntilStr}</p>
-        <table>
-          <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
-          <tbody>${itemsRows}</tbody>
+      <div class="doc">
+        <table class="head-row" width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td width="38%" class="head-left" style="vertical-align:top">
+            <div class="company">${companyName}</div>
+            <div style="white-space:pre-line">${companyAddress}</div>
+            <div style="margin-top:6px">${companyEmail}</div>
+            <div style="margin-top:4px;font-size:12px;color:#6b7280">${companyReg}</div>
+          </td>
+          <td width="24%" style="vertical-align:top" class="head-mid">
+            <div class="order-label">Quotation</div>
+            <div class="order-num">${quotationNumber || 'N/A'}</div>
+          </td>
+          <td width="38%" style="vertical-align:top" class="head-right">
+            <div class="logo">PRACO</div>
+            <div class="tagline">Packaging Supplies</div>
+          </td>
+        </tr></table>
+        <div class="divider"></div>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px"><tr>
+          <td width="30%" class="col-addr">
+            <div class="title">ADDRESS</div>
+            <div class="lines">${customerName || ''}\n${(billingAddress || '—').replace(/\n/g, '\n')}</div>
+          </td>
+          <td width="30%" class="col-addr">
+            <div class="title">SHIP TO</div>
+            <div class="lines">${customerName || ''}\n${(shipToAddr || '—').replace(/\n/g, '\n')}</div>
+          </td>
+          <td width="40%" style="vertical-align:top;text-align:right">
+            <div class="box-date-total-wrap">
+              <span class="box-date"><div class="label">VALID UNTIL</div><div class="val">${validUntilStr}</div></span>
+              <div style="height:12px;"></div>
+              <span class="box-total"><div class="label">TOTAL</div><div class="val">£${Number(total).toFixed(2)}</div></span>
+            </div>
+          </td>
+        </tr></table>
+
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>DESCRIPTION</th>
+              <th>VAT</th>
+              <th>QTY</th>
+              <th>RATE</th>
+              <th>AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>${itemsRows || '<tr><td colspan="6" style="text-align:center;padding:24px">No items</td></tr>'}</tbody>
         </table>
-        <p class="total">Total: £${Number(total).toFixed(2)}</p>
-        ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+
+        <div class="totals-wrap">
+          <div class="row">SUBTOTAL &nbsp; ${Number(subtotal || total).toFixed(2)}</div>
+          ${Number(tax || 0) > 0 ? `<div class="row">VAT TOTAL &nbsp; ${Number(tax).toFixed(2)}</div>` : ''}
+          <div class="total-row">
+            <span class="label">TOTAL</span> <span class="val">£${Number(total).toFixed(2)}</span>
+          </div>
+          ${notes ? `<p style="text-align:left;margin-top:12px;font-size:13px;color:#6b7280"><strong>Notes:</strong> ${notes}</p>` : ''}
+          <div class="thanks">THANK YOU.</div>
+        </div>
+
+        <table width="100%" cellpadding="0" cellspacing="0" class="footer-row"><tr>
+          <td width="50%">Accepted By <span class="under">&nbsp;</span></td>
+          <td width="50%" style="text-align:right">Accepted Date <span class="under">&nbsp;</span></td>
+        </tr></table>
       </div>
-      <div class="footer">This is an automated email from Sales Rep Hub.</div>
     </body>
     </html>`;
   const mailOptions = {
-    from: `"Proco Sales" <${fromEmail}>`,
+    from: `"Praco Sales" <${fromEmail}>`,
     to: toEmail,
-    subject: `Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
+    subject: `Praco Sales — Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
     html,
   };
   return transporter.sendMail(mailOptions).then((info) => ({ success: true, messageId: info.messageId }));

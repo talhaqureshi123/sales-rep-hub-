@@ -150,24 +150,35 @@ const createQuotation = async (req, res) => {
     const discountAmount = discount || 0;
     const total = subtotal + taxAmount - discountAmount;
 
-    // Generate quotation number
-    const count = await Quotation.countDocuments();
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const number = String(count + 1).padStart(4, '0');
-    const quotationNumber = `QT-${year}${month}-${number}`;
+    // Next quotation number = max in this month + 1 + offset (retry uses offset so we never reuse same number)
+    const getNextQuotationNumber = async (offset = 0) => {
+      const date = new Date();
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const prefix = `QT-${year}${month}-`;
+      const last = await Quotation.findOne({ quotationNumber: new RegExp(`^${prefix}`) })
+        .sort({ quotationNumber: -1 })
+        .select('quotationNumber')
+        .lean();
+      const nextSeq = last
+        ? parseInt(last.quotationNumber.split('-')[2], 10) + 1 + offset
+        : 1 + offset;
+      return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+    };
 
     // Get salesman ID - use provided salesman or current user
     let salesmanId = salesman;
     if (!salesmanId) {
-      // If no salesman provided, try to find one or use current user
       salesmanId = req.user._id;
     }
 
-    const quotation = await Quotation.create({
-      quotationNumber,
-      salesman: salesmanId,
+    let quotation;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const quotationNumber = await getNextQuotationNumber(attempt);
+      try {
+        quotation = await Quotation.create({
+          quotationNumber,
+          salesman: salesmanId,
       customerName,
       customerEmail,
       customerPhone,
@@ -182,7 +193,16 @@ const createQuotation = async (req, res) => {
       status: status || 'Draft',
       createdBy: 'admin',
       createdByUser: req.user._id,
-    });
+        });
+        break;
+      } catch (err) {
+        const isDuplicate = err.code === 11000 || err.code === 11001 || (err.message && err.message.includes('duplicate key'));
+        if (isDuplicate && attempt < 4) {
+          continue;
+        }
+        throw err;
+      }
+    }
 
     const populatedQuotation = await Quotation.findById(quotation._id)
       .populate('salesman', 'name email')
@@ -360,6 +380,10 @@ const sendQuotationByEmail = async (req, res) => {
     const result = await sendQuotationEmail(toEmail, {
       quotationNumber: quotation.quotationNumber || '',
       customerName: quotation.customerName || '',
+      billingAddress: quotation.customerAddress || '',
+      deliveryAddress: quotation.customerAddress || '',
+      subtotal: quotation.subtotal ?? quotation.total ?? 0,
+      tax: quotation.tax ?? 0,
       total: quotation.total || 0,
       validUntil: quotation.validUntil || '',
       items,

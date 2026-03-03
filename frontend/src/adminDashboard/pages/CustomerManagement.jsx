@@ -3,7 +3,7 @@ import { getCustomers, createCustomer, updateCustomer, deleteCustomer, getCustom
 import { getUsers } from '../../services/adminservices/userService'
 import { getHubSpotCustomers, importHubSpotCustomersToDb, pushCustomersToHubSpot } from '../../services/adminservices/hubspotService'
 import LeafletMapView from '../../universalcomponents/LeafletMapView'
-import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash, FaFileExcel } from 'react-icons/fa'
+import { FaUsers, FaSearch, FaFilter, FaTh, FaMapMarkerAlt, FaWhatsapp, FaEnvelope, FaCloudDownloadAlt, FaDatabase, FaTasks, FaFlask, FaShoppingCart, FaBuilding, FaPhone, FaUser, FaTimes, FaCalendarAlt, FaClock, FaCheckCircle, FaExclamationTriangle, FaRoute, FaFileAlt, FaSpinner, FaInfoCircle, FaLink, FaChevronLeft, FaChevronRight, FaArrowUp, FaEdit, FaTrash, FaFileExcel, FaCheckSquare } from 'react-icons/fa'
 import Swal from 'sweetalert2'
 
 const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
@@ -36,6 +36,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
+  // Bulk selection for customers (grid)
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([])
   // My Contacts Only (HubSpot) - Always true for import
   const [myContactsOnly] = useState(true)
   const filterEffectRan = useRef(false)
@@ -462,6 +464,54 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const paginatedCustomerList = useMemo(() =>
+    customers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
+    [customers, currentPage, itemsPerPage]
+  )
+
+  const handleSelectAllCustomers = () => {
+    if (selectedCustomerIds.length === customers.length && customers.length > 0) {
+      setSelectedCustomerIds([])
+    } else {
+      setSelectedCustomerIds(customers.map(c => c._id))
+    }
+  }
+
+  const handleBulkDeleteCustomers = async () => {
+    if (selectedCustomerIds.length === 0) return
+    const result = await Swal.fire({
+      title: 'Bulk Delete Customers?',
+      html: `Delete <strong>${selectedCustomerIds.length}</strong> selected customer(s)? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+    })
+    if (!result.isConfirmed) return
+    setLoading(true)
+    let deleted = 0
+    let failed = 0
+    for (const id of selectedCustomerIds) {
+      const res = await deleteCustomer(id)
+      if (res && res.success) deleted++
+      else failed++
+    }
+    setSelectedCustomerIds([])
+    await loadCustomers()
+    setLoading(false)
+    Swal.fire({
+      icon: failed ? (deleted ? 'warning' : 'error') : 'success',
+      title: failed ? (deleted ? 'Partially done' : 'Delete failed') : 'Deleted',
+      text: deleted ? `Deleted ${deleted} customer(s).${failed ? ` ${failed} failed.` : ''}` : 'Could not delete customers.',
+      confirmButtonColor: '#e9931c',
+    })
+  }
+
+  const toggleCustomerSelection = (id) => {
+    setSelectedCustomerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   // Load customer details with all related data
@@ -1429,8 +1479,8 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
       ) : viewMode === 'grid' ? (
         <>
           {/* Pagination Info and Controls */}
-          <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between mb-4 bg-white p-4 rounded-lg border border-gray-200 flex-wrap gap-3">
+            <div className="flex items-center gap-4 flex-wrap">
               <p className="text-sm text-gray-600">
                 Showing <span className="font-semibold text-gray-800">
                   {customers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
@@ -1454,24 +1504,47 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                   <option value={100}>100</option>
                 </select>
               </div>
+              {customers.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleSelectAllCustomers}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                  >
+                    <FaCheckSquare className="w-4 h-4" />
+                    <span>{selectedCustomerIds.length === customers.length ? 'Deselect All' : 'Select All'}</span>
+                  </button>
+                  {selectedCustomerIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleBulkDeleteCustomers}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                    >
+                      <FaTrash className="w-4 h-4" />
+                      <span>Bulk Delete ({selectedCustomerIds.length})</span>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
           {/* Customer Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((customer) => {
+            {paginatedCustomerList.map((customer) => {
               // Note: assignedSalesman field was removed from Customer model
               // Salesmen are now linked through Tasks/FollowUps, not directly to customers
               // Check if customer has assignedSalesman in raw data (legacy data)
               const salesmanId = customer.assignedSalesman?._id || customer.assignedSalesman
               const salesman = salesmanId ? getSalesmanInfo(salesmanId) : null
+              const isSelected = selectedCustomerIds.includes(customer._id)
               return (
                 <div
                   key={customer._id}
-                  className="bg-white border-2 border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer"
+                  className={`bg-white border-2 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer ${isSelected ? 'border-[#e9931c] ring-2 ring-[#e9931c] ring-opacity-50' : 'border-gray-200'}`}
                   onClick={(e) => {
-                    // Don't trigger if clicking on action buttons or links
-                    if (e.target.closest('button') || e.target.closest('a')) {
+                    // Don't trigger if clicking on action buttons or links or checkbox
+                    if (e.target.closest('button') || e.target.closest('a') || e.target.closest('input')) {
                       return
                     }
                     handleCustomerClick(customer)
@@ -1479,7 +1552,20 @@ const CustomerManagement = ({ initialFilter, onFilterConsumed }) => {
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 text-lg hover:text-[#e9931c] transition-colors">{customer.name || customer.firstName}</h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleCustomerSelection(customer._id)
+                          }}
+                          className={`flex-shrink-0 p-1 rounded ${isSelected ? 'text-[#e9931c] bg-orange-50' : 'text-gray-400 hover:bg-gray-100'}`}
+                          title={isSelected ? 'Deselect' : 'Select'}
+                        >
+                          <FaCheckSquare className="w-4 h-4" />
+                        </button>
+                        <h3 className="font-semibold text-gray-900 text-lg hover:text-[#e9931c] transition-colors">{customer.name || customer.firstName}</h3>
+                      </div>
                       {customer.company && (
                         <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
                           <FaBuilding className="w-3 h-3" />

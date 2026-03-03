@@ -659,7 +659,7 @@ const SalesTracking = () => {
       if (!addr || cancelled) return
       const q = encodeURIComponent(addr)
       fetch(`${NOMINATIM_URL}?q=${q}&format=json&limit=1`, {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'SalesRepHub/1.0' },
+        headers: { 'Accept': 'application/json', 'User-Agent': 'PracoSupplies/1.0' },
       })
         .then(res => res.json())
         .then((results) => {

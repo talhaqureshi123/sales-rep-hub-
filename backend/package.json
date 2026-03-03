@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "Sales Rep Hub Backend API",
+  "description": "Praco Supplies Backend API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

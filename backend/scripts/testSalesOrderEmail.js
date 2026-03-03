@@ -257,7 +257,7 @@ const testSalesOrderEmail = async () => {
     console.log(`   Sales Person: ${orderDetails.salesPerson?.name || orderDetails.salesPerson?.email || 'N/A'}`);
     console.log(`   Invoice: ${orderDetails.invoiceNumber || 'N/A'}`);
 
-    const APPROVAL_EMAIL = 'talhaabid400@gmail.com';
+    const APPROVAL_EMAIL = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'talhaabid400@gmail.com';
     console.log(`\n   📧 Sending to: ${APPROVAL_EMAIL}`);
 
     // ============================================
@@ -265,7 +265,7 @@ const testSalesOrderEmail = async () => {
     // ============================================
     log.section('STEP 5: Sending Email to Admin');
 
-    log.info('Attempting to send email (formal Sales Order Report - Sales Rep Hub)...');
+    log.info('Attempting to send email (formal Sales Order Report - Praco Supplies)...');
     
     const result = await sendOrderApprovalEmail(APPROVAL_EMAIL, 'Admin', orderDetails);
 
@@ -275,7 +275,7 @@ const testSalesOrderEmail = async () => {
       console.log(`   Sent to: ${APPROVAL_EMAIL}`);
       console.log(`   Subject: Sales Order Report: ${orderDetails.soNumber} - ${orderDetails.customerName}`);
       console.log(`\n${colors.green}✅ Check your inbox at ${APPROVAL_EMAIL}${colors.reset}`);
-      console.log(`   Look for formal Sales Order Report (Sales Rep Hub).`);
+      console.log(`   Look for formal Sales Order Report (Praco Supplies).`);
     } else {
       log.error('Email sending failed!');
       console.log(`   Error: ${result.error || 'Unknown error'}`);

@@ -110,7 +110,7 @@ app.get("/api/health", (req, res) => {
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Sales Rep Hub API",
+    message: "Praco Supplies API",
     version: "1.0.0",
   });
 });
