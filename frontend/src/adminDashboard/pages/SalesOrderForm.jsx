@@ -100,7 +100,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
 
     // Section G: Internal Flags
     sendToAdmin: false,
-    sendFromEmail: 'info', // 'info' = info@parco.co.uk sender, 'login' = admin's email
+    sendFromEmail: 'info', // 'info' = info@praco.co.uk sender, 'login' = admin's email
     stockDeducted: false,
     sendToWarehouse: false,
     creditLimitCheck: false,

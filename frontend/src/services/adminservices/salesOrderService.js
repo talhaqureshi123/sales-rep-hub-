@@ -139,7 +139,7 @@ export const deleteSalesOrder = async (orderId) => {
   }
 }
 
-// Approve sales order (options.sendFromEmail: 'login' = admin email, else = info@parco.co.uk)
+// Approve sales order (options.sendFromEmail: 'login' = admin email, else = info@praco.co.uk)
 export const approveSalesOrder = async (orderId, options = {}) => {
   try {
     const token = getAuthToken()
