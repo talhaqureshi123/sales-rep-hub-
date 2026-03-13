@@ -797,7 +797,7 @@ const SalesOrderForm = ({ orderId = null, onClose = null, initialData = null }) 
   return (
     <div className="w-full bg-white rounded-lg shadow-lg">
       <div className="flex items-center justify-between p-6 border-b bg-white">
-        <h1 className="text-3xl font-bold text-gray-900">Proco Sales — Order Form</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Praco Sales — Order Form</h1>
         {onClose && (
           <button
             onClick={onClose}

@@ -375,8 +375,7 @@ const sendQuotationByEmail = async (req, res) => {
       total: item.total || 0,
     }));
 
-    const fromEmail = (req.user && req.user.email) ? req.user.email : null;
-    const fromName = (req.user && req.user.name) ? req.user.name : 'Admin';
+    // Always send from info@praco.co.uk (same as salesman)
     const result = await sendQuotationEmail(toEmail, {
       quotationNumber: quotation.quotationNumber || '',
       customerName: quotation.customerName || '',
@@ -388,7 +387,7 @@ const sendQuotationByEmail = async (req, res) => {
       validUntil: quotation.validUntil || '',
       items,
       notes: quotation.notes || '',
-    }, fromEmail, fromName);
+    }, null, '');
 
     if (!result.success) {
       return res.status(500).json({

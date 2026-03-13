@@ -5,7 +5,7 @@ import QRCameraScanner from '../../components/QRCameraScanner'
 import { getScannedProducts, getProducts } from '../../services/salemanservices/productService'
 import { getQuotations, getQuotation, createQuotation, updateQuotation, deleteQuotation, sendQuotationEmail } from '../../services/salemanservices/quotationService'
 import { getMyCustomers } from '../../services/salemanservices/customerService'
-import { FaQrcode, FaEye, FaEdit, FaTrash, FaDownload, FaWhatsapp, FaEnvelope, FaCloudUploadAlt, FaFileImport } from 'react-icons/fa'
+import { FaQrcode, FaEye, FaEdit, FaTrash, FaDownload, FaWhatsapp, FaEnvelope, FaCloudUploadAlt, FaFileImport, FaFilePdf } from 'react-icons/fa'
 
 const Quotation = () => {
   const [quotations, setQuotations] = useState([])
@@ -917,6 +917,157 @@ const Quotation = () => {
     URL.revokeObjectURL(url)
   }
 
+  // Download quotation as PDF — same format as email (Estimate 3036 / Praco)
+  const handleDownloadQuotePdf = (quote) => {
+    const q = quote
+    const validUntilStr = q.validUntil
+      ? new Date(q.validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : 'N/A'
+    const billingAddress = q.customerAddress || q.billingAddress || ''
+    const deliveryAddress = (q.deliveryAddress && String(q.deliveryAddress).trim()) ? q.deliveryAddress : billingAddress
+    const shipToAddr = deliveryAddress || billingAddress || '—'
+    const total = Number(q.total ?? 0)
+    const subtotal = Number(q.subtotal ?? total)
+    const tax = Number(q.tax ?? 0)
+    const companyName = 'Praco Packaging Supplies Ltd.'
+    const companyAddress = '15 Parker Drive\nLeicester\nLeicestershire\nLE4 0JP'
+    const companyEmail = 'accounts@praco.co.uk'
+    const companyReg = 'Company Registration No. 15112621'
+    const items = q.lineItems || q.items || []
+    const itemsRows = items.map((item) => {
+      const desc = item.productName || item.name || item.productCode || '—'
+      return `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${item.productCode || '—'}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${desc}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">20.0% S</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">${item.quantity || 0}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.unitPrice ?? item.price ?? 0).toFixed(2)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.lineTotal ?? item.total ?? 0).toFixed(2)}</td>
+      </tr>`
+    }).join('')
+
+    const html = `<!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Quotation ${q.quotationNumber || q.quoteNumber || 'N/A'}</title>
+      <style>
+        body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 24px; background: #f9fafb; }
+        .doc { max-width: 720px; margin: 0 auto; background: #fff; padding: 32px; }
+        .head-row { width: 100%; margin-bottom: 16px; }
+        .head-left { font-size: 13px; color: #374151; line-height: 1.6; }
+        .head-left .company { font-weight: bold; font-size: 15px; color: #111; margin-bottom: 8px; }
+        .head-mid { text-align: center; }
+        .head-mid .order-label { font-size: 12px; color: #6b7280; margin-bottom: 2px; }
+        .head-mid .order-num { font-size: 28px; font-weight: bold; color: #e85d04; }
+        .head-right { text-align: right; }
+        .head-right .logo { font-size: 26px; font-weight: bold; color: #e85d04; letter-spacing: 0.5px; }
+        .head-right .tagline { font-size: 11px; color: #e85d04; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+        .divider { height: 1px; background: #d1d5db; margin: 16px 0 20px; }
+        .col-addr { font-size: 13px; vertical-align: top; padding-right: 16px; }
+        .col-addr .title { font-weight: bold; font-size: 11px; color: #374151; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .col-addr .lines { color: #374151; white-space: pre-line; }
+        .box-date { display: inline-block; background: #ffedd5; color: #9a3412; padding: 12px 20px; border-radius: 4px; text-align: center; margin-bottom: 16px; }
+        .box-date .label { font-size: 10px; letter-spacing: 0.5px; }
+        .box-date .val { font-size: 14px; font-weight: bold; }
+        .box-total { display: inline-block; background: #ea580c; color: #fff; padding: 14px 24px; border-radius: 4px; text-align: center; margin-top: 4px; }
+        .box-total .label { font-size: 10px; letter-spacing: 0.5px; opacity: 0.95; }
+        .box-total .val { font-size: 20px; font-weight: bold; }
+        .box-date-total-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+        .tbl { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+        .tbl th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151; font-size: 12px; }
+        .tbl th:nth-child(3), .tbl th:nth-child(4) { text-align: center; }
+        .tbl th:nth-child(5), .tbl th:nth-child(6) { text-align: right; }
+        .tbl td { border-bottom: 1px solid #e5e7eb; }
+        .totals-wrap { text-align: right; margin-top: 24px; margin-bottom: 28px; }
+        .totals-wrap .row { padding: 4px 0; font-size: 14px; }
+        .totals-wrap .total-row { border-top: 2px solid #ea580c; margin-top: 10px; padding-top: 12px; }
+        .totals-wrap .total-row .label { font-weight: bold; color: #ea580c; font-size: 16px; }
+        .totals-wrap .total-row .val { font-weight: bold; color: #ea580c; font-size: 20px; }
+        .thanks { font-size: 14px; font-weight: bold; color: #374151; margin-top: 12px; }
+        .footer-row { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
+        .footer-row .under { border-bottom: 1px solid #333; display: inline-block; min-width: 140px; padding-bottom: 2px; margin-left: 4px; }
+      </style>
+    </head>
+    <body>
+      <div class="doc">
+        <table class="head-row" width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td width="38%" class="head-left" style="vertical-align:top">
+            <div class="company">${companyName}</div>
+            <div style="white-space:pre-line">${companyAddress}</div>
+            <div style="margin-top:6px">${companyEmail}</div>
+            <div style="margin-top:4px;font-size:12px;color:#6b7280">${companyReg}</div>
+          </td>
+          <td width="24%" style="vertical-align:top" class="head-mid">
+            <div class="order-label">Quotation</div>
+            <div class="order-num">${q.quotationNumber || q.quoteNumber || 'N/A'}</div>
+          </td>
+          <td width="38%" style="vertical-align:top" class="head-right">
+            <div class="logo">PRACO</div>
+            <div class="tagline">Packaging Supplies</div>
+          </td>
+        </tr></table>
+        <div class="divider"></div>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px"><tr>
+          <td width="30%" class="col-addr">
+            <div class="title">ADDRESS</div>
+            <div class="lines">${q.customerName || ''}\n${(billingAddress || '—').replace(/\n/g, '\n')}</div>
+          </td>
+          <td width="30%" class="col-addr">
+            <div class="title">SHIP TO</div>
+            <div class="lines">${q.customerName || ''}\n${(shipToAddr || '—').replace(/\n/g, '\n')}</div>
+          </td>
+          <td width="40%" style="vertical-align:top;text-align:right">
+            <div class="box-date-total-wrap">
+              <span class="box-date"><div class="label">VALID UNTIL</div><div class="val">${validUntilStr}</div></span>
+              <div style="height:12px;"></div>
+              <span class="box-total"><div class="label">TOTAL</div><div class="val">£${total.toFixed(2)}</div></span>
+            </div>
+          </td>
+        </tr></table>
+
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>DESCRIPTION</th>
+              <th>VAT</th>
+              <th>QTY</th>
+              <th>RATE</th>
+              <th>AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>${itemsRows || '<tr><td colspan="6" style="text-align:center;padding:24px">No items</td></tr>'}</tbody>
+        </table>
+
+        <div class="totals-wrap">
+          <div class="row">SUBTOTAL &nbsp; ${subtotal.toFixed(2)}</div>
+          ${tax > 0 ? `<div class="row">VAT TOTAL &nbsp; ${tax.toFixed(2)}</div>` : ''}
+          <div class="total-row">
+            <span class="label">TOTAL</span> <span class="val">£${total.toFixed(2)}</span>
+          </div>
+          ${q.notes ? `<p style="text-align:left;margin-top:12px;font-size:13px;color:#6b7280"><strong>Notes:</strong> ${q.notes}</p>` : ''}
+          <div class="thanks">THANK YOU.</div>
+        </div>
+
+        <table width="100%" cellpadding="0" cellspacing="0" class="footer-row"><tr>
+          <td width="50%">Accepted By <span class="under">&nbsp;</span></td>
+          <td width="50%" style="text-align:right">Accepted Date <span class="under">&nbsp;</span></td>
+        </tr></table>
+      </div>
+    </body>
+    </html>`
+    const w = window.open('', '_blank')
+    if (!w) { Swal.fire({ icon: 'warning', title: 'Popup blocked', text: 'Allow popups for this site to download PDF.', confirmButtonColor: '#e9931c' }); return }
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { w.print(); w.close() }, 250)
+  }
+
   // Build WhatsApp message text for a quote (shared for send or copy)
   const getQuoteWhatsAppMessage = (quote) => {
     const qNum = quote.quotationNumber || quote.quoteNumber || ''
@@ -1386,9 +1537,30 @@ const Quotation = () => {
                     </div>
                     <div className="flex gap-2">
                       <button
+                        onClick={() => handleViewQuotation(quote)}
+                        className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                        title="View"
+                      >
+                        <FaEye className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleEditQuotation(quote)}
+                        className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                        title="Edit"
+                      >
+                        <FaEdit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDownloadQuotePdf(quote)}
+                        className="p-2 rounded-lg bg-orange-50 text-[#e9931c] hover:bg-orange-100 transition-colors"
+                        title="Download as PDF"
+                      >
+                        <FaFilePdf className="w-5 h-5" />
+                      </button>
+                      <button
                         onClick={() => handleDownloadQuote(quote)}
                         className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                        title="Download"
+                        title="Download as TXT"
                       >
                         <FaDownload className="w-5 h-5" />
                       </button>
@@ -1405,20 +1577,6 @@ const Quotation = () => {
                         title="Send link to customer email"
                       >
                         <FaEnvelope className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleViewQuotation(quote)}
-                        className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                        title="View"
-                      >
-                        <FaEye className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleEditQuotation(quote)}
-                        className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-                        title="Edit"
-                      >
-                        <FaEdit className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => handleDeleteQuotation(quote)}
@@ -1470,9 +1628,30 @@ const Quotation = () => {
                       <td className="py-3 px-4 align-middle">
                         <div className="flex flex-wrap gap-1">
                           <button
+                            onClick={() => handleViewQuotation(quote)}
+                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                            title="View"
+                          >
+                            <FaEye className="w-5 h-5 text-blue-600" />
+                          </button>
+                          <button
+                            onClick={() => handleEditQuotation(quote)}
+                            className="p-2 rounded-lg hover:bg-green-50 transition-colors"
+                            title="Edit"
+                          >
+                            <FaEdit className="w-5 h-5 text-green-600" />
+                          </button>
+                          <button
+                            onClick={() => handleDownloadQuotePdf(quote)}
+                            className="p-2 rounded-lg hover:bg-orange-50 transition-colors"
+                            title="Download as PDF"
+                          >
+                            <FaFilePdf className="w-5 h-5 text-[#e9931c]" />
+                          </button>
+                          <button
                             onClick={() => handleDownloadQuote(quote)}
                             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                            title="Download"
+                            title="Download as TXT"
                           >
                             <FaDownload className="w-5 h-5 text-gray-600" />
                           </button>
@@ -1489,20 +1668,6 @@ const Quotation = () => {
                             title="Send link to customer email"
                           >
                             <FaEnvelope className="w-5 h-5 text-blue-600" />
-                          </button>
-                          <button
-                            onClick={() => handleViewQuotation(quote)}
-                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                            title="View"
-                          >
-                            <FaEye className="w-5 h-5 text-blue-600" />
-                          </button>
-                          <button
-                            onClick={() => handleEditQuotation(quote)}
-                            className="p-2 rounded-lg hover:bg-green-50 transition-colors"
-                            title="Edit"
-                          >
-                            <FaEdit className="w-5 h-5 text-green-600" />
                           </button>
                           <button
                             onClick={() => handleDeleteQuotation(quote)}
@@ -1860,18 +2025,28 @@ const Quotation = () => {
                 <h3 className="text-xl font-bold text-gray-800">Quotation Details</h3>
                 <p className="text-sm text-gray-600 mt-1">Quote #{viewingQuotation.quoteNumber || viewingQuotation.quotationNumber}</p>
               </div>
-              <button
-                onClick={() => {
-                  setShowViewModal(false)
-                  setViewingQuotation(null)
-                }}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
-                aria-label="Close"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadQuotePdf(viewingQuotation)}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-[#e9931c] hover:bg-orange-50 transition-colors rounded-lg"
+                  title="Download PDF"
+                  aria-label="Download PDF"
+                >
+                  <FaFilePdf className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={() => {
+                    setShowViewModal(false)
+                    setViewingQuotation(null)
+                  }}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2.5 text-gray-400 hover:text-gray-600 transition-colors rounded-lg"
+                  aria-label="Close"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Modal Body – scrollable on mobile, touch-friendly after QR scan */}

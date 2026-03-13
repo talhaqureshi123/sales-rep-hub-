@@ -586,26 +586,27 @@ ${companyName}
   }
 };
 
-// Send quotation — uses INFO_PROCO_* from .env; on 535 fallback to EMAIL_USER (Gmail)
+// Send quotation — always From: info@praco.co.uk when configured (admin + salesman same sender). fromEmail/fromName args are ignored.
 const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, fromName = '') => {
-  const infoSender = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim();
-  const useInfo = infoSender && config.INFO_PROCO_EMAIL && config.INFO_PROCO_PASS;
+  // Always use Praco sender so admin and salesman both send from info@praco.co.uk (never logged-in user email)
+  const useInfo = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL) && config.INFO_PROCO_EMAIL && config.INFO_PROCO_PASS;
   const useFallback = config.EMAIL_USER && config.EMAIL_PASS;
   if (!useInfo && !useFallback) {
     console.warn('Quotation email: Set INFO_PROCO_* or EMAIL_USER+EMAIL_PASS in .env');
     return { success: false, message: 'Email not configured. Set INFO_PROCO_EMAIL and INFO_PROCO_PASS (or EMAIL_USER and EMAIL_PASS) in .env' };
   }
+  const effectiveFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim() || config.EMAIL_USER.trim();
+  console.log('📤 Sending quotation email → To:', toEmail, '| From:', effectiveFrom, '(admin & salesman same sender)');
   if (!useInfo) {
-    // No info@ configured, use EMAIL_USER (Gmail uses its own SMTP)
     const transporter = createApprovalEmailTransporter();
-    return sendQuotationEmailWithTransporter(transporter, config.EMAIL_USER.trim(), toEmail, quotationDetails);
+    return sendQuotationEmailWithTransporter(transporter, effectiveFrom, toEmail, quotationDetails);
   }
   try {
-    const transporter = getOrderEmailTransporter(infoSender);
-    return await sendQuotationEmailWithTransporter(transporter, infoSender, toEmail, quotationDetails);
+    const transporter = getOrderEmailTransporter(effectiveFrom);
+    return await sendQuotationEmailWithTransporter(transporter, effectiveFrom, toEmail, quotationDetails);
   } catch (error) {
     if (error.code === 'EAUTH' && useFallback) {
-      console.warn('⚠️ Quotation: info@ login failed (535). Retrying with EMAIL_USER (Gmail)...');
+      console.warn('⚠️ Quotation: info@ login failed (535). Retrying with EMAIL_USER...');
       try {
         const fallbackTransporter = createApprovalEmailTransporter();
         return await sendQuotationEmailWithTransporter(fallbackTransporter, config.EMAIL_USER.trim(), toEmail, quotationDetails);

@@ -309,7 +309,7 @@ const SalesSubmissions = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">Proco Sales — Orders</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-1">Praco Sales — Orders</h2>
           <p className="text-sm text-gray-600">
             {loading ? 'Loading...' : `${submissions.length} records`}
           </p>
@@ -612,7 +612,7 @@ const SalesSubmissions = () => {
       {showApproveModal && selectedSubmission && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
           <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-md sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
-            <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Approve Order — Proco Sales</h3>
+            <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Approve Order — Praco Sales</h3>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div>
                 <p className="text-sm text-gray-600 mb-2">
@@ -675,7 +675,7 @@ const SalesSubmissions = () => {
       {showRejectModal && selectedSubmission && (
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0">
           <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-md sm:min-h-0 sm:max-h-[90vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
-            <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Reject Order — Proco Sales</h3>
+            <h3 className="flex-shrink-0 text-xl font-bold text-gray-800 p-4 sm:p-6 pb-0">Reject Order — Praco Sales</h3>
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div>
                 <p className="text-sm text-gray-600 mb-2">

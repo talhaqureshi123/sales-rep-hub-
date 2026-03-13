@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle, FaEye } from 'react-icons/fa'
+import { FaShoppingCart, FaSearch, FaFilter, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaTimesCircle, FaEye, FaFilePdf } from 'react-icons/fa'
 import { getSalesOrders, getSalesOrder, deleteSalesOrder, approveSalesOrder, rejectSalesOrder } from '../../services/adminservices/salesOrderService'
 import SalesOrderForm from './SalesOrderForm'
 import Swal from 'sweetalert2'
@@ -209,6 +209,186 @@ const SalesOrders = () => {
     setViewOrderDetail(null)
   }
 
+  // Same format as email (Estimate 3036 / Praco Packaging Supplies Ltd.)
+  const buildOrderPdfHtml = (o) => {
+    if (!o) return ''
+    const orderDateStr = o.orderDate
+      ? new Date(o.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const billingAddress = o.billingAddress || o.customerAddress || ''
+    const deliveryAddress = o.deliveryAddress && String(o.deliveryAddress).trim() ? o.deliveryAddress : billingAddress
+    const shipToAddress = deliveryAddress || billingAddress || 'Same as address'
+    const subtotal = Number(o.subtotal ?? 0)
+    const discount = Number(o.discount ?? 0)
+    const deliveryCharges = Number(o.deliveryCharges ?? 0)
+    const vat = Number(o.vat ?? 0)
+    const grandTotal = Number(o.grandTotal ?? 0)
+    const companyName = 'Praco Packaging Supplies Ltd.'
+    const companyAddress = '15 Parker Drive\nLeicester\nLeicestershire\nLE4 0JP'
+    const companyEmail = 'accounts@praco.co.uk'
+    const companyReg = 'Company Registration No. 15112621'
+
+    const itemsRows = (Array.isArray(o.items) ? o.items : []).map((item) => {
+      const desc = [item.productName || item.name, item.spec].filter(Boolean).join(' | ') || '—'
+      const vatLabel = '20.0% S'
+      return `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${item.productCode || item.sku || '—'}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px">${desc}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">${vatLabel}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:center">${item.quantity || 0}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.unitPrice || 0).toFixed(2)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;text-align:right">${Number(item.lineTotal || 0).toFixed(2)}</td>
+        </tr>`
+    }).join('')
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order ${o.soNumber}</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; line-height: 1.5; color: #333; margin: 0; padding: 24px; background: #f9fafb; }
+    .doc { max-width: 720px; margin: 0 auto; background: #fff; padding: 32px; }
+    .head-row { width: 100%; margin-bottom: 16px; }
+    .head-left { font-size: 13px; color: #374151; line-height: 1.6; }
+    .head-left .company { font-weight: bold; font-size: 15px; color: #111; margin-bottom: 8px; }
+    .head-mid { text-align: center; }
+    .head-mid .order-label { font-size: 12px; color: #6b7280; margin-bottom: 2px; }
+    .head-mid .order-num { font-size: 28px; font-weight: bold; color: #e85d04; }
+    .head-right { text-align: right; }
+    .head-right .logo { font-size: 26px; font-weight: bold; color: #e85d04; letter-spacing: 0.5px; }
+    .head-right .tagline { font-size: 11px; color: #e85d04; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .divider { height: 1px; background: #d1d5db; margin: 16px 0 20px; }
+    .col-addr { font-size: 13px; vertical-align: top; padding-right: 16px; }
+    .col-addr .title { font-weight: bold; font-size: 11px; color: #374151; margin-bottom: 6px; letter-spacing: 0.5px; }
+    .col-addr .lines { color: #374151; white-space: pre-line; }
+    .box-date { display: inline-block; background: #ffedd5; color: #9a3412; padding: 12px 20px; border-radius: 4px; text-align: center; margin-bottom: 16px; }
+    .box-date .label { font-size: 10px; letter-spacing: 0.5px; }
+    .box-date .val { font-size: 14px; font-weight: bold; }
+    .box-total { display: inline-block; background: #ea580c; color: #fff; padding: 14px 24px; border-radius: 4px; text-align: center; margin-top: 4px; }
+    .box-total .label { font-size: 10px; letter-spacing: 0.5px; opacity: 0.95; }
+    .box-total .val { font-size: 20px; font-weight: bold; }
+    .box-date-total-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+    .tbl { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+    .tbl th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #374151; font-size: 12px; }
+    .tbl th:nth-child(3), .tbl th:nth-child(4) { text-align: center; }
+    .tbl th:nth-child(5), .tbl th:nth-child(6) { text-align: right; }
+    .tbl td { border-bottom: 1px solid #e5e7eb; }
+    .totals-wrap { text-align: right; margin-top: 24px; margin-bottom: 28px; }
+    .totals-wrap .row { padding: 4px 0; font-size: 14px; }
+    .totals-wrap .total-row { border-top: 2px solid #ea580c; margin-top: 10px; padding-top: 12px; }
+    .totals-wrap .total-row .label { font-weight: bold; color: #ea580c; font-size: 16px; }
+    .totals-wrap .total-row .val { font-weight: bold; color: #ea580c; font-size: 20px; }
+    .thanks { font-size: 14px; font-weight: bold; color: #374151; margin-top: 12px; }
+    .footer-row { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; }
+    .footer-row .under { border-bottom: 1px solid #333; display: inline-block; min-width: 140px; padding-bottom: 2px; margin-left: 4px; }
+  </style>
+</head>
+<body>
+  <div class="doc">
+    <table class="head-row" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td width="38%" class="head-left" style="vertical-align:top">
+        <div class="company">${companyName}</div>
+        <div style="white-space:pre-line">${companyAddress}</div>
+        <div style="margin-top:6px">${companyEmail}</div>
+        <div style="margin-top:4px;font-size:12px;color:#6b7280">${companyReg}</div>
+      </td>
+      <td width="24%" style="vertical-align:top" class="head-mid">
+        <div class="order-label">Order</div>
+        <div class="order-num">${o.soNumber || 'N/A'}</div>
+      </td>
+      <td width="38%" style="vertical-align:top" class="head-right">
+        <div class="logo">PRACO</div>
+        <div class="tagline">Packaging Supplies</div>
+      </td>
+    </tr></table>
+    <div class="divider"></div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px"><tr>
+      <td width="30%" class="col-addr">
+        <div class="title">ADDRESS</div>
+        <div class="lines">${o.customerName || ''}\n${(billingAddress || 'N/A').replace(/\n/g, '\n')}</div>
+      </td>
+      <td width="30%" class="col-addr">
+        <div class="title">SHIP TO</div>
+        <div class="lines">${o.customerName || ''}\n${(shipToAddress || 'Same as address').replace(/\n/g, '\n')}</div>
+      </td>
+      <td width="40%" style="vertical-align:top;text-align:right">
+        <div class="box-date-total-wrap">
+          <span class="box-date"><div class="label">DATE</div><div class="val">${orderDateStr}</div></span>
+          <div style="height:12px;"></div>
+          <span class="box-total"><div class="label">TOTAL</div><div class="val">£${grandTotal.toFixed(2)}</div></span>
+        </div>
+      </td>
+    </tr></table>
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>DESCRIPTION</th>
+          <th>VAT</th>
+          <th>QTY</th>
+          <th>RATE</th>
+          <th>AMOUNT</th>
+        </tr>
+      </thead>
+      <tbody>${itemsRows || '<tr><td colspan="6" style="text-align:center;padding:24px">No items</td></tr>'}</tbody>
+    </table>
+
+    <div class="totals-wrap">
+      <div class="row">SUBTOTAL &nbsp; ${subtotal.toFixed(2)}</div>
+      ${discount ? `<div class="row">Discount &nbsp; -${discount.toFixed(2)}</div>` : ''}
+      ${deliveryCharges ? `<div class="row">Delivery &nbsp; ${deliveryCharges.toFixed(2)}</div>` : ''}
+      <div class="row">VAT TOTAL &nbsp; ${vat.toFixed(2)}</div>
+      <div class="total-row">
+        <span class="label">TOTAL</span> <span class="val">£${grandTotal.toFixed(2)}</span>
+      </div>
+      <div class="thanks">THANK YOU.</div>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" class="footer-row"><tr>
+      <td width="50%">Accepted By <span class="under">&nbsp;</span></td>
+      <td width="50%" style="text-align:right">Accepted Date <span class="under">&nbsp;</span></td>
+    </tr></table>
+  </div>
+</body>
+</html>`
+  }
+
+  const openOrderPdfWindow = (html) => {
+    const w = window.open('', '_blank')
+    if (!w) { Swal.fire({ icon: 'warning', title: 'Popup blocked', text: 'Allow popups for this site to download PDF.', confirmButtonColor: '#e9931c' }); return }
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { w.print(); w.close() }, 250)
+  }
+
+  const handleDownloadOrderPdf = () => {
+    if (!viewOrderDetail) return
+    const html = buildOrderPdfHtml(viewOrderDetail)
+    if (html) openOrderPdfWindow(html)
+  }
+
+  const handleDownloadOrderPdfById = async (orderId) => {
+    try {
+      const result = await getSalesOrder(orderId)
+      if (result.success && result.data) {
+        const html = buildOrderPdfHtml(result.data)
+        if (html) openOrderPdfWindow(html)
+      } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: result.message || 'Failed to load order', confirmButtonColor: '#e9931c' })
+      }
+    } catch (err) {
+      console.error(err)
+      Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to load order', confirmButtonColor: '#e9931c' })
+    }
+  }
+
+
   const user = JSON.parse(localStorage.getItem('user') || '{}')
   const isAdmin = user.role === 'admin'
   const isSalesman = user.role === 'salesman'
@@ -272,9 +452,9 @@ const SalesOrders = () => {
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <FaShoppingCart className="w-8 h-8 text-[#e9931c]" />
-          <h1 className="text-3xl font-bold text-gray-900">{isSalesman ? 'My Sales Orders' : 'Proco Sales — Orders'}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{isSalesman ? 'My Sales Orders' : 'Praco Sales — Orders'}</h1>
         </div>
-        <p className="text-gray-600">{isSalesman ? 'View and manage your sales orders' : 'Proco Supplies — Create and manage customer orders'}</p>
+        <p className="text-gray-600">{isSalesman ? 'View and manage your sales orders' : 'Praco Supplies — Create and manage customer orders'}</p>
       </div>
 
       {/* Create Order Button - opens full SalesOrderForm */}
@@ -413,7 +593,7 @@ const SalesOrders = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2 flex-wrap items-center">
+                <div className="flex gap-2 flex-wrap items-center flex-shrink-0">
                   {isAdmin && order.approvalStatus === 'Pending' && (
                     <>
                       <button
@@ -449,6 +629,14 @@ const SalesOrders = () => {
                     title="Edit"
                   >
                     <FaEdit className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDownloadOrderPdfById(order._id || order.id)}
+                    className="flex items-center gap-1.5 px-2.5 py-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors border border-orange-200"
+                    title="Download PDF"
+                  >
+                    <FaFilePdf className="w-5 h-5 flex-shrink-0" />
+                    <span className="text-xs font-medium hidden sm:inline">PDF</span>
                   </button>
                   <button
                     onClick={async () => {
@@ -495,10 +683,17 @@ const SalesOrders = () => {
         <div className="fixed inset-0 bg-white sm:bg-black/50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4 md:p-5 overflow-hidden sm:overflow-y-auto overflow-x-hidden min-h-[100dvh] sm:min-h-0 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" aria-modal="true">
           <div className="bg-white w-full h-full max-w-full rounded-none min-h-[100dvh] max-h-[100dvh] sm:w-auto sm:h-auto sm:max-w-3xl md:max-w-4xl lg:max-w-5xl sm:min-h-0 sm:max-h-[90vh] md:max-h-[92vh] lg:max-h-[94vh] sm:rounded-t-xl sm:rounded-xl shadow-xl overflow-hidden flex flex-col flex-shrink-0 self-start sm:static my-0 sm:my-auto">
             <div className="flex-shrink-0 flex items-center justify-between p-4 border-b bg-white">
-              <h3 className="text-xl font-semibold text-gray-800">View Order — Proco Sales</h3>
-              <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              <h3 className="text-xl font-semibold text-gray-800">View Order — Praco Sales</h3>
+              <div className="flex items-center gap-2">
+                {viewOrderDetail && (
+                  <button onClick={handleDownloadOrderPdf} className="p-2 text-[#e9931c] hover:bg-orange-50 rounded-lg transition-colors" title="Download PDF">
+                    <FaFilePdf className="w-5 h-5" />
+                  </button>
+                )}
+                <button onClick={closeViewModal} className="text-gray-500 hover:text-gray-700 p-1">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto p-4" style={{ WebkitOverflowScrolling: 'touch' }}>
               {loadingView ? (
