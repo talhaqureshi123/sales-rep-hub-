@@ -1,3 +1,6 @@
+// Load .env first so EMAIL_PASS/INFO_PROCO_PASS from file override shell env (e.g. placeholder)
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), override: true });
+
 const mongoose = require('mongoose');
 const connectDB = require('../database/connection');
 const SalesOrder = require('../database/models/SalesOrder');
@@ -51,7 +54,7 @@ const testSalesOrderEmail = async () => {
     } else {
       log.warning('EMAIL_USER or EMAIL_PASS not set in backend/.env');
       console.log(`\n${colors.yellow}📝 To fix: Add to backend/.env${colors.reset}`);
-      console.log(`   EMAIL_USER=talhaabid400@gmail.com`);
+      console.log(`   EMAIL_USER=<your-sender-email>`);
       console.log(`   EMAIL_PASS=your-16-char-gmail-app-password`);
       console.log(`\n${colors.cyan}💡 Gmail App Password: Google Account → Security → 2-Step Verification → App passwords\n`);
       if (!hasEnvPass) {
@@ -257,7 +260,7 @@ const testSalesOrderEmail = async () => {
     console.log(`   Sales Person: ${orderDetails.salesPerson?.name || orderDetails.salesPerson?.email || 'N/A'}`);
     console.log(`   Invoice: ${orderDetails.invoiceNumber || 'N/A'}`);
 
-    const APPROVAL_EMAIL = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'talhaabid400@gmail.com';
+    const APPROVAL_EMAIL = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'accounts@praco.co.uk';
     console.log(`\n   📧 Sending to: ${APPROVAL_EMAIL}`);
 
     // ============================================

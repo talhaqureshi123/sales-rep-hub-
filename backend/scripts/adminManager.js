@@ -10,7 +10,7 @@ const email = args[1]; // Email address
 // Admin data
 const adminData = {
   name: 'Admin User',
-  email: email || 'talhaabid400@gmail.com',
+  email: email || process.env.ADMIN_EMAIL || '',
   password: 'Admin@123', // Default password - change this
   role: 'admin',
   status: 'Active',
@@ -161,12 +161,12 @@ if (command === 'create') {
 } else {
   console.log('📋 Admin Manager - Usage Guide\n');
   console.log('Commands:');
-  console.log('  create [email]  - Create a new admin (default: talhaabid400@gmail.com)');
+  console.log('  create [email]  - Create a new admin (or set ADMIN_EMAIL in .env)');
   console.log('  remove <email>  - Remove an admin by email');
   console.log('  list            - List all admins\n');
   console.log('Examples:');
   console.log('  node adminManager.js create');
-  console.log('  node adminManager.js create talhaabid400@gmail.com');
+  console.log('  node adminManager.js create your-admin@example.com');
   console.log('  node adminManager.js remove admin@example.com');
   console.log('  node adminManager.js list\n');
   process.exit(0);

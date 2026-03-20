@@ -34,7 +34,7 @@ console.log(`   Backend Server: http://127.0.0.1:${PORT}`);
 console.log(`   Port Source: ${process.env.PORT ? 'environment (.env)' : config.PORT ? 'config.js' : 'default'}\n`);
 
 // Credentials
-const ADMIN_EMAIL = 'talhaabid400@gmail.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
 const ADMIN_PASSWORD = 'Admin@123';
 const SALESMAN_EMAIL = 'usman.abid00321@gmail.com';
 const SALESMAN_PASSWORD = 'salesman123';

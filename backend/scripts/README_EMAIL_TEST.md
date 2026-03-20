@@ -6,8 +6,8 @@
 
 Add ya update karo:
 ```
-EMAIL_USER=talhaabid400@gmail.com
-EMAIL_PASS=your-16-char-gmail-app-password
+EMAIL_USER=<your-sender-email e.g. info@praco.co.uk>
+EMAIL_PASS=your-smtp-password
 ```
 
 Gmail App Password kaise banaye:
@@ -28,7 +28,7 @@ node testSalesOrderEmail.js
 **Yeh script:**
 - Database connect karegi
 - Ek test sales order create karegi (Approved + Confirmed)
-- Admin ko email bhejegi: `talhaabid400@gmail.com`
+- Admin ko email bhejegi: `ORDER_NOTIFY_EMAIL` from .env (e.g. accounts@praco.co.uk)
 - Subject: `Sales Order Approved: SOxxxxxx`
 
 ---

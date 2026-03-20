@@ -3,10 +3,13 @@
  * Run: node scripts/testQuotationEmail.js
  * Requires: DB with at least one Quotation that has customerEmail (or we use TEST_EMAIL).
  */
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), override: true });
+
 const connectDB = require('../database/connection');
 const Quotation = require('../database/models/Quotation');
 const User = require('../database/models/User');
 const { sendQuotationEmail } = require('../utils/emailService');
+const config = require('../config');
 
 const colors = {
   reset: '\x1b[0m',
@@ -28,7 +31,7 @@ const log = {
   section: (msg) => console.log(`\n${colors.magenta}📋 ${msg}${colors.reset}`),
 };
 
-const TEST_EMAIL = 'talhaabid400@gmail.com';
+const TEST_EMAIL = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'accounts@praco.co.uk';
 
 const testQuotationEmail = async () => {
   try {
@@ -38,7 +41,6 @@ const testQuotationEmail = async () => {
     log.success('Connected to database\n');
 
     log.section('STEP 1: Checking Email Configuration');
-    const config = require('../config');
     const hasPass = config.EMAIL_PASS && config.EMAIL_PASS.trim() && config.EMAIL_PASS !== 'your-app-password-here';
     const hasUser = config.EMAIL_USER && config.EMAIL_USER.trim();
     if (hasUser && hasPass) {

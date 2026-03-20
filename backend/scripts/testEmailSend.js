@@ -4,6 +4,7 @@ const { sendOrderApprovalEmail } = require('../utils/emailService');
 const SalesOrder = require('../database/models/SalesOrder');
 const User = require('../database/models/User');
 const Customer = require('../database/models/Customer');
+const config = require('../config');
 
 // Colors for console output
 const colors = {
@@ -123,7 +124,7 @@ const testEmailSend = async () => {
     console.log(`   Sales Person: ${orderDetails.salesPerson?.name || orderDetails.salesPerson?.email || 'N/A'}`);
     console.log(`   Invoice: ${orderDetails.invoiceNumber || 'N/A'}`);
 
-    const APPROVAL_EMAIL = 'talhaabid400@gmail.com';
+    const APPROVAL_EMAIL = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'accounts@praco.co.uk';
     console.log(`\n   📧 Sending to: ${APPROVAL_EMAIL}`);
 
     // ============================================

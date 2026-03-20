@@ -60,7 +60,7 @@ node scripts/testAllEndpoints.js
 2. **Database connection** - The script will connect to MongoDB using the configuration from `config.js`
 
 3. **Valid test credentials** - Default credentials are:
-   - Admin: `talhaabid400@gmail.com` / `Admin@123`
+   - Admin: Set `ADMIN_EMAIL` in .env (e.g. admin@example.com) / `Admin@123`
    - Salesman: `usman.abid00321@gmail.com` / `salesman123`
 
 ## What Gets Tested
@@ -246,7 +246,7 @@ The script provides:
 
 ℹ️  API Base URL: http://127.0.0.1:4000/api
 ℹ️  Port: 4000
-ℹ️  Admin Email: talhaabid400@gmail.com
+ℹ️  Admin Email: (from ADMIN_EMAIL env)
 ℹ️  Salesman Email: usman.abid00321@gmail.com
 
 ✅ Database connected successfully

@@ -1,14 +1,40 @@
 const nodemailer = require('nodemailer');
+const path = require('path');
+const fs = require('fs');
 const config = require('../config');
+let Resend;
+try {
+  Resend = require('resend').Resend;
+} catch (_) {
+  Resend = null;
+}
+
+// When config has placeholder (e.g. from shell env), read .env file directly so scripts work
+function getPassFromEnvFile(key) {
+  const tryPath = (envPath) => {
+    try {
+      let content = fs.readFileSync(envPath, 'utf8');
+      if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1); // strip BOM
+      content = content.replace(/\r\n/g, '\n');
+      const re = new RegExp(`^\\s*${key}\\s*=\\s*(.+)`, 'm');
+      const m = content.match(re);
+      if (m) return m[1].split('#')[0].replace(/^["']|["']$/g, '').trim().replace(/\s/g, '');
+      return '';
+    } catch (_) {
+      return '';
+    }
+  };
+  const cwd = process.cwd();
+  const base = path.resolve(__dirname, '..');
+  // Try cwd first (when running "node scripts/..." from backend), then utils parent, then cwd/backend
+  return tryPath(path.join(cwd, '.env')) || tryPath(path.join(base, '.env')) || tryPath(path.join(cwd, 'backend', '.env'));
+}
 
 // Create reusable transporter object using SMTP transport
+// Password from .env file first so behaviour is consistent (no "sometimes works")
 const createTransporter = () => {
-  // For Gmail, you need to use an App Password instead of regular password
-  // Enable 2FA and generate App Password from Google Account settings
-  
-  // Remove spaces from App Password (Gmail App Passwords sometimes have spaces)
-  const cleanPassword = config.EMAIL_PASS ? config.EMAIL_PASS.replace(/\s/g, '') : '';
-  
+  let cleanPassword = getPassFromEnvFile('EMAIL_PASS');
+  if (!cleanPassword) cleanPassword = (config.EMAIL_PASS || '').replace(/\s/g, '');
   const secure = config.EMAIL_SECURE ?? (config.EMAIL_PORT === 465);
   return nodemailer.createTransport({
     host: config.EMAIL_HOST,
@@ -275,32 +301,54 @@ const sendOTPEmail = async (email, name, otp) => {
 };
 
 // Create transporter for order approval emails (Admin login option)
-// Gmail (@gmail.com) must use Gmail SMTP; other emails use EMAIL_HOST (e.g. GoDaddy)
+// Always read password from .env file first so behaviour is consistent (no "sometimes works" from load order)
 const createApprovalEmailTransporter = () => {
-  const APPROVAL_EMAIL_USER = config.EMAIL_USER || '';
-  const APPROVAL_EMAIL_PASS = config.EMAIL_PASS || '';
-  const cleanPass = (APPROVAL_EMAIL_PASS || '').replace(/\s/g, '');
+  const APPROVAL_EMAIL_USER = (config.EMAIL_USER || '').trim();
+  let cleanPass = getPassFromEnvFile('EMAIL_PASS');
+  if (!cleanPass) {
+    const raw = (config.EMAIL_PASS || process.env.EMAIL_PASS || '').trim();
+    cleanPass = String(raw || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+  }
+  if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) cleanPass = '';
   const isGmail = (APPROVAL_EMAIL_USER || '').toLowerCase().includes('@gmail.com');
   const host = isGmail ? 'smtp.gmail.com' : (config.EMAIL_HOST || 'smtp.gmail.com');
-  const port = isGmail ? 587 : (config.EMAIL_PORT || 587);
+  const port = isGmail ? 587 : (Number(config.EMAIL_PORT) || 587);
   const secure = config.EMAIL_SECURE ?? (port === 465);
-  return nodemailer.createTransport({
+  const opts = {
     host,
     port,
     secure,
     auth: { user: APPROVAL_EMAIL_USER, pass: cleanPass },
     debug: process.env.NODE_ENV === 'development',
     logger: process.env.NODE_ENV === 'development',
-  });
+  };
+  if (port === 587 && !secure) {
+    opts.requireTLS = true;
+    opts.tls = { rejectUnauthorized: true };
+  }
+  return nodemailer.createTransport(opts);
 };
 
 // When sending from INFO_PROCO / SALES_ORDER_FROM_EMAIL, use INFO_PROCO_* (set in .env)
+// Always read password from .env file first so it works every time (no dependency on load order / process.env)
 const getOrderEmailTransporter = (fromEmailOverride) => {
   const infoEmail = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim().toLowerCase();
   const from = (fromEmailOverride || '').trim().toLowerCase();
-  if (from === infoEmail && config.INFO_PROCO_EMAIL && config.INFO_PROCO_PASS) {
-    const cleanPass = (config.INFO_PROCO_PASS || '').replace(/\s/g, '').trim();
-    const user = (config.INFO_PROCO_EMAIL || '').trim();
+  if (from === infoEmail && config.INFO_PROCO_EMAIL) {
+    let cleanPass = getPassFromEnvFile('INFO_PROCO_PASS');
+    if (!cleanPass) {
+      const rawPass = (config.INFO_PROCO_PASS || process.env.INFO_PROCO_PASS || '').trim();
+      cleanPass = String(rawPass || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+    }
+    // Fallback: same account often has EMAIL_PASS in .env (e.g. info@praco.co.uk)
+    if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
+      cleanPass = getPassFromEnvFile('EMAIL_PASS') || (config.EMAIL_PASS || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+    }
+    if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
+      console.error('❌ INFO_PROCO_PASS (and EMAIL_PASS) missing or placeholder. Set real password in backend/.env');
+      cleanPass = cleanPass || '';
+    }
+    const user = (config.INFO_PROCO_EMAIL || '').trim().toLowerCase();
     const host = (config.INFO_PROCO_HOST || config.EMAIL_HOST || 'smtp.office365.com').trim();
     const port = config.INFO_PROCO_PORT ? Number(config.INFO_PROCO_PORT) : (config.EMAIL_PORT || 587);
     const isOutlook = host.includes('office365.com');
@@ -336,10 +384,9 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
     console.error('❌ Order email skipped: no receiver (ORDER_NOTIFY_EMAIL)');
     return { success: false, error: 'No receiver email configured' };
   }
-  try {
-    const transporter = getOrderEmailTransporter(fromEmail);
-    const {
-      soNumber,
+
+  const {
+    soNumber,
       orderDate,
       orderStatus,
       poNumber,
@@ -361,8 +408,8 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
       paymentMethod,
       amountPaid = 0,
       balanceRemaining = 0,
-    } = orderDetails;
-    const orderDateStr = orderDate
+  } = orderDetails;
+  const orderDateStr = orderDate
       ? new Date(orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
       : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const reportDateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -548,23 +595,41 @@ THANK YOU.
 ${companyName}
 © ${new Date().getFullYear()} ${companyName}. All rights reserved.
       `,
-    };
+  };
 
+  // Resend se bhejo — SMTP/GoDaddy/2FA ki zaroorat nahi, sirf API key
+  if (config.RESEND_API_KEY && Resend) {
     try {
-      await transporter.verify();
-      console.log('✅ Order email: SMTP verified');
-    } catch (verifyError) {
-      console.error('❌ Order email SMTP verify failed:', verifyError.message);
-      console.error('   Code:', verifyError.code, '| Full:', verifyError.toString());
-      throw verifyError;
+      const resend = new Resend(config.RESEND_API_KEY);
+      const { data, error } = await resend.emails.send({
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+      });
+      if (error) {
+        console.error('❌ Resend error:', error.message);
+        return { success: false, error: error.message };
+      }
+      console.log('✅ Order email sent via Resend → To:', toEmail, '| Id:', data?.id);
+      return { success: true, messageId: data?.id };
+    } catch (err) {
+      console.error('❌ Resend failed:', err.message);
+      return { success: false, error: err.message };
     }
+  }
 
+  try {
+    const transporter = getOrderEmailTransporter(fromEmail);
+    await transporter.verify();
+    console.log('✅ Order email: SMTP verified');
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Order email received by server → To: ${toEmail}, MessageID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    if (error.code === 'EAUTH' && config.EMAIL_USER && config.EMAIL_PASS && fromEmail && mailOptions) {
-      console.warn('⚠️ Praco SMTP login failed (535). Retrying with EMAIL_USER...');
+    const canFallback = config.EMAIL_USER && config.EMAIL_PASS && fromEmail && mailOptions;
+    if (canFallback && (error.code === 'EAUTH' || error.code === 'ESOCKET' || String(error.message || '').includes('535'))) {
+      console.warn('⚠️ Order email SMTP failed:', error.message, '— Retrying with EMAIL_USER/EMAIL_PASS...');
       try {
         const fallbackTransporter = createApprovalEmailTransporter();
         const fallbackFrom = config.EMAIL_USER.trim();
@@ -580,47 +645,14 @@ ${companyName}
     console.error('❌ Order approval email failed:', error.message);
     console.error('   To:', toEmail, '| From:', fromEmail);
     if (error.code === 'EAUTH') {
-      console.error('   Fix: Set INFO_PROCO_EMAIL + INFO_PROCO_PASS in .env, or fix GoDaddy password / SMTP.');
+      console.error('   Fix: Set INFO_PROCO_EMAIL + INFO_PROCO_PASS (or EMAIL_USER + EMAIL_PASS) in backend/.env; for GoDaddy use correct password.');
     }
     return { success: false, error: error.message };
   }
 };
 
-// Send quotation — always From: info@praco.co.uk when configured (admin + salesman same sender). fromEmail/fromName args are ignored.
-const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, fromName = '') => {
-  // Always use Praco sender so admin and salesman both send from info@praco.co.uk (never logged-in user email)
-  const useInfo = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL) && config.INFO_PROCO_EMAIL && config.INFO_PROCO_PASS;
-  const useFallback = config.EMAIL_USER && config.EMAIL_PASS;
-  if (!useInfo && !useFallback) {
-    console.warn('Quotation email: Set INFO_PROCO_* or EMAIL_USER+EMAIL_PASS in .env');
-    return { success: false, message: 'Email not configured. Set INFO_PROCO_EMAIL and INFO_PROCO_PASS (or EMAIL_USER and EMAIL_PASS) in .env' };
-  }
-  const effectiveFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim() || config.EMAIL_USER.trim();
-  console.log('📤 Sending quotation email → To:', toEmail, '| From:', effectiveFrom, '(admin & salesman same sender)');
-  if (!useInfo) {
-    const transporter = createApprovalEmailTransporter();
-    return sendQuotationEmailWithTransporter(transporter, effectiveFrom, toEmail, quotationDetails);
-  }
-  try {
-    const transporter = getOrderEmailTransporter(effectiveFrom);
-    return await sendQuotationEmailWithTransporter(transporter, effectiveFrom, toEmail, quotationDetails);
-  } catch (error) {
-    if (error.code === 'EAUTH' && useFallback) {
-      console.warn('⚠️ Quotation: info@ login failed (535). Retrying with EMAIL_USER...');
-      try {
-        const fallbackTransporter = createApprovalEmailTransporter();
-        return await sendQuotationEmailWithTransporter(fallbackTransporter, config.EMAIL_USER.trim(), toEmail, quotationDetails);
-      } catch (fallbackErr) {
-        console.error('Error sending quotation email (fallback failed):', fallbackErr);
-        return { success: false, error: fallbackErr.message };
-      }
-    }
-    console.error('Error sending quotation email:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-function sendQuotationEmailWithTransporter(transporter, fromEmail, toEmail, quotationDetails) {
+// Quotation mail options builder — Resend aur SMTP dono use karte hain
+function buildQuotationMailOptions(fromEmail, toEmail, quotationDetails) {
   const {
     quotationNumber = '',
     customerName = '',
@@ -768,12 +800,79 @@ function sendQuotationEmailWithTransporter(transporter, fromEmail, toEmail, quot
       </div>
     </body>
     </html>`;
-  const mailOptions = {
+  return {
     from: `"Praco Sales" <${fromEmail}>`,
     to: toEmail,
     subject: `Praco Sales — Quotation ${quotationNumber} – ${customerName || 'Quote'}`,
     html,
   };
+}
+
+// Send quotation — same mail path as sales order: same From, same getOrderEmailTransporter (so if order works, quotation works).
+const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, fromName = '') => {
+  const pracoFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || config.EMAIL_USER || '').trim();
+  if (!pracoFrom) {
+    console.warn('Quotation email: Set SALES_ORDER_FROM_EMAIL or INFO_PROCO_EMAIL or EMAIL_USER in .env');
+    return { success: false, message: 'Email not configured. Set same as sales order (SALES_ORDER_FROM_EMAIL / INFO_PROCO_EMAIL).' };
+  }
+  console.log('📤 Sending quotation email → To:', toEmail, '| From:', pracoFrom, '(same as sales order)');
+
+  const mailOpts = buildQuotationMailOptions(pracoFrom, toEmail, quotationDetails);
+
+  // Resend se bhejo — SMTP/2FA ki zaroorat nahi
+  if (config.RESEND_API_KEY && Resend) {
+    try {
+      const resend = new Resend(config.RESEND_API_KEY);
+      const { data, error } = await resend.emails.send({
+        from: mailOpts.from,
+        to: mailOpts.to,
+        subject: mailOpts.subject,
+        html: mailOpts.html,
+      });
+      if (error) {
+        console.error('❌ Resend quotation error:', error.message);
+        return { success: false, error: error.message };
+      }
+      console.log('✅ Quotation email sent via Resend → To:', toEmail, '| Id:', data?.id);
+      return { success: true, messageId: data?.id };
+    } catch (err) {
+      console.error('❌ Resend quotation failed:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  try {
+    const transporter = getOrderEmailTransporter(pracoFrom);
+    try {
+      await transporter.verify();
+      console.log('✅ Quotation email: SMTP verified');
+    } catch (verifyErr) {
+      console.warn('⚠️ Quotation SMTP verify failed:', verifyErr.message);
+    }
+    const result = await sendQuotationEmailWithTransporter(transporter, pracoFrom, toEmail, quotationDetails);
+    return result;
+  } catch (error) {
+    const isAuthError = error.code === 'EAUTH' || (error.message && String(error.message).includes('535'));
+    if (isAuthError && config.EMAIL_USER && config.EMAIL_PASS) {
+      console.warn('⚠️ Praco SMTP login failed (535). Retrying with EMAIL_USER/EMAIL_PASS...');
+      try {
+        const fallbackTransporter = createApprovalEmailTransporter();
+        const fallbackFrom = config.EMAIL_USER.trim();
+        const result = await sendQuotationEmailWithTransporter(fallbackTransporter, fallbackFrom, toEmail, quotationDetails);
+        console.log('✅ Quotation email sent via fallback → To:', toEmail, '| From:', fallbackFrom);
+        return result;
+      } catch (fallbackErr) {
+        console.error('❌ Quotation fallback also failed:', fallbackErr.message);
+        return { success: false, error: fallbackErr.message };
+      }
+    }
+    console.error('Error sending quotation email:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+function sendQuotationEmailWithTransporter(transporter, fromEmail, toEmail, quotationDetails) {
+  const mailOptions = buildQuotationMailOptions(fromEmail, toEmail, quotationDetails);
   return transporter.sendMail(mailOptions).then((info) => ({ success: true, messageId: info.messageId }));
 }
 

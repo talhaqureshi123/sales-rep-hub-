@@ -148,7 +148,7 @@ async function main() {
 
     // Find or create admin user
     let adminUser = await User.findOne({ 
-      email: 'talhaabid400@gmail.com',
+      email: process.env.ADMIN_EMAIL || 'admin@example.com',
       role: 'admin'
     });
 

@@ -284,8 +284,13 @@ const createSalesOrder = async (req, res) => {
           };
 
           const toEmail = config.ORDER_NOTIFY_EMAIL;
-          if (toEmail) await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
-          console.log("✅ Order creation email sent to", toEmail);
+          if (!toEmail) {
+            console.warn("⚠️ Order email skipped: ORDER_NOTIFY_EMAIL not set in .env");
+          } else {
+            const emailResult = await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
+            if (emailResult?.success) console.log("✅ Order creation email sent to", toEmail);
+            else console.error("Order creation email failed:", emailResult?.error || "unknown");
+          }
         } catch (emailError) {
           console.error("Order creation email failed:", emailError?.message || emailError);
           console.error("  To:", config.ORDER_NOTIFY_EMAIL, "| Code:", emailError?.code);
@@ -714,9 +719,12 @@ const approveSalesOrder = async (req, res) => {
           balanceRemaining: populatedOrder.balanceRemaining,
         };
 
-        if (toEmail) {
-          await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
-          console.log("✅ Order approval email sent to", toEmail);
+        if (!toEmail) {
+          console.warn("⚠️ Order approval email skipped: ORDER_NOTIFY_EMAIL not set in .env");
+        } else {
+          const emailResult = await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
+          if (emailResult?.success) console.log("✅ Order approval email sent to", toEmail);
+          else console.error("Error sending order approval email:", emailResult?.error || "unknown");
         }
       } catch (emailError) {
         console.error("Error sending order approval email:", emailError);
