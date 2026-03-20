@@ -1,11 +1,12 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const config = require('../config');
 const { sendPasswordSetupEmail } = require('../utils/emailService');
 
 const testEmail = async () => {
   console.log('\n📧 Sending Test Email...\n');
   
   const testToken = 'test-token-12345';
-  const testEmail = 'usman.abid00321@gmail.com';
+  const testEmail = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'accounts@praco.co.uk';
   const testName = 'Test User';
   
   try {

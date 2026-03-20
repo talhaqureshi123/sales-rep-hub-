@@ -9,9 +9,10 @@ const SalesOrder = require('../database/models/SalesOrder');
 const User = require('../database/models/User');
 const Customer = require('../database/models/Customer');
 const Product = require('../database/models/Product');
+const config = require('../config');
 const { sendOrderApprovalEmail } = require('../utils/emailService');
 
-const APPROVAL_EMAIL = 'iotfiy.solution@gmail.com';
+const APPROVAL_EMAIL = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || 'accounts@praco.co.uk';
 
 const log = {
   ok: (msg) => console.log('✅', msg),

@@ -28,10 +28,10 @@ const config = require('../config');
 const PORT = process.env.PORT || config.PORT || 4000;
 const API_BASE_URL = `http://127.0.0.1:${PORT}/api`;
 
-// Test credentials
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
+// Test credentials — use env or Praco defaults (no personal Gmail)
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@praco.co.uk';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123';
-const SALESMAN_EMAIL = process.env.SALESMAN_EMAIL || 'usman.abid00321@gmail.com';
+const SALESMAN_EMAIL = process.env.SALESMAN_EMAIL || 'salesman@praco.co.uk';
 const SALESMAN_PASSWORD = process.env.SALESMAN_PASSWORD || 'salesman123';
 
 // Test Results

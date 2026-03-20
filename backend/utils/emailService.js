@@ -30,20 +30,28 @@ function getPassFromEnvFile(key) {
   return tryPath(path.join(cwd, '.env')) || tryPath(path.join(base, '.env')) || tryPath(path.join(cwd, 'backend', '.env'));
 }
 
+// Praco-only mail: never use personal Gmail (e.g. talhaabid400@gmail.com) for sending
+const PRACO_ORDER_TO = 'accounts@praco.co.uk';
+const PRACO_ORDER_FROM = 'info@praco.co.uk';
+const isPersonalGmail = (e) => /talhaabid|talhaabid400|talhaabid00321@gmail\.com/i.test((e || '').trim());
+
 // Create reusable transporter object using SMTP transport
-// Password from .env file first so behaviour is consistent (no "sometimes works")
+// Never use personal Gmail (talhaabid400 etc.) — use Praco (INFO_PROCO) if configured
 const createTransporter = () => {
+  let user = (config.EMAIL_USER || '').trim();
   let cleanPassword = getPassFromEnvFile('EMAIL_PASS');
   if (!cleanPassword) cleanPassword = (config.EMAIL_PASS || '').replace(/\s/g, '');
+  if (isPersonalGmail(user)) {
+    user = (config.INFO_PROCO_EMAIL || '').trim() || PRACO_ORDER_FROM;
+    const p = getPassFromEnvFile('INFO_PROCO_PASS') || (config.INFO_PROCO_PASS || '').replace(/\s/g, '');
+    if (p) cleanPassword = p;
+  }
   const secure = config.EMAIL_SECURE ?? (config.EMAIL_PORT === 465);
   return nodemailer.createTransport({
     host: config.EMAIL_HOST,
     port: config.EMAIL_PORT,
     secure, // true for 465 (GoDaddy), false for 587
-    auth: {
-      user: config.EMAIL_USER,
-      pass: cleanPassword,
-    },
+    auth: { user: user || config.EMAIL_USER, pass: cleanPassword },
     debug: process.env.NODE_ENV === 'development',
     logger: process.env.NODE_ENV === 'development',
   });
@@ -52,11 +60,10 @@ const createTransporter = () => {
 // Send password setup email to salesman
 const sendPasswordSetupEmail = async (email, name, token) => {
   try {
-    // Only send email if email is configured
-    if (!config.EMAIL_USER || !config.EMAIL_PASS) {
+    const fromUser = isPersonalGmail(config.EMAIL_USER) ? PRACO_ORDER_FROM : ((config.INFO_PROCO_EMAIL || config.EMAIL_USER || '').trim() || PRACO_ORDER_FROM);
+    if (!fromUser || (!config.EMAIL_PASS && !config.INFO_PROCO_PASS)) {
       console.warn('⚠️ Email not configured. Skipping email send.');
-      console.warn('📧 EMAIL_USER:', config.EMAIL_USER || 'NOT SET');
-      console.warn('🔑 EMAIL_PASS:', config.EMAIL_PASS ? 'SET' : 'NOT SET');
+      console.warn('📧 EMAIL_USER / INFO_PROCO_EMAIL:', fromUser || 'NOT SET');
       console.log('🔗 Password setup link:', `${config.FRONTEND_URL}/setup-password?token=${token}`);
       return { success: false, message: 'Email not configured. Please set EMAIL_USER and EMAIL_PASS in .env file', link: `${config.FRONTEND_URL}/setup-password?token=${token}` };
     }
@@ -66,7 +73,7 @@ const sendPasswordSetupEmail = async (email, name, token) => {
     const setupUrl = `${config.FRONTEND_URL}/setup-password?token=${token}`;
 
     const mailOptions = {
-      from: `"Praco Supplies" <${config.EMAIL_USER}>`,
+      from: `"Praco Supplies" <${fromUser}>`,
       to: email,
       subject: 'Welcome to Praco Supplies - Set Your Password',
       html: `
@@ -185,8 +192,8 @@ const sendPasswordSetupEmail = async (email, name, token) => {
 // Send OTP email for password setup verification
 const sendOTPEmail = async (email, name, otp) => {
   try {
-    // Only send email if email is configured
-    if (!config.EMAIL_USER || !config.EMAIL_PASS) {
+    const fromUser = isPersonalGmail(config.EMAIL_USER) ? PRACO_ORDER_FROM : ((config.INFO_PROCO_EMAIL || config.EMAIL_USER || '').trim() || PRACO_ORDER_FROM);
+    if (!fromUser || (!config.EMAIL_PASS && !config.INFO_PROCO_PASS)) {
       console.warn('Email not configured. Skipping OTP email send.');
       console.log('OTP for', email, ':', otp);
       return { success: true, message: 'Email not configured, but OTP generated' };
@@ -195,7 +202,7 @@ const sendOTPEmail = async (email, name, otp) => {
     const transporter = createTransporter();
 
     const mailOptions = {
-      from: `"Praco Supplies" <${config.EMAIL_USER}>`,
+      from: `"Praco Supplies" <${fromUser}>`,
       to: email,
       subject: 'Praco Supplies - Password Setup OTP',
       html: `
@@ -301,16 +308,23 @@ const sendOTPEmail = async (email, name, otp) => {
 };
 
 // Create transporter for order approval emails (Admin login option)
-// Always read password from .env file first so behaviour is consistent (no "sometimes works" from load order)
+// Never use personal Gmail (talhaabid400 etc.) — use Praco (INFO_PROCO) if configured
 const createApprovalEmailTransporter = () => {
-  const APPROVAL_EMAIL_USER = (config.EMAIL_USER || '').trim();
-  let cleanPass = getPassFromEnvFile('EMAIL_PASS');
-  if (!cleanPass) {
-    const raw = (config.EMAIL_PASS || process.env.EMAIL_PASS || '').trim();
-    cleanPass = String(raw || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+  let user = (config.EMAIL_USER || '').trim();
+  let cleanPass = (config.EMAIL_PASS || process.env.EMAIL_PASS || '').trim();
+  cleanPass = String(cleanPass || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+  if (isPersonalGmail(user)) {
+    user = (config.INFO_PROCO_EMAIL || '').trim() || PRACO_ORDER_FROM;
+    if (isPersonalGmail(user)) user = PRACO_ORDER_FROM;
+    const p = (config.INFO_PROCO_PASS || process.env.INFO_PROCO_PASS || '').trim().replace(/\s/g, '');
+    if (p) cleanPass = p;
+  }
+  if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
+    cleanPass = getPassFromEnvFile('EMAIL_PASS') || '';
   }
   if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) cleanPass = '';
-  const isGmail = (APPROVAL_EMAIL_USER || '').toLowerCase().includes('@gmail.com');
+  if (isPersonalGmail(user)) user = PRACO_ORDER_FROM;
+  const isGmail = (user || '').toLowerCase().includes('@gmail.com');
   const host = isGmail ? 'smtp.gmail.com' : (config.EMAIL_HOST || 'smtp.gmail.com');
   const port = isGmail ? 587 : (Number(config.EMAIL_PORT) || 587);
   const secure = config.EMAIL_SECURE ?? (port === 465);
@@ -318,7 +332,7 @@ const createApprovalEmailTransporter = () => {
     host,
     port,
     secure,
-    auth: { user: APPROVAL_EMAIL_USER, pass: cleanPass },
+    auth: { user: user || config.EMAIL_USER, pass: cleanPass },
     debug: process.env.NODE_ENV === 'development',
     logger: process.env.NODE_ENV === 'development',
   };
@@ -329,27 +343,33 @@ const createApprovalEmailTransporter = () => {
   return nodemailer.createTransport(opts);
 };
 
-// When sending from INFO_PROCO / SALES_ORDER_FROM_EMAIL, use INFO_PROCO_* (set in .env)
-// Always read password from .env file first so it works every time (no dependency on load order / process.env)
+// When sending from INFO_PROCO / SALES_ORDER_FROM_EMAIL, use INFO_PROCO_* (set in .env or deployment env vars)
+// Deployment: kabhi bhi personal Gmail (talhaabid400) se send mat karo — hamesha Praco use karo
 const getOrderEmailTransporter = (fromEmailOverride) => {
+  let from = (fromEmailOverride || '').trim().toLowerCase();
+  if (isPersonalGmail(from)) from = PRACO_ORDER_FROM.toLowerCase();
   const infoEmail = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || '').trim().toLowerCase();
-  const from = (fromEmailOverride || '').trim().toLowerCase();
-  if (from === infoEmail && config.INFO_PROCO_EMAIL) {
-    let cleanPass = getPassFromEnvFile('INFO_PROCO_PASS');
-    if (!cleanPass) {
-      const rawPass = (config.INFO_PROCO_PASS || process.env.INFO_PROCO_PASS || '').trim();
-      cleanPass = String(rawPass || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
-    }
-    // Fallback: same account often has EMAIL_PASS in .env (e.g. info@praco.co.uk)
+  const usePracoBlock = (from === infoEmail || from === PRACO_ORDER_FROM.toLowerCase() || isPersonalGmail(infoEmail));
+  if (usePracoBlock && (config.INFO_PROCO_EMAIL || config.INFO_PROCO_PASS || config.EMAIL_USER || config.EMAIL_PASS)) {
+    let cleanPass = (config.INFO_PROCO_PASS || process.env.INFO_PROCO_PASS || '').trim();
+    cleanPass = String(cleanPass || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
     if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
-      cleanPass = getPassFromEnvFile('EMAIL_PASS') || (config.EMAIL_PASS || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+      cleanPass = getPassFromEnvFile('INFO_PROCO_PASS');
     }
     if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
-      console.error('❌ INFO_PROCO_PASS (and EMAIL_PASS) missing or placeholder. Set real password in backend/.env');
+      cleanPass = (config.EMAIL_PASS || process.env.EMAIL_PASS || '').replace(/\s/g, '').trim().replace(/^["']|["']$/g, '');
+    }
+    if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
+      cleanPass = getPassFromEnvFile('EMAIL_PASS') || '';
+    }
+    if (!cleanPass || /^\*?\s*secret\s*\*?$/i.test(cleanPass)) {
+      console.error('❌ Order email: INFO_PROCO_PASS / EMAIL_PASS missing. Set in backend/.env (local) or in deployment Environment Variables.');
       cleanPass = cleanPass || '';
     }
-    const user = (config.INFO_PROCO_EMAIL || '').trim().toLowerCase();
-    const host = (config.INFO_PROCO_HOST || config.EMAIL_HOST || 'smtp.office365.com').trim();
+    let user = (config.INFO_PROCO_EMAIL || '').trim().toLowerCase();
+    if (isPersonalGmail(user)) user = PRACO_ORDER_FROM;
+    let host = (config.INFO_PROCO_HOST || config.EMAIL_HOST || 'smtp.office365.com').trim();
+    if (user === PRACO_ORDER_FROM && host.includes('gmail.com')) host = 'smtpout.secureserver.net';
     const port = config.INFO_PROCO_PORT ? Number(config.INFO_PROCO_PORT) : (config.EMAIL_PORT || 587);
     const isOutlook = host.includes('office365.com');
     const secure = port === 465;
@@ -375,14 +395,20 @@ const getOrderEmailTransporter = (fromEmailOverride) => {
 // Send order approval notification to admin
 // fromEmailOverride: optional; prefer Praco address (SALES_ORDER_FROM_EMAIL / INFO_PROCO_EMAIL) so From is always info@praco.co.uk
 const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromEmailOverride) => {
-  const toEmail = (adminEmail || '').trim();
-  const pracoFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || config.EMAIL_USER || '').trim();
+  let toEmail = (adminEmail || '').trim();
+  if (!toEmail) toEmail = (process.env.ORDER_NOTIFY_EMAIL || '').trim();
+  if (!toEmail) toEmail = PRACO_ORDER_TO;
+  if (isPersonalGmail(toEmail)) toEmail = PRACO_ORDER_TO;
+  let pracoFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || config.EMAIL_USER || process.env.INFO_PROCO_EMAIL || process.env.EMAIL_USER || '').trim();
+  if (isPersonalGmail(pracoFrom)) pracoFrom = PRACO_ORDER_FROM;
   const fromEmail = pracoFrom || (fromEmailOverride && fromEmailOverride.trim()) || (config.EMAIL_USER || '');
+  let fromEmailSafe = isPersonalGmail(fromEmail) ? PRACO_ORDER_FROM : (fromEmail || '').trim();
+  if (!fromEmailSafe) fromEmailSafe = PRACO_ORDER_FROM;
   let mailOptions = null;
-  console.log('📤 Sending order email → To:', toEmail, '| From:', fromEmail || '(default)');
-  if (!toEmail) {
-    console.error('❌ Order email skipped: no receiver (ORDER_NOTIFY_EMAIL)');
-    return { success: false, error: 'No receiver email configured' };
+  console.log('📤 Sending order email → To:', toEmail, '| From:', fromEmailSafe);
+  if (!fromEmailSafe) {
+    console.error('❌ Order email skipped: SALES_ORDER_FROM_EMAIL / INFO_PROCO_EMAIL / EMAIL_USER not set.');
+    return { success: false, error: 'No sender email configured' };
   }
 
   const {
@@ -439,7 +465,7 @@ const sendOrderApprovalEmail = async (adminEmail, adminName, orderDetails, fromE
     const companyReg = 'Company Registration No. 15112621';
 
     mailOptions = {
-      from: `"Praco Sales" <${fromEmail}>`,
+      from: `"Praco Sales" <${fromEmailSafe}>`,
       to: toEmail,
       subject: `Praco Sales — Order ${soNumber} - ${customerName || 'Order'}`,
       html: `
@@ -620,19 +646,20 @@ ${companyName}
   }
 
   try {
-    const transporter = getOrderEmailTransporter(fromEmail);
+    const transporter = getOrderEmailTransporter(fromEmailSafe);
     await transporter.verify();
     console.log('✅ Order email: SMTP verified');
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Order email received by server → To: ${toEmail}, MessageID: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    const canFallback = config.EMAIL_USER && config.EMAIL_PASS && fromEmail && mailOptions;
+    const canFallback = config.EMAIL_USER && config.EMAIL_PASS && fromEmailSafe && mailOptions;
     if (canFallback && (error.code === 'EAUTH' || error.code === 'ESOCKET' || String(error.message || '').includes('535'))) {
       console.warn('⚠️ Order email SMTP failed:', error.message, '— Retrying with EMAIL_USER/EMAIL_PASS...');
       try {
         const fallbackTransporter = createApprovalEmailTransporter();
-        const fallbackFrom = config.EMAIL_USER.trim();
+        let fallbackFrom = (config.EMAIL_USER || '').trim();
+        if (isPersonalGmail(fallbackFrom)) fallbackFrom = PRACO_ORDER_FROM;
         const fallbackOptions = { ...mailOptions, from: `"Praco Sales" <${fallbackFrom}>` };
         const info = await fallbackTransporter.sendMail(fallbackOptions);
         console.log(`✅ Order email sent via fallback → To: ${toEmail}, From: ${fallbackFrom}`);
@@ -643,7 +670,7 @@ ${companyName}
       }
     }
     console.error('❌ Order approval email failed:', error.message);
-    console.error('   To:', toEmail, '| From:', fromEmail);
+    console.error('   To:', toEmail, '| From:', fromEmailSafe);
     if (error.code === 'EAUTH') {
       console.error('   Fix: Set INFO_PROCO_EMAIL + INFO_PROCO_PASS (or EMAIL_USER + EMAIL_PASS) in backend/.env; for GoDaddy use correct password.');
     }
@@ -809,8 +836,10 @@ function buildQuotationMailOptions(fromEmail, toEmail, quotationDetails) {
 }
 
 // Send quotation — same mail path as sales order: same From, same getOrderEmailTransporter (so if order works, quotation works).
+// Deployment: kabhi bhi talhaabid400 se mat bhejo — hamesha info@praco.co.uk
 const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, fromName = '') => {
-  const pracoFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || config.EMAIL_USER || '').trim();
+  let pracoFrom = (config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL || config.EMAIL_USER || process.env.SALES_ORDER_FROM_EMAIL || process.env.INFO_PROCO_EMAIL || process.env.EMAIL_USER || '').trim();
+  if (isPersonalGmail(pracoFrom) || !pracoFrom) pracoFrom = PRACO_ORDER_FROM;
   if (!pracoFrom) {
     console.warn('Quotation email: Set SALES_ORDER_FROM_EMAIL or INFO_PROCO_EMAIL or EMAIL_USER in .env');
     return { success: false, message: 'Email not configured. Set same as sales order (SALES_ORDER_FROM_EMAIL / INFO_PROCO_EMAIL).' };
@@ -857,7 +886,8 @@ const sendQuotationEmail = async (toEmail, quotationDetails, fromEmail = null, f
       console.warn('⚠️ Praco SMTP login failed (535). Retrying with EMAIL_USER/EMAIL_PASS...');
       try {
         const fallbackTransporter = createApprovalEmailTransporter();
-        const fallbackFrom = config.EMAIL_USER.trim();
+        let fallbackFrom = (config.EMAIL_USER || '').trim();
+        if (isPersonalGmail(fallbackFrom)) fallbackFrom = PRACO_ORDER_FROM;
         const result = await sendQuotationEmailWithTransporter(fallbackTransporter, fallbackFrom, toEmail, quotationDetails);
         console.log('✅ Quotation email sent via fallback → To:', toEmail, '| From:', fallbackFrom);
         return result;

@@ -1,10 +1,11 @@
 const path = require("path");
 const fs = require("fs");
 
-// Load .env from backend root.
+// Load .env from backend root. override: true so .env wins over shell/env (e.g. placeholder "* secret *")
 const envPath = path.join(__dirname, ".env");
 require("dotenv").config({
   path: envPath,
+  override: true,
 });
 
 const normalizeSecret = (value) => {
@@ -22,8 +23,7 @@ module.exports = {
   MONGODB_URI:
     process.env.USE_LOCAL_MONGO === "1" || process.env.USE_LOCAL_MONGO === "true"
       ? (process.env.MONGODB_URI_LOCAL || "mongodb://localhost:27017/salesraphub")
-      : (process.env.MONGODB_URI ||
-          "mongodb+srv://talhaabid400:1234567890@cluster0.oaruawd.mongodb.net/salesraphub"),
+      : (process.env.MONGODB_URI || "mongodb://localhost:27017/salesraphub"),
   JWT_SECRET: process.env.JWT_SECRET || "your-secret-key-change-in-production",
   JWT_EXPIRE: process.env.JWT_EXPIRE || "7d",
   NODE_ENV: process.env.NODE_ENV || "development",
@@ -40,8 +40,12 @@ module.exports = {
   INFO_PROCO_PORT: (process.env.INFO_PROCO_PORT || "").trim(),
   // Order notification receiver — set ORDER_NOTIFY_EMAIL in .env
   ORDER_NOTIFY_EMAIL: normalizeSecret(process.env.ORDER_NOTIFY_EMAIL) || "",
-  // Order/quotation "From" address — set SALES_ORDER_FROM_EMAIL in .env (uses INFO_PROCO_* for SMTP)
+  // Order "From" address — set SALES_ORDER_FROM_EMAIL in .env (uses INFO_PROCO_* for SMTP)
   SALES_ORDER_FROM_EMAIL: normalizeSecret(process.env.SALES_ORDER_FROM_EMAIL) || normalizeSecret(process.env.INFO_PROCO_EMAIL) || "",
+  // Quotation "From" address — same as order by default; set QUOTATION_FROM_EMAIL in .env to override
+  QUOTATION_FROM_EMAIL: normalizeSecret(process.env.QUOTATION_FROM_EMAIL) || normalizeSecret(process.env.SALES_ORDER_FROM_EMAIL) || normalizeSecret(process.env.INFO_PROCO_EMAIL) || "",
+  // Resend API — agar set ho to order/quotation Resend se bhejenge (SMTP/GoDaddy/2FA ki zaroorat nahi)
+  RESEND_API_KEY: normalizeSecret(process.env.RESEND_API_KEY) || "",
   FRONTEND_URL: process.env.FRONTEND_URL || "https://salesrephub.iotfiysolutions.com",
   // HubSpot Configuration
   // Prefer HUBSPOT_TOKEN (custom name), then HUBSPOT_ACCESS_TOKEN, then HUBSPOT_API_KEY (legacy)

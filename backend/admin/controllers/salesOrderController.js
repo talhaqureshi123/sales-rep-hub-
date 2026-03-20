@@ -6,6 +6,21 @@ const config = require("../../config");
 const { sendOrderApprovalEmail } = require("../../utils/emailService");
 const { notifyUser } = require("../../sockets/notificationSocket");
 
+// Deployment: env mein agar talhaabid wala email set hai toh bhi hamesha Praco use karo
+const ORDER_TO_PRACO = "accounts@praco.co.uk";
+const ORDER_FROM_PRACO = "info@praco.co.uk";
+const forcePracoEmail = (email) => {
+  const e = (email || "").trim().toLowerCase();
+  if (!e) return ORDER_TO_PRACO;
+  if (/talhaabid|talhaabid400|talhaabid00321@gmail\.com/.test(e)) return ORDER_TO_PRACO;
+  return email.trim();
+};
+const forcePracoFrom = (email) => {
+  const e = (email || "").trim().toLowerCase();
+  if (!e || /talhaabid|talhaabid400|talhaabid00321@gmail\.com/.test(e)) return ORDER_FROM_PRACO;
+  return email.trim();
+};
+
 // @desc    Get all sales orders
 // @route   GET /api/admin/sales-orders
 // @access  Private/Admin, Salesman
@@ -252,7 +267,7 @@ const createSalesOrder = async (req, res) => {
     ) {
       (async () => {
         try {
-          const fromEmailForNotification = config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL;
+          const fromEmailForNotification = forcePracoFrom(config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL);
           const populatedOrder = await SalesOrder.findById(order._id)
             .populate("salesPerson", "name email")
             .populate("customer", "firstName lastName email phone")
@@ -283,14 +298,13 @@ const createSalesOrder = async (req, res) => {
             balanceRemaining: populatedOrder.balanceRemaining,
           };
 
-          const toEmail = config.ORDER_NOTIFY_EMAIL;
-          if (!toEmail) {
-            console.warn("⚠️ Order email skipped: ORDER_NOTIFY_EMAIL not set in .env");
-          } else {
-            const emailResult = await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
-            if (emailResult?.success) console.log("✅ Order creation email sent to", toEmail);
-            else console.error("Order creation email failed:", emailResult?.error || "unknown");
-          }
+          // Deployment: use process.env at runtime; force Praco if env has personal Gmail
+          let toEmail = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || (process.env.ORDER_NOTIFY_EMAIL && process.env.ORDER_NOTIFY_EMAIL.trim()) || ORDER_TO_PRACO;
+          toEmail = forcePracoEmail(toEmail);
+          const fromForEmail = forcePracoFrom(fromEmailForNotification);
+          const emailResult = await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromForEmail);
+          if (emailResult?.success) console.log("✅ Order creation email sent to", toEmail);
+          else console.error("Order creation email failed:", emailResult?.error || "unknown");
         } catch (emailError) {
           console.error("Order creation email failed:", emailError?.message || emailError);
           console.error("  To:", config.ORDER_NOTIFY_EMAIL, "| Code:", emailError?.code);
@@ -685,8 +699,9 @@ const approveSalesOrder = async (req, res) => {
 
     // Sales targets are updated only when order is marked Delivered (see updateSalesOrder).
 
-    const fromEmailForNotification = config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL;
-    const toEmail = config.ORDER_NOTIFY_EMAIL;
+    const fromEmailForNotification = forcePracoFrom(config.SALES_ORDER_FROM_EMAIL || config.INFO_PROCO_EMAIL);
+    let toEmail = (config.ORDER_NOTIFY_EMAIL && config.ORDER_NOTIFY_EMAIL.trim()) || (process.env.ORDER_NOTIFY_EMAIL && process.env.ORDER_NOTIFY_EMAIL.trim()) || ORDER_TO_PRACO;
+    toEmail = forcePracoEmail(toEmail);
     (async () => {
       try {
         const populatedOrder = await SalesOrder.findById(order._id)
@@ -719,13 +734,9 @@ const approveSalesOrder = async (req, res) => {
           balanceRemaining: populatedOrder.balanceRemaining,
         };
 
-        if (!toEmail) {
-          console.warn("⚠️ Order approval email skipped: ORDER_NOTIFY_EMAIL not set in .env");
-        } else {
-          const emailResult = await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
-          if (emailResult?.success) console.log("✅ Order approval email sent to", toEmail);
-          else console.error("Error sending order approval email:", emailResult?.error || "unknown");
-        }
+        const emailResult = await sendOrderApprovalEmail(toEmail, "Admin", orderDetails, fromEmailForNotification);
+        if (emailResult?.success) console.log("✅ Order approval email sent to", toEmail);
+        else console.error("Error sending order approval email:", emailResult?.error || "unknown");
       } catch (emailError) {
         console.error("Error sending order approval email:", emailError);
       }

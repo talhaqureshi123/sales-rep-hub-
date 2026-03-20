@@ -30,11 +30,11 @@ const config = require('../config');
 const BASE_URL = `http://localhost:${config.PORT || 4000}`;
 const API_BASE = `${BASE_URL}/api`;
 
-// Test credentials (update these with actual test credentials)
-const ADMIN_EMAIL = 'talhaabid00321@gmail.com'; // Update with actual admin email
-const ADMIN_PASSWORD = 'your-admin-password'; // Update with actual admin password
-const SALESMAN_EMAIL = 'usman.abid00321@gmail.com'; // Update with actual salesman email
-const SALESMAN_PASSWORD = 'your-salesman-password'; // Update with actual salesman password
+// Test credentials — set ADMIN_EMAIL etc. in env if needed; defaults use Praco (no personal Gmail)
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@praco.co.uk';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'your-admin-password';
+const SALESMAN_EMAIL = process.env.SALESMAN_EMAIL || 'salesman@praco.co.uk';
+const SALESMAN_PASSWORD = process.env.SALESMAN_PASSWORD || 'your-salesman-password';
 
 let adminToken = '';
 let salesmanToken = '';

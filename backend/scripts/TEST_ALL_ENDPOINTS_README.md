@@ -59,9 +59,9 @@ node scripts/testAllEndpoints.js
 
 2. **Database connection** - The script will connect to MongoDB using the configuration from `config.js`
 
-3. **Valid test credentials** - Default credentials are:
-   - Admin: Set `ADMIN_EMAIL` in .env (e.g. admin@example.com) / `Admin@123`
-   - Salesman: `usman.abid00321@gmail.com` / `salesman123`
+3. **Valid test credentials** - Set in env or use Praco defaults:
+   - Admin: `ADMIN_EMAIL` (default admin@praco.co.uk) / `ADMIN_PASSWORD`
+   - Salesman: `SALESMAN_EMAIL` (default salesman@praco.co.uk) / `SALESMAN_PASSWORD`
 
 ## What Gets Tested
 
@@ -247,7 +247,7 @@ The script provides:
 ℹ️  API Base URL: http://127.0.0.1:4000/api
 ℹ️  Port: 4000
 ℹ️  Admin Email: (from ADMIN_EMAIL env)
-ℹ️  Salesman Email: usman.abid00321@gmail.com
+ℹ️  Salesman Email: (from SALESMAN_EMAIL or salesman@praco.co.uk)
 
 ✅ Database connected successfully
 ✅ Backend server is running

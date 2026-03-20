@@ -9,9 +9,9 @@ async function editCustomer() {
     await connectDB();
     console.log('Connected to database');
 
-    // Find customer by email or name
-    const customerEmail = 'info@iotfiysolutions.com';
-    const customerName = 'Jawwad Malik';
+    // Find customer by email or name (set CUSTOMER_EMAIL / CUSTOMER_NAME in env to override)
+    const customerEmail = process.env.CUSTOMER_EMAIL || 'info@praco.co.uk';
+    const customerName = process.env.CUSTOMER_NAME || 'Praco';
 
     let customer = await Customer.findOne({
       $or: [
